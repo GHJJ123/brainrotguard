@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Search: {{ query }}{% endblock %}
+
+{% block content %}
+<div class="search-container">
+    <form action="/search" method="GET" class="search-form">
+        <input type="text" name="q" value="{{ query }}" placeholder="Search for a video or paste a link..." class="search-input" autofocus>
+        <button type="submit" class="search-button">Search</button>
+    </form>
+</div>
+
+<section class="results-section">
+    <h2 class="section-title">Results for "{{ query }}"</h2>
+    {% if results %}
+    <div class="results-list" id="results-list">
+        {% for result in results %}
+        <div class="result-card" data-index="{{ loop.index }}"{% if loop.index > 5 %} style="display:none"{% endif %}>
+            <div class="thumbnail-wrap result-thumb-wrap">
+                <img src="{{ result.thumbnail_url }}" alt="{{ result.title }}" class="result-thumbnail" loading="lazy">
+                <span class="duration-badge">{{ format_duration(result.duration) }}</span>
+            </div>
+            <div class="result-info">
+                <h3 class="result-title">{{ result.title }}</h3>
+                <p class="result-channel">{{ result.channel_name }}</p>
+            </div>
+            <form action="/request" method="POST" class="request-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="video_id" value="{{ result.video_id }}">
+                <button type="submit" class="request-button">Request</button>
+            </form>
+        </div>
+        {% endfor %}
+    </div>
+    {% if results|length > 5 %}
+    <div class="show-more-wrap" id="show-more-wrap">
+        <button class="show-more-btn" id="show-more-btn" type="button">Show More</button>
+    </div>
+    {% endif %}
+    <script>
+    (function() {
+        var btn = document.getElementById('show-more-btn');
+        if (!btn) return;
+        btn.addEventListener('click', function() {
+            var hidden = document.querySelectorAll('#results-list .result-card[style*="display:none"]');
+            for (var i = 0; i < Math.min(5, hidden.length); i++) {
+                hidden[i].style.display = '';
+            }
+            if (hidden.length <= 5) {
+                document.getElementById('show-more-wrap').style.display = 'none';
+            }
+        });
+    })();
+    </script>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-icon">&#x1f614;</div>
+        <p>No results found</p>
+        <p class="empty-hint">Try a different search</p>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

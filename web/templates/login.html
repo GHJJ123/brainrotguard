@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Login{% endblock %}
+
+{% block content %}
+<div class="login-container">
+    <form action="/login" method="POST" class="login-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <h2>Enter PIN</h2>
+        {% if error %}
+        <p class="login-error">Wrong PIN. Try again.</p>
+        {% endif %}
+        <input type="password" name="pin" placeholder="PIN" class="pin-input" inputmode="numeric" autofocus>
+        <button type="submit" class="login-button">Enter</button>
+    </form>
+</div>
+{% endblock %}

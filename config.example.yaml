@@ -1,0 +1,24 @@
+web:
+  host: 0.0.0.0
+  port: 8080
+  poll_interval: 3000  # ms between status checks on pending page
+  pin: ${BRG_PIN}  # optional, empty = no auth
+  # session_secret: auto-generated if not set
+
+telegram:
+  bot_token: ${BRG_BOT_TOKEN}
+  admin_chat_id: ${BRG_ADMIN_CHAT_ID}
+
+youtube:
+  search_max_results: 50
+  channel_cache_results: 200  # max videos per allowlisted channel in cache
+  channel_cache_ttl: 1800     # seconds between channel cache refreshes (default 30min)
+  ydl_timeout: 30             # seconds — max wall-clock time per yt-dlp operation
+
+database:
+  path: db/videos.db
+
+watch_limits:
+  daily_limit_minutes: 120  # 0 = unlimited
+  timezone: America/New_York
+  notify_on_limit: true

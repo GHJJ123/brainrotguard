@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Waiting...{% endblock %}
+
+{% block content %}
+<div class="pending-container">
+    <div class="pending-card">
+        <img src="{{ video.thumbnail_url }}" alt="{{ video.title }}" class="pending-thumbnail">
+        <h2 class="pending-title">{{ video.title }}</h2>
+        <p class="pending-channel">{{ video.channel_name }}</p>
+    </div>
+
+    <div class="pending-status">
+        <div class="spinner"></div>
+        <p class="pending-message">Asking mom or dad...</p>
+        <p class="pending-hint">This page will update automatically</p>
+    </div>
+</div>
+
+<script>
+(function() {
+    const videoId = {{ video.video_id | tojson }};
+
+    function checkStatus() {
+        fetch(`/api/status/${videoId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'approved') {
+                    window.location.href = `/watch/${videoId}`;
+                } else if (data.status === 'denied') {
+                    window.location.href = `/pending/${videoId}`;
+                }
+            })
+            .catch(error => console.error('Status check failed:', error));
+    }
+
+    setInterval(checkStatus, {{ poll_interval }});
+})();
+</script>
+{% endblock %}

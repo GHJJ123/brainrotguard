@@ -1,0 +1,24 @@
+services:
+  brainrotguard:
+    build: .
+    image: brainrotguard
+    container_name: brainrotguard
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - BRG_BOT_TOKEN=${BRG_BOT_TOKEN}
+      - BRG_ADMIN_CHAT_ID=${BRG_ADMIN_CHAT_ID}
+      - BRG_PIN=${BRG_PIN:-}
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - brg_db:/app/db
+    networks:
+      - brainrotguard
+
+volumes:
+  brg_db:
+
+networks:
+  brainrotguard:
+    driver: bridge

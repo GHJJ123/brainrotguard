@@ -1,0 +1,313 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="search-container">
+    <form action="/search" method="GET" class="search-form">
+        <input type="text" name="q" placeholder="Search for a video or paste a link..." class="search-input" autofocus>
+        <button type="submit" class="search-button">Search</button>
+    </form>
+</div>
+
+{% if schedule_info and not schedule_info.allowed %}
+<div class="schedule-banner schedule-closed">
+    <span>Videos available at {{ schedule_info.unlock_time }}</span>
+    <span class="schedule-detail">{{ schedule_info.start }} &ndash; {{ schedule_info.end }}</span>
+</div>
+{% elif schedule_info and schedule_info.allowed %}
+<div class="schedule-banner schedule-open">
+    <span>Available until {{ schedule_info.end }}</span>
+</div>
+{% endif %}
+
+{% if time_info %}
+<a href="/activity" class="time-budget {% if time_info.remaining_min < 15 %}time-budget-low{% endif %}">
+    {% if time_info.exceeded %}
+    <span class="time-low">No time remaining today</span>
+    {% else %}
+    <span>{{ time_info.remaining_min | int }} min remaining today</span>
+    <span class="time-budget-detail">{{ time_info.used_min | int }} / {{ time_info.limit_min }} min used</span>
+    {% endif %}
+</a>
+{% endif %}
+
+{% if channel_videos %}
+{# Hero carousel: latest video from each allowlisted channel, randomized #}
+{% set highlights = [] %}
+{% for ch_name, ch_vids in channel_videos.items() %}
+    {% if ch_vids %}
+        {% if highlights.append(ch_vids[0]) %}{% endif %}
+    {% endif %}
+{% endfor %}
+{% if highlights %}
+<div class="hero-carousel" id="hero-carousel">
+    {% for vid in highlights[:10] %}
+    <a href="/watch/{{ vid.video_id }}" class="hero-slide{% if loop.first %} active{% endif %}">
+        <img src="https://i.ytimg.com/vi/{{ vid.video_id }}/maxresdefault.jpg" alt="{{ vid.title }}"{% if not loop.first %} loading="lazy"{% endif %}>
+        <div class="hero-overlay"></div>
+        <div class="hero-content">
+            <span class="hero-channel">{{ vid.channel_name }}</span>
+            <h2 class="hero-title">{{ vid.title }}</h2>
+            <span class="hero-duration">{{ format_duration(vid.duration) }}</span>
+            <div class="hero-play-hint">
+                <span class="play-icon"></span>
+                Watch Now
+            </div>
+        </div>
+    </a>
+    {% endfor %}
+    <div class="hero-dots" id="hero-dots"></div>
+</div>
+{% endif %}
+
+{# Channel pills: filter catalog by allowlisted channel #}
+<div class="channel-pills">
+    <button class="channel-pill active" data-channel="__all__">All</button>
+    {% for ch_name in channel_videos %}
+    <button class="channel-pill" data-channel="{{ ch_name }}">{{ ch_name }}</button>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% if catalog %}
+<section class="videos-section">
+    <h2 class="section-title">Your Videos</h2>
+    <div class="video-grid" id="catalog-grid">
+        {% for video in catalog %}
+        <a href="/watch/{{ video.video_id }}" class="video-card" data-channel="{{ video.channel_name }}">
+            <div class="thumbnail-wrap">
+                <img src="{{ video.thumbnail_url }}" alt="{{ video.title }}" class="video-thumbnail" loading="lazy">
+                {% if video.duration %}
+                <span class="duration-badge">{{ format_duration(video.duration) }}</span>
+                {% endif %}
+            </div>
+            <div class="video-info">
+                <h3 class="video-title">{{ video.title }}</h3>
+                <p class="video-channel">{{ video.channel_name }}</p>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+    <div class="show-more-wrap" id="show-more-wrap"{% if not has_more %} style="display:none"{% endif %}>
+        <button class="show-more-btn" id="show-more-btn">Show More</button>
+    </div>
+</section>
+{% else %}
+<section class="videos-section">
+    <h2 class="section-title">Your Videos</h2>
+    <div class="empty-state">
+        <div class="empty-icon">&#x1f50d;</div>
+        <p>No videos yet</p>
+        <p class="empty-hint">Search for something to watch!</p>
+    </div>
+</section>
+{% endif %}
+
+<script>
+(function() {
+    // Hero carousel: auto-advance with crossfade + Ken Burns
+    var heroCarousel = document.getElementById('hero-carousel');
+    if (heroCarousel) {
+        var slides = heroCarousel.querySelectorAll('.hero-slide');
+        var dotsContainer = document.getElementById('hero-dots');
+        var current = 0;
+        var heroInterval = 6000;
+        var heroTimer;
+
+        // Shuffle slide order on load
+        var slideArr = Array.from(slides);
+        for (var si = slideArr.length - 1; si > 0; si--) {
+            var sj = Math.floor(Math.random() * (si + 1));
+            heroCarousel.insertBefore(slideArr[sj], dotsContainer);
+            var tmp = slideArr[si]; slideArr[si] = slideArr[sj]; slideArr[sj] = tmp;
+        }
+        slides = heroCarousel.querySelectorAll('.hero-slide');
+        slides.forEach(function(s, i) {
+            s.classList.toggle('active', i === 0);
+            s.querySelector('img').style.transform = i === 0 ? '' : 'scale(1)';
+        });
+
+        // Build dots
+        slides.forEach(function(_, i) {
+            var dot = document.createElement('button');
+            dot.className = 'hero-dot' + (i === 0 ? ' active' : '');
+            dot.addEventListener('click', function() { heroGoTo(i); heroResetTimer(); });
+            dotsContainer.appendChild(dot);
+        });
+
+        function heroGoTo(index) {
+            slides[current].classList.remove('active');
+            slides[current].querySelector('img').style.transform = 'scale(1)';
+            dotsContainer.children[current].classList.remove('active');
+            current = index;
+            void slides[current].querySelector('img').offsetWidth;
+            slides[current].classList.add('active');
+            void dotsContainer.children[current].offsetWidth;
+            dotsContainer.children[current].classList.add('active');
+        }
+
+        function heroResetTimer() {
+            clearInterval(heroTimer);
+            heroTimer = setInterval(function() {
+                heroGoTo((current + 1) % slides.length);
+            }, heroInterval);
+        }
+
+        heroCarousel.addEventListener('mouseenter', function() { clearInterval(heroTimer); });
+        heroCarousel.addEventListener('mouseleave', function() { heroResetTimer(); });
+        heroResetTimer();
+    }
+
+    // XSS-safe HTML escaping
+    function escapeHtml(str) {
+        var div = document.createElement('div');
+        div.appendChild(document.createTextNode(str));
+        return div.innerHTML;
+    }
+
+    // Client-side duration formatter (mirrors server-side format_duration)
+    function formatDuration(seconds) {
+        if (!seconds) return '?';
+        seconds = Math.floor(seconds);
+        var h = Math.floor(seconds / 3600);
+        var m = Math.floor((seconds % 3600) / 60);
+        var s = seconds % 60;
+        if (h) return h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+        return m + ':' + String(s).padStart(2, '0');
+    }
+
+    // Shared: build a video card element
+    function buildCard(v) {
+        var a = document.createElement('a');
+        a.href = '/watch/' + encodeURIComponent(v.video_id);
+        a.className = 'video-card';
+        a.dataset.channel = v.channel_name || '';
+        var dur = v.duration ? '<span class="duration-badge">' + escapeHtml(formatDuration(v.duration)) + '</span>' : '';
+        a.innerHTML =
+            '<div class="thumbnail-wrap">' +
+                '<img src="' + escapeHtml(v.thumbnail_url || '') + '" alt="' + escapeHtml(v.title || '') + '" class="video-thumbnail" loading="lazy">' +
+                dur +
+            '</div>' +
+            '<div class="video-info">' +
+                '<h3 class="video-title">' + escapeHtml(v.title || '') + '</h3>' +
+                '<p class="video-channel">' + escapeHtml(v.channel_name || '') + '</p>' +
+            '</div>';
+        return a;
+    }
+
+    var catalogGrid = document.getElementById('catalog-grid');
+    var showMoreBtn = document.getElementById('show-more-btn');
+    var showMoreWrap = document.getElementById('show-more-wrap');
+    var PAGE_SIZE = 24;
+    var catalogOffset = {{ catalog | length }};
+    var activeFilter = '';
+    var filterOffset = 0;
+    var filterHasMore = false;
+    // Stash initial HTML so we can restore on "All"
+    var initialGridHTML = catalogGrid ? catalogGrid.innerHTML : '';
+    var initialOffset = catalogOffset;
+    var initialHasMore = {{ 'true' if has_more else 'false' }};
+
+    function fetchCatalog(channel, offset, limit, replace) {
+        var url = '/api/catalog?offset=' + offset + '&limit=' + limit;
+        if (channel) url += '&channel=' + encodeURIComponent(channel);
+        return fetch(url).then(function(r) { return r.json(); }).then(function(data) {
+            if (replace) catalogGrid.innerHTML = '';
+            if (data.videos.length === 0 && replace) {
+                catalogGrid.innerHTML = '<p style="color:#666;text-align:center;padding:20px;">No videos found</p>';
+            } else {
+                data.videos.forEach(function(v) { catalogGrid.appendChild(buildCard(v)); });
+            }
+            return data;
+        });
+    }
+
+    // Channel pills: fetch filtered results from API
+    document.querySelectorAll('.channel-pill').forEach(function(pill) {
+        pill.addEventListener('click', function() {
+            var channel = this.dataset.channel;
+            var isAll = channel === '__all__';
+            var isActive = this.classList.contains('active');
+
+            document.querySelectorAll('.channel-pill').forEach(function(p) {
+                p.classList.remove('active');
+            });
+
+            if (isActive && !isAll) {
+                document.querySelector('.channel-pill[data-channel="__all__"]').classList.add('active');
+                restoreAll();
+                return;
+            }
+
+            this.classList.add('active');
+
+            if (isAll) {
+                restoreAll();
+                return;
+            }
+
+            activeFilter = channel;
+            catalogGrid.innerHTML = '<p style="color:#666;text-align:center;padding:20px;">Loading...</p>';
+
+            fetchCatalog(channel, 0, PAGE_SIZE, true)
+                .then(function(data) {
+                    filterOffset = data.videos.length;
+                    filterHasMore = data.has_more;
+                    showMoreWrap.style.display = filterHasMore ? '' : 'none';
+                    if (showMoreBtn) {
+                        showMoreBtn.disabled = false;
+                        showMoreBtn.textContent = 'Show More';
+                    }
+                })
+                .catch(function() {
+                    catalogGrid.innerHTML = '<p style="color:#888;text-align:center;padding:20px;">Failed to load</p>';
+                    showMoreWrap.style.display = 'none';
+                });
+        });
+    });
+
+    function restoreAll() {
+        activeFilter = '';
+        catalogGrid.innerHTML = initialGridHTML;
+        catalogOffset = initialOffset;
+        if (showMoreWrap) showMoreWrap.style.display = initialHasMore ? '' : 'none';
+        if (showMoreBtn) {
+            showMoreBtn.disabled = false;
+            showMoreBtn.textContent = 'Show More';
+        }
+    }
+
+    // Show More: works for both All and filtered views
+    if (showMoreBtn) {
+        showMoreBtn.addEventListener('click', function() {
+            showMoreBtn.disabled = true;
+            showMoreBtn.textContent = 'Loading...';
+            var ch = activeFilter || '';
+            var off = activeFilter ? filterOffset : catalogOffset;
+
+            fetchCatalog(ch, off, PAGE_SIZE, false)
+                .then(function(data) {
+                    if (activeFilter) {
+                        filterOffset += data.videos.length;
+                        filterHasMore = data.has_more;
+                    } else {
+                        catalogOffset += data.videos.length;
+                        initialGridHTML = catalogGrid.innerHTML;
+                        initialOffset = catalogOffset;
+                        initialHasMore = data.has_more;
+                    }
+                    if (!data.has_more) {
+                        showMoreWrap.style.display = 'none';
+                    } else {
+                        showMoreBtn.disabled = false;
+                        showMoreBtn.textContent = 'Show More';
+                    }
+                })
+                .catch(function() {
+                    showMoreBtn.disabled = false;
+                    showMoreBtn.textContent = 'Show More';
+                });
+        });
+    }
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Time's Up{% endblock %}
+
+{% block content %}
+<div class="timesup-container">
+    <div class="timesup-icon">&#x23F0;</div>
+    <h2>Time's Up!</h2>
+    <p class="timesup-text">You've used {{ time_info.used_min | int }} out of {{ time_info.limit_min }} minutes today.</p>
+    <p class="timesup-subtext">Come back tomorrow for more videos!</p>
+    <a href="/" class="back-link">Back to Home</a>
+</div>
+{% endblock %}

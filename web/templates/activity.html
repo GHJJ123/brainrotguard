@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Today's Activity - BrainRotGuard{% endblock %}
+
+{% block content %}
+<div class="activity-container">
+    <div class="activity-header">
+        <h2 class="section-title">Today's Activity</h2>
+        <a href="/" class="back-link-small">&larr; Back</a>
+    </div>
+
+    {% if time_info %}
+    <div class="activity-summary">
+        <div class="activity-stat">
+            <span class="stat-value">{{ total_min | int }}</span>
+            <span class="stat-label">min watched</span>
+        </div>
+        <div class="activity-stat">
+            <span class="stat-value">{{ time_info.limit_min }}</span>
+            <span class="stat-label">min allowed</span>
+        </div>
+        <div class="activity-stat">
+            <span class="stat-value {% if time_info.remaining_min < 10 %}stat-low{% endif %}">{{ time_info.remaining_min | int }}</span>
+            <span class="stat-label">min left</span>
+        </div>
+    </div>
+    <div class="activity-bar-wrap">
+        {% set pct = ((total_min / time_info.limit_min) * 100) if time_info.limit_min > 0 else 0 %}
+        <div class="activity-bar" style="width: {{ [pct, 100] | min }}%"></div>
+    </div>
+    {% else %}
+    <div class="activity-summary">
+        <div class="activity-stat">
+            <span class="stat-value">{{ total_min | int }}</span>
+            <span class="stat-label">min watched today</span>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if breakdown %}
+    <div class="activity-list">
+        {% for v in breakdown %}
+        <a href="/watch/{{ v.video_id }}" class="activity-row">
+            <img src="{{ v.thumbnail_url }}" alt="" class="activity-thumb" loading="lazy">
+            <div class="activity-info">
+                <span class="activity-title">{{ v.title }}</span>
+                <span class="activity-channel">{{ v.channel_name }}</span>
+            </div>
+            <span class="activity-time">{{ v.minutes | int if v.minutes >= 1 else '<1' }} min</span>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <p>No videos watched today</p>
+        <p class="empty-hint">Your watch history will appear here</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

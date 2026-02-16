@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Not Available{% endblock %}
+
+{% block content %}
+<div class="outsidehours-container">
+    <div class="outsidehours-icon">&#x1F319;</div>
+    <h2>Videos Aren't Available Right Now</h2>
+    <p class="outsidehours-text">Videos are available from {{ schedule_info.start }} to {{ schedule_info.end }}</p>
+    <p class="outsidehours-subtext">Come back at {{ schedule_info.unlock_time }}!</p>
+    <a href="/" class="back-link">Back to Home</a>
+</div>
+{% endblock %}

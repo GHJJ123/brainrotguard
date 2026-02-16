@@ -1,0 +1,193 @@
+# Changelog
+
+## v1.9.7 - Screenshot Refresh & Search Results
+
+- Retook phone screenshots at iPhone 17 Pro Max resolution (440x956 @2x) for proper tall aspect ratio
+- Rebuilt combined screenshot image: tablet + 3 bezeled phones (left column), full-page scroll (right column)
+- Increased `search_max_results` default from 10 to 50
+
+## v1.9.6 - Network Diagram
+
+- Added ASCII network diagram to README "How It Works" section showing kid device, BrainRotGuard server, router, DNS blocking, Telegram cloud, and parent device
+
+## v1.9.5 - README Restructure
+
+- Moved Configuration Reference, Telegram Commands, Troubleshooting, Architecture, and Design Decisions into separate `docs/*.md` files
+- Added table of contents to README
+- Added Documentation links section for quick access to reference material
+- README reduced from 368 to 269 lines, focused on pitch + setup flow
+
+## v1.9.4 - Architecture Diagrams
+
+- Added Mermaid architecture diagram to README: all page routes, API routes, Telegram bot commands/callbacks, external services, and data flows
+- Added Mermaid sequence diagram showing the video request/approval flow (auto-approve, auto-deny, and manual approval paths)
+
+## v1.9.3 - Search Show More Pagination
+
+- Client-side "Show More" pagination on search results: shows first 5 results, reveals next batch on tap
+- Reuses existing `.show-more-btn` styling from homepage catalog
+- Button auto-hides when all results are visible; not rendered if ≤5 results
+
+## v1.9.2 - README Overhaul & Video End Overlay
+
+- Rewrote README for non-technical audience: plain-language feature descriptions, design decisions table, step-by-step setup guide, troubleshooting section
+- Added production screenshots (homepage, search, playback, activity, mobile views)
+- Video end overlay: covers YouTube's suggested video overlay when a video finishes, shows "Video finished — Back to Library" instead
+- Emphasized DNS blocking as effectively required (not just recommended)
+
+## v1.9.1 - Channel Link Fix
+
+- `/channel` list now uses @handle URL (`youtube.com/@handle`) when channel_id is unavailable, instead of falling back to YouTube search query
+
+## v1.9.0 - Unified Curated Catalog & Channel Management
+
+- Merged channel cache videos and individually approved videos into single browsable catalog
+- Round-robin interleave across channels for variety at the top of the grid
+- Client-side "Show More" progressive loading via `/api/catalog` endpoint (replaces server-side pagination)
+- Channel pills visible on all screen sizes (not just mobile), filter catalog by channel with "All" default pill
+- Removed desktop sidebar navigation (channel tree with collapsible nodes)
+- Added `_build_catalog()` helper with deduplication by video_id and LRU caching (invalidated on channel refresh or video status change)
+- Added `GET /api/catalog` endpoint with offset/limit pagination and optional channel filter (DB query, not Python filtering)
+- Client-side `buildCard()` and `formatDuration()` JS helpers for dynamic card rendering
+- Show More button now full-width with red gradient styling, always in DOM (hidden when no more results)
+- Channel cache default increased to 200 videos per channel (configurable via `youtube.channel_cache_results`)
+- New config parameters: `youtube.channel_cache_results`, `youtube.channel_cache_ttl`, `youtube.ydl_timeout` (all with env var support)
+- `/channel allow @handle` now requires @handle format; resolves via yt-dlp to get exact channel name + channel_id
+- `/channel` command uses paginated inline buttons (10 channels per page, "Show more"/"Back" nav) with in-place message refresh
+- Each channel in list has inline "Unallow"/"Unblock" button for quick management
+- Channel list links use channel_id URLs (prevents Telegram chat link behavior from @handle)
+- `youtube/extractor.py` added `resolve_channel_handle()` to convert @handle to channel name + ID
+- `data/video_store.py` updated: `get_by_status()` accepts optional `channel_name` filter (SQL WHERE clause); channels table now stores `handle`; `remove_channel()` matches by name or handle
+- `main.py` wired `on_video_change` callback from bot to `_invalidate_catalog_cache()` for live updates on approve/deny
+
+## v1.8.0 - Channel Links & /watch Command
+
+- `/watch [yesterday|N]` Telegram command: daily watch activity with time budget progress bar and per-video breakdown (watched vs duration with percentage)
+- Channel names in all Telegram messages now link to YouTube channel pages when channel_id is available (notifications, approve/deny, /pending, /approved, /channel list)
+- `_channel_md_link()` helper builds `/channel/{id}` URLs with search fallback
+- `get_daily_watch_breakdown()` now returns video `duration` and `channel_id`
+- `/channel` list uses `get_channels_with_ids()` for proper channel page URLs
+
+## v1.7.1 - Security Hardening
+
+- Remove yt-dlp `js_runtimes` and `remote_components` (RCE prevention), remove nodejs from Docker image
+- Require PIN auth session for `/api/watch-heartbeat` (was bypassing auth via `/api/` exemption)
+- Strengthen login rate limit from 5/min to 5/hour (brute-force mitigation)
+- Validate YouTube widget API proxy URL against domain allowlist before fetching (SSRF prevention)
+- Add 30s `asyncio.wait_for` timeout on all yt-dlp calls (DoS prevention)
+- Fix XSS: use `|tojson` for video_id in watch.html JavaScript context
+
+## v1.7.0 - Watch Activity Log
+
+- `/activity` page: per-video watch time breakdown for today with thumbnails, titles, and minutes
+- Summary stats bar showing watched / allowed / remaining minutes with progress bar
+- Time budget bar on homepage now links to activity page for quick access
+- DB: `get_daily_watch_breakdown()` joins watch_log with videos for per-video daily stats
+
+## v1.6.0 - Bonus Minutes & Library Pagination
+
+- `/time add <min>`: grant bonus screen time for today only (stacks, auto-expires next day)
+- Paginated video library on homepage (24 per page, Newer/Older navigation)
+- DB: `get_approved_page()` for server-side pagination, `get_batch_watch_minutes()` for batch stats
+- DB: status index on videos table, optimized daily watch query with range scan
+- Startup data pruning: watch_log (180 days) and search_log (90 days) auto-cleaned
+- Dockerfile: add nodejs for yt-dlp, fix `useradd -m` flag for home directory
+
+## v1.5.0 - Silent Auto-Approve & Telegram UX Cleanup
+
+- Allowlisted channel videos auto-approve silently (no Telegram notification)
+- `/approved` list cleaned up: bullet links, compact stats, `/revoke_VID` commands
+- Inline button pagination (Show more / Back) on `/approved`, `/logs`, and `/search history`
+- `/search history` shows chronological log with fixed-width `MM-DD HH:MM` timestamps
+- `/revoke` handles video IDs with hyphens (encoded as underscores for Telegram compat)
+- Channel sidebar fix: resolves channel ID via YouTube search for generic names (e.g. LEGO)
+- `channel_id` stored in DB from video metadata, used for direct channel page fetches
+- `extract_metadata()` now returns `channel_id`; `channels` and `videos` tables auto-migrated
+
+## v1.4.0 - Allowlisted Channel Discovery
+
+- Sidebar now shows only allowlisted channels (from `/channel allow`) with fresh YouTube content
+- Background task fetches latest videos for each allowlisted channel every 30 minutes
+- Clicking a sidebar video from a trusted channel auto-approves and plays immediately
+- `fetch_channel_videos()` in extractor searches YouTube and filters to exact channel match
+- Mobile pills reflect allowlisted channels; tapping filters approved grid by channel
+- Approved video grid unchanged as main content
+
+## v1.3.1 - Channel Sidebar Navigation
+
+- Collapsible channel tree sidebar on homepage groups approved videos by channel
+- Each channel node shows mini-thumbnail previews (max 10 per channel)
+- Click channel header to expand/collapse with +/− indicator
+- Mobile (≤768px): sidebar replaced by horizontal scrollable channel pills
+- Tapping a pill filters the video grid to that channel; tap again to clear
+- No backend changes — uses existing approved video data with Jinja2 groupby
+
+## v1.3.0 - Scheduled Access Window
+
+- Configurable start/stop times to restrict when videos can be watched
+- `/time start <time>` and `/time stop <time>` bot commands (flexible input: 800am, 20:00, etc.)
+- `/time` status now shows schedule window and OPEN/CLOSED state
+- Playback blocked outside schedule; search and browsing remain available
+- Schedule banner on homepage shows unlock time when closed
+- Heartbeat returns 403 during off-hours, triggering client-side video pause
+- New `outsidehours.html` blocking page with schedule details
+- `parse_time_input()`, `format_time_12h()`, `is_within_schedule()` utilities
+- Overnight schedule wrap support (e.g. 22:00–06:00)
+
+## v1.2.1 - Security Hardening
+
+- Thread-safe SQLite access via threading.Lock on all VideoStore methods
+- Session secret persisted in DB settings (survives container restarts)
+- Rate limit (5/min) on PIN login endpoint
+- CSRF token regenerated on failed login attempts
+- Heartbeat rejects unapproved/nonexistent video IDs
+- Thumbnail SSRF: exact hostname allowlist replaces suffix matching
+- Admin check defense-in-depth (rejects falsy admin_chat_id)
+- Config validation warns on empty/non-numeric admin_chat_id
+- SHA-256 hash logging of cached YouTube API scripts
+- Heartbeat interval tightened (30s→15s client, 20→10s server floor)
+
+## v1.2.0 - Parental Controls & Content Filtering
+
+- Daily watch time limits with configurable timezone and parent notification
+- Channel allow/block lists with auto-approve and auto-deny
+- Word filters with word-boundary matching to block videos by title
+- Search logging and `/search history` command for parents
+- `/timelimit`, `/channel`, `/search` Telegram commands
+- Activity report via `/logs` command
+- YouTube IFrame API proxy for playback on DNS-blocked networks
+- MarkdownV2 formatting for all Telegram messages
+- Inline "Allow Channel" / "Block Channel" buttons on approval notifications
+- Shared timezone utility with startup validation and UTC fallback
+- YT script cache with 24h TTL and graceful error handling
+- Heartbeat interval clamping to prevent inflated watch time
+- Telegram message truncation (4096 char limit, newline-aware)
+- Time-limit notification race guard (once per day)
+- Watch log index for faster per-video queries
+- Search query truncation (200 char limit in DB)
+
+## v1.1.0 - Public Release & Security Hardening
+
+- Optional PIN auth gate for web UI (session-based, configurable via `web.pin`)
+- CSRF protection on all POST routes
+- Rate limiting via slowapi (10/min search+request, 30/min status poll)
+- Video ID regex validation (`^[a-zA-Z0-9_-]{11}$`) and input length limits
+- Thumbnail URL domain allowlist to prevent SSRF
+- SQLite WAL mode for safer concurrent access
+- Docker container runs as non-root user (appuser)
+- Database path and poll interval moved from hardcoded to config
+- Dependency versions pinned with upper bounds
+- Added README.md with setup guide, config reference, AdGuard DNS instructions
+- Added MIT LICENSE
+- Added login page with styled PIN input
+
+## v1.0.0 - Initial Release
+
+- Web UI: search YouTube, request videos, watch approved videos
+- Telegram bot: parent receives photo notifications with Approve/Deny inline buttons
+- yt-dlp integration for metadata extraction and search (no API key needed)
+- SQLite storage for video approval tracking and view counts
+- youtube-nocookie.com iframe embeds for playback
+- Dark theme, tablet-friendly UI with large touch targets
+- Docker Compose deployment
+- Admin commands: /help, /pending, /approved, /stats, /changelog

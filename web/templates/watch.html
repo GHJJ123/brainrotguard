@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+{% block title %}{{ video.title }}{% endblock %}
+
+{% block content %}
+{% if schedule_info and schedule_info.allowed %}
+<div class="schedule-banner schedule-open">
+    <span>Available until {{ schedule_info.end }}</span>
+</div>
+{% endif %}
+
+{% if time_info %}
+<div class="time-budget {% if time_info.remaining_min < 15 %}time-budget-low{% endif %}">
+    <span>{{ time_info.remaining_min | int }} min remaining today</span>
+    <span class="time-budget-detail">{{ time_info.used_min | int }} / {{ time_info.limit_min }} min used</span>
+</div>
+{% endif %}
+
+<div class="watch-container">
+    <div class="video-player">
+        <div class="video-wrapper">
+            <div id="ytplayer"></div>
+        </div>
+    </div>
+
+    <div class="watch-info">
+        <h2 class="watch-title">{{ video.title }}</h2>
+        <p class="watch-channel">{{ video.channel_name }}</p>
+        {% if time_info %}
+        <p class="time-remaining" id="time-remaining">
+            Time left: <span id="time-counter">{{ time_info.remaining_min | int }}</span> min
+        </p>
+        {% endif %}
+        <a href="/" class="back-link">Back to Library</a>
+    </div>
+</div>
+
+{% if time_info %}
+<div class="time-warning" id="time-warning" style="display:none;">
+    Less than 5 minutes remaining
+</div>
+<div class="time-critical" id="time-critical" style="display:none;">
+    Less than 1 minute remaining!
+</div>
+<div class="time-overlay" id="time-overlay" style="display:none;">
+    <div class="time-overlay-content">
+        <div class="timesup-icon">&#x23F0;</div>
+        <h2>Time's Up!</h2>
+        <p>Redirecting to home...</p>
+    </div>
+</div>
+{% endif %}
+
+<script>
+var tag = document.createElement('script');
+tag.src = "/api/yt-iframe-api.js";
+var firstScriptTag = document.getElementsByTagName('script')[0];
+firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+var player;
+var isPlaying = false;
+var playSeconds = 0;
+var heartbeatInterval = null;
+// NOTE: remainingSeconds is client-side and can be manipulated via DevTools.
+// The server heartbeat response is the authority and corrects this value every 15s.
+var remainingSeconds = {{ time_info.remaining_sec if time_info else -1 }};
+var hasTimeLimit = {{ 'true' if time_info else 'false' }};
+var videoId = {{ video.video_id | tojson }};
+var countdownInterval = null;
+
+function onYouTubeIframeAPIReady() {
+    player = new YT.Player('ytplayer', {
+        videoId: videoId,
+        host: 'https://www.youtube-nocookie.com',
+        playerVars: {
+            'autoplay': 0,
+            'rel': 0,
+            'modestbranding': 1
+        },
+        events: {
+            'onStateChange': onPlayerStateChange
+        }
+    });
+}
+
+function onPlayerStateChange(event) {
+    if (event.data === YT.PlayerState.PLAYING) {
+        isPlaying = true;
+        if (!heartbeatInterval) {
+            heartbeatInterval = setInterval(sendHeartbeat, 15000);
+        }
+        if (hasTimeLimit && !countdownInterval) {
+            countdownInterval = setInterval(tickCountdown, 1000);
+        }
+    } else if (event.data === YT.PlayerState.ENDED) {
+        // Cover the player immediately so YouTube's suggested video
+        // overlay is never visible. DNS blocking would prevent those
+        // videos from loading anyway, but this keeps the UI clean.
+        isPlaying = false;
+        if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null; }
+        if (playSeconds > 0) { sendHeartbeat(); }
+        showEndOverlay();
+    } else {
+        isPlaying = false;
+        if (countdownInterval) {
+            clearInterval(countdownInterval);
+            countdownInterval = null;
+        }
+        if (playSeconds > 0) {
+            sendHeartbeat();
+        }
+    }
+}
+
+function showEndOverlay() {
+    var existing = document.getElementById('end-overlay');
+    if (existing) { existing.style.display = 'flex'; return; }
+    var overlay = document.createElement('div');
+    overlay.id = 'end-overlay';
+    overlay.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;background:#1a1a2e;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;border-radius:8px;';
+    var msg = document.createElement('p');
+    msg.textContent = 'Video finished';
+    msg.style.cssText = 'color:#ccc;font-size:1.2em;margin-bottom:1em;';
+    var link = document.createElement('a');
+    link.href = '/';
+    link.textContent = 'Back to Library';
+    link.style.cssText = 'color:#e74c6f;font-size:1.1em;text-decoration:none;';
+    overlay.appendChild(msg);
+    overlay.appendChild(link);
+    var wrapper = document.querySelector('.video-wrapper');
+    if (wrapper) { wrapper.style.position = 'relative'; wrapper.appendChild(overlay); }
+}
+
+function tickCountdown() {
+    if (!isPlaying || !hasTimeLimit) return;
+    remainingSeconds--;
+    playSeconds++;
+    updateTimeDisplay();
+
+    if (remainingSeconds <= 0) {
+        timesUp();
+    }
+}
+
+function updateTimeDisplay() {
+    var counterEl = document.getElementById('time-counter');
+    var warningEl = document.getElementById('time-warning');
+    var criticalEl = document.getElementById('time-critical');
+    var remainingEl = document.getElementById('time-remaining');
+    if (!counterEl || !remainingEl) return;
+
+    if (remainingSeconds > 60) {
+        var min = Math.max(0, Math.ceil(remainingSeconds / 60));
+        counterEl.textContent = min + ' min';
+    } else {
+        counterEl.textContent = Math.max(0, remainingSeconds) + ' sec';
+        counterEl.className = 'time-low';
+    }
+
+    if (warningEl && remainingSeconds <= 300 && remainingSeconds > 60) {
+        warningEl.style.display = 'block';
+        if (criticalEl) criticalEl.style.display = 'none';
+    } else if (criticalEl && remainingSeconds <= 60 && remainingSeconds > 0) {
+        criticalEl.style.display = 'block';
+        if (warningEl) warningEl.style.display = 'none';
+    }
+}
+
+function timesUp() {
+    isPlaying = false;
+    clearInterval(heartbeatInterval);
+    clearInterval(countdownInterval);
+    if (player && player.pauseVideo) player.pauseVideo();
+    var overlay = document.getElementById('time-overlay');
+    if (overlay) overlay.style.display = 'flex';
+    if (playSeconds > 0) {
+        doHeartbeat(playSeconds);
+        playSeconds = 0;
+    }
+    setTimeout(function() { window.location.href = '/'; }, 3000);
+}
+
+function sendHeartbeat() {
+    if (playSeconds <= 0) return;
+    var secs = playSeconds;
+    playSeconds = 0;
+    doHeartbeat(secs);
+}
+
+function doHeartbeat(secs) {
+    fetch('/api/watch-heartbeat', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({video_id: videoId, seconds: secs})
+    }).then(function(r) {
+        if (r.status === 403) {
+            timesUp();
+            return null;
+        }
+        return r.json();
+    }).then(function(data) {
+        if (!data) return;
+        if (hasTimeLimit && typeof data.remaining === 'number' && data.remaining >= 0) {
+            remainingSeconds = data.remaining;
+            updateTimeDisplay();
+            if (remainingSeconds <= 0) timesUp();
+        }
+    }).catch(function() {});
+}
+</script>
+{% endblock %}
