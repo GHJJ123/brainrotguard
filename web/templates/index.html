@@ -1,13 +1,8 @@
 {% extends "base.html" %}
 
-{% block content %}
-<div class="search-container">
-    <form action="/search" method="GET" class="search-form">
-        <input type="text" name="q" placeholder="Search for a video or paste a link..." class="search-input" autofocus>
-        <button type="submit" class="search-button">Search</button>
-    </form>
-</div>
+{% block search_attrs %}autofocus{% endblock %}
 
+{% block content %}
 {% if schedule_info and not schedule_info.allowed %}
 <div class="schedule-banner schedule-closed">
     <span>Videos available at {{ schedule_info.unlock_time }}</span>
@@ -30,17 +25,10 @@
 </a>
 {% endif %}
 
-{% if channel_videos %}
-{# Hero carousel: latest video from each allowlisted channel, randomized #}
-{% set highlights = [] %}
-{% for ch_name, ch_vids in channel_videos.items() %}
-    {% if ch_vids %}
-        {% if highlights.append(ch_vids[0]) %}{% endif %}
-    {% endif %}
-{% endfor %}
-{% if highlights %}
+{% if hero_highlights %}
+{# Hero carousel: random video from each allowlisted channel #}
 <div class="hero-carousel" id="hero-carousel">
-    {% for vid in highlights[:10] %}
+    {% for vid in hero_highlights[:10] %}
     <a href="/watch/{{ vid.video_id }}" class="hero-slide{% if loop.first %} active{% endif %}">
         <img src="https://i.ytimg.com/vi/{{ vid.video_id }}/maxresdefault.jpg" alt="{{ vid.title }}"{% if not loop.first %} loading="lazy"{% endif %}>
         <div class="hero-overlay"></div>
@@ -59,6 +47,7 @@
 </div>
 {% endif %}
 
+{% if channel_videos %}
 {# Channel pills: filter catalog by allowlisted channel #}
 <div class="channel-pills">
     <button class="channel-pill active" data-channel="__all__">All</button>
@@ -112,19 +101,6 @@
         var current = 0;
         var heroInterval = 6000;
         var heroTimer;
-
-        // Shuffle slide order on load
-        var slideArr = Array.from(slides);
-        for (var si = slideArr.length - 1; si > 0; si--) {
-            var sj = Math.floor(Math.random() * (si + 1));
-            heroCarousel.insertBefore(slideArr[sj], dotsContainer);
-            var tmp = slideArr[si]; slideArr[si] = slideArr[sj]; slideArr[sj] = tmp;
-        }
-        slides = heroCarousel.querySelectorAll('.hero-slide');
-        slides.forEach(function(s, i) {
-            s.classList.toggle('active', i === 0);
-            s.querySelector('img').style.transform = i === 0 ? '' : 'scale(1)';
-        });
 
         // Build dots
         slides.forEach(function(_, i) {

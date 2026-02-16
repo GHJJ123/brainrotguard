@@ -1,14 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Search: {{ query }}{% endblock %}
+{% block search_attrs %}value="{{ query }}" autofocus{% endblock %}
 
 {% block content %}
-<div class="search-container">
-    <form action="/search" method="GET" class="search-form">
-        <input type="text" name="q" value="{{ query }}" placeholder="Search for a video or paste a link..." class="search-input" autofocus>
-        <button type="submit" class="search-button">Search</button>
-    </form>
-</div>
-
 <section class="results-section">
     <h2 class="section-title">Results for "{{ query }}"</h2>
     {% if results %}

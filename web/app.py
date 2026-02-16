@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import logging
+import random
 import re
 import secrets
 import time
@@ -465,6 +466,12 @@ async def index(request: Request):
     time_info = _get_time_limit_info()
     schedule_info = _get_schedule_info()
     channel_videos = _channel_cache.get("channels", {})
+    # Pick a random video from each channel for the hero carousel
+    hero_highlights = []
+    for ch_name, ch_vids in channel_videos.items():
+        if ch_vids:
+            hero_highlights.append(random.choice(ch_vids))
+    random.shuffle(hero_highlights)
     return templates.TemplateResponse("index.html", {
         "request": request,
         "catalog": catalog,
@@ -473,6 +480,7 @@ async def index(request: Request):
         "time_info": time_info,
         "schedule_info": schedule_info,
         "channel_videos": channel_videos,
+        "hero_highlights": hero_highlights,
     })
 
 
