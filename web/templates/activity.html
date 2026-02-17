@@ -8,7 +8,24 @@
         <a href="/" class="back-link-small">&larr; Back</a>
     </div>
 
-    {% if time_info %}
+    {% if cat_info %}
+    <div class="activity-summary">
+        {% for cat_name in ["edu", "fun"] %}
+        {% set cat_label = "Edu" if cat_name == "edu" else "Fun" %}
+        {% set info = cat_info.categories[cat_name] %}
+        <div class="activity-stat">
+            <span class="stat-value">{{ info.used_min | int }}</span>
+            <span class="stat-label">{{ cat_label }} min</span>
+        </div>
+        {% if info.limit_min > 0 %}
+        <div class="activity-stat">
+            <span class="stat-value {% if info.remaining_min < 10 %}stat-low{% endif %}">{{ info.remaining_min | int }}</span>
+            <span class="stat-label">{{ cat_label }} left</span>
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+    {% elif time_info %}
     <div class="activity-summary">
         <div class="activity-stat">
             <span class="stat-value">{{ total_min | int }}</span>
@@ -37,6 +54,61 @@
     {% endif %}
 
     {% if breakdown %}
+    {% if cat_info %}
+    {# Group by category #}
+    {% for cat_name in ["edu", "fun"] %}
+    {% set cat_label = "Educational" if cat_name == "edu" else "Entertainment" %}
+    {% set cat_vids = breakdown | selectattr("category", "equalto", cat_name) | list %}
+    {% if cat_vids %}
+    {% set cat_total = cat_vids | sum(attribute="minutes") %}
+    {% set cat_budget = cat_info.categories[cat_name] %}
+    <div class="activity-category-header">
+        <strong>{{ cat_label }}</strong>
+        {% if cat_budget.limit_min > 0 %}
+        — {{ cat_total | int }}/{{ cat_budget.limit_min }} min
+        {% else %}
+        — {{ cat_total | int }} min (no limit)
+        {% endif %}
+    </div>
+    {% if cat_budget.limit_min > 0 %}
+    <div class="activity-bar-wrap">
+        {% set pct = ((cat_total / cat_budget.limit_min) * 100) if cat_budget.limit_min > 0 else 0 %}
+        <div class="activity-bar" style="width: {{ [pct, 100] | min }}%"></div>
+    </div>
+    {% endif %}
+    <div class="activity-list">
+        {% for v in cat_vids %}
+        <a href="/watch/{{ v.video_id }}" class="activity-row">
+            <img src="{{ v.thumbnail_url }}" alt="" class="activity-thumb" loading="lazy">
+            <div class="activity-info">
+                <span class="activity-title">{{ v.title }}</span>
+                <span class="activity-channel">{{ v.channel_name }}</span>
+            </div>
+            <span class="activity-time">{{ v.minutes | int if v.minutes >= 1 else '<1' }} min</span>
+        </a>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% endfor %}
+    {# Also show uncategorized as fun #}
+    {% set uncat_vids = breakdown | rejectattr("category") | list %}
+    {% if uncat_vids %}
+    <div class="activity-category-header"><strong>Entertainment</strong> (uncategorized)</div>
+    <div class="activity-list">
+        {% for v in uncat_vids %}
+        <a href="/watch/{{ v.video_id }}" class="activity-row">
+            <img src="{{ v.thumbnail_url }}" alt="" class="activity-thumb" loading="lazy">
+            <div class="activity-info">
+                <span class="activity-title">{{ v.title }}</span>
+                <span class="activity-channel">{{ v.channel_name }}</span>
+            </div>
+            <span class="activity-time">{{ v.minutes | int if v.minutes >= 1 else '<1' }} min</span>
+        </a>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% else %}
+    {# No category info — flat list like before #}
     <div class="activity-list">
         {% for v in breakdown %}
         <a href="/watch/{{ v.video_id }}" class="activity-row">
@@ -49,6 +121,7 @@
         </a>
         {% endfor %}
     </div>
+    {% endif %}
     {% else %}
     <div class="empty-state">
         <p>No videos watched today</p>

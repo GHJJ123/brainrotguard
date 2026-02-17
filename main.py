@@ -61,9 +61,9 @@ class BrainRotGuard:
             if self.bot:
                 await self.bot.notify_new_request(video)
 
-        async def time_limit_cb(used_min: float, limit_min: int):
+        async def time_limit_cb(used_min: float, limit_min: int, category: str = ""):
             if self.bot:
-                await self.bot.notify_time_limit_reached(used_min, limit_min)
+                await self.bot.notify_time_limit_reached(used_min, limit_min, category)
 
         web_setup(
             self.video_store, notify_callback, self.config.youtube, self.config.web,

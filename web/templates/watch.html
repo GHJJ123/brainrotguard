@@ -10,7 +10,7 @@
 
 {% if time_info %}
 <div class="time-budget {% if time_info.remaining_min < 15 %}time-budget-low{% endif %}">
-    <span>{{ time_info.remaining_min | int }} min remaining today</span>
+    <span>{{ cat_label }}: {{ time_info.remaining_min | int }} min remaining</span>
     <span class="time-budget-detail">{{ time_info.used_min | int }} / {{ time_info.limit_min }} min used</span>
 </div>
 {% endif %}
@@ -27,7 +27,7 @@
         <p class="watch-channel">{{ video.channel_name }}</p>
         {% if time_info %}
         <p class="time-remaining" id="time-remaining">
-            Time left: <span id="time-counter">{{ time_info.remaining_min | int }}</span> min
+            {{ cat_label }} time: <span id="time-counter">{{ time_info.remaining_min | int }}</span> min
         </p>
         {% endif %}
         <a href="/" class="back-link">Back to Library</a>

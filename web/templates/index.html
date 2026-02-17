@@ -57,16 +57,34 @@
 </div>
 {% endif %}
 
+{% if cat_info %}
+<div class="channel-pills" style="margin-top:4px;">
+    <button class="cat-pill active" data-category="__all__">All</button>
+    {% for cat_name, info in cat_info.categories.items() %}
+    {% set cat_label = "Educational" if cat_name == "edu" else "Entertainment" %}
+    <button class="cat-pill{% if info.exceeded %} cat-exceeded{% endif %}" data-category="{{ cat_name }}">
+        {{ cat_label }}
+        {% if info.limit_min > 0 %}
+        <span class="cat-time-badge">{{ info.remaining_min | int }}m</span>
+        {% endif %}
+    </button>
+    {% endfor %}
+</div>
+{% endif %}
+
 {% if catalog %}
 <section class="videos-section">
     <h2 class="section-title">Your Videos</h2>
     <div class="video-grid" id="catalog-grid">
         {% for video in catalog %}
-        <a href="/watch/{{ video.video_id }}" class="video-card" data-channel="{{ video.channel_name }}">
+        <a href="/watch/{{ video.video_id }}" class="video-card" data-channel="{{ video.channel_name }}" data-category="{{ video.category or 'fun' }}">
             <div class="thumbnail-wrap">
                 <img src="{{ video.thumbnail_url }}" alt="{{ video.title }}" class="video-thumbnail" loading="lazy">
                 {% if video.duration %}
                 <span class="duration-badge">{{ format_duration(video.duration) }}</span>
+                {% endif %}
+                {% if video.category %}
+                <span class="category-badge category-{{ video.category }}">{{ "Edu" if video.category == "edu" else "Fun" }}</span>
                 {% endif %}
             </div>
             <div class="video-info">
@@ -191,11 +209,15 @@
         a.href = '/watch/' + encodeURIComponent(v.video_id);
         a.className = 'video-card';
         a.dataset.channel = v.channel_name || '';
+        a.dataset.category = v.category || 'fun';
         var dur = v.duration ? '<span class="duration-badge">' + escapeHtml(formatDuration(v.duration)) + '</span>' : '';
+        var catBadge = v.category ? '<span class="category-badge category-' + escapeHtml(v.category) + '">' + (v.category === 'edu' ? 'Edu' : 'Fun') + '</span>' : '';
+        // eslint-disable-next-line no-unsanitized/property -- values are escaped via escapeHtml()
         a.innerHTML =
             '<div class="thumbnail-wrap">' +
                 '<img src="' + escapeHtml(v.thumbnail_url || '') + '" alt="' + escapeHtml(v.title || '') + '" class="video-thumbnail" loading="lazy">' +
                 dur +
+                catBadge +
             '</div>' +
             '<div class="video-info">' +
                 '<h3 class="video-title">' + escapeHtml(v.title || '') + '</h3>' +
@@ -210,6 +232,7 @@
     var PAGE_SIZE = 24;
     var catalogOffset = {{ catalog | length }};
     var activeFilter = '';
+    var activeCatFilter = '';
     var filterOffset = 0;
     var filterHasMore = false;
     // Stash initial HTML so we can restore on "All"
@@ -220,6 +243,7 @@
     function fetchCatalog(channel, offset, limit, replace) {
         var url = '/api/catalog?offset=' + offset + '&limit=' + limit;
         if (channel) url += '&channel=' + encodeURIComponent(channel);
+        if (activeCatFilter) url += '&category=' + encodeURIComponent(activeCatFilter);
         return fetch(url).then(function(r) { return r.json(); }).then(function(data) {
             if (replace) catalogGrid.innerHTML = '';
             if (data.videos.length === 0 && replace) {
@@ -256,6 +280,10 @@
             }
 
             activeFilter = channel;
+            activeCatFilter = '';
+            document.querySelectorAll('.cat-pill').forEach(function(p) { p.classList.remove('active'); });
+            var allCatPill = document.querySelector('.cat-pill[data-category="__all__"]');
+            if (allCatPill) allCatPill.classList.add('active');
             catalogGrid.innerHTML = '<p style="color:#666;text-align:center;padding:20px;">Loading...</p>';
 
             fetchCatalog(channel, 0, PAGE_SIZE, true)
@@ -275,8 +303,60 @@
         });
     });
 
+    // Category pills: filter by edu/fun
+    document.querySelectorAll('.cat-pill').forEach(function(pill) {
+        pill.addEventListener('click', function() {
+            var category = this.dataset.category;
+            var isAll = category === '__all__';
+            var isActive = this.classList.contains('active');
+
+            document.querySelectorAll('.cat-pill').forEach(function(p) {
+                p.classList.remove('active');
+            });
+
+            if (isActive && !isAll) {
+                document.querySelector('.cat-pill[data-category="__all__"]').classList.add('active');
+                activeCatFilter = '';
+                restoreAll();
+                return;
+            }
+
+            this.classList.add('active');
+
+            if (isAll) {
+                activeCatFilter = '';
+                restoreAll();
+                return;
+            }
+
+            activeCatFilter = category;
+            activeFilter = '';  // clear channel filter
+            // Also reset channel pills
+            document.querySelectorAll('.channel-pill').forEach(function(p) { p.classList.remove('active'); });
+            var allChPill = document.querySelector('.channel-pill[data-channel="__all__"]');
+            if (allChPill) allChPill.classList.add('active');
+
+            catalogGrid.innerHTML = '<p style="color:#666;text-align:center;padding:20px;">Loading...</p>';
+            fetchCatalog('', 0, PAGE_SIZE, true)
+                .then(function(data) {
+                    filterOffset = data.videos.length;
+                    filterHasMore = data.has_more;
+                    showMoreWrap.style.display = filterHasMore ? '' : 'none';
+                    if (showMoreBtn) {
+                        showMoreBtn.disabled = false;
+                        showMoreBtn.textContent = 'Show More';
+                    }
+                })
+                .catch(function() {
+                    catalogGrid.innerHTML = '<p style="color:#888;text-align:center;padding:20px;">Failed to load</p>';
+                    showMoreWrap.style.display = 'none';
+                });
+        });
+    });
+
     function restoreAll() {
         activeFilter = '';
+        activeCatFilter = '';
         catalogGrid.innerHTML = initialGridHTML;
         catalogOffset = initialOffset;
         if (showMoreWrap) showMoreWrap.style.display = initialHasMore ? '' : 'none';
@@ -292,11 +372,11 @@
             showMoreBtn.disabled = true;
             showMoreBtn.textContent = 'Loading...';
             var ch = activeFilter || '';
-            var off = activeFilter ? filterOffset : catalogOffset;
+            var off = (activeFilter || activeCatFilter) ? filterOffset : catalogOffset;
 
             fetchCatalog(ch, off, PAGE_SIZE, false)
                 .then(function(data) {
-                    if (activeFilter) {
+                    if (activeFilter || activeCatFilter) {
                         filterOffset += data.videos.length;
                         filterHasMore = data.has_more;
                     } else {

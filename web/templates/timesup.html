@@ -4,9 +4,24 @@
 {% block content %}
 <div class="timesup-container">
     <div class="timesup-icon">&#x23F0;</div>
+    {% if category %}
+    <h2>{{ category }} Time's Up!</h2>
+    <p class="timesup-text">You've used {{ time_info.used_min | int }} out of {{ time_info.limit_min }} {{ category | lower }} minutes today.</p>
+    {% if available_categories %}
+    <p class="timesup-subtext">You can still watch:</p>
+    {% for cat in available_categories %}
+    <a href="/?category={{ cat.name }}" class="btn-primary" style="display:inline-block;margin:8px 4px;text-decoration:none;">
+        {{ cat.label }}{% if cat.remaining_min > 0 %} ({{ cat.remaining_min | int }} min left){% endif %}
+    </a>
+    {% endfor %}
+    {% else %}
+    <p class="timesup-subtext">Come back tomorrow for more videos!</p>
+    {% endif %}
+    {% else %}
     <h2>Time's Up!</h2>
     <p class="timesup-text">You've used {{ time_info.used_min | int }} out of {{ time_info.limit_min }} minutes today.</p>
     <p class="timesup-subtext">Come back tomorrow for more videos!</p>
+    {% endif %}
     <a href="/" class="back-link">Back to Home</a>
 </div>
 {% endblock %}

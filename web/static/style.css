@@ -1268,3 +1268,57 @@ main {
     white-space: nowrap;
     flex-shrink: 0;
 }
+
+/* Category badges on video cards */
+.category-badge {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.7em;
+    font-weight: 600;
+    color: #fff;
+    z-index: 2;
+}
+.category-edu { background: #2e7d32; }
+.category-fun { background: #e65100; }
+
+/* Category pills */
+.cat-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 14px;
+    border: 1px solid var(--border-subtle, #333);
+    border-radius: 20px;
+    background: transparent;
+    color: var(--text-muted, #aaa);
+    cursor: pointer;
+    font-size: 0.85em;
+    transition: all 0.2s;
+}
+.cat-pill.active {
+    background: linear-gradient(135deg, #e74c6f, #f39c12);
+    color: #fff;
+    border-color: transparent;
+}
+.cat-pill.cat-exceeded {
+    opacity: 0.5;
+    text-decoration: line-through;
+}
+.cat-time-badge {
+    background: rgba(255,255,255,0.2);
+    padding: 1px 6px;
+    border-radius: 10px;
+    font-size: 0.8em;
+}
+
+/* Activity category headers */
+.activity-category-header {
+    padding: 12px 0 4px;
+    font-size: 0.95em;
+    color: var(--text-muted, #aaa);
+    border-bottom: 1px solid var(--border-subtle, #333);
+    margin-bottom: 4px;
+}

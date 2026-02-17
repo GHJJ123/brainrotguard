@@ -217,9 +217,6 @@ templates.env.globals["format_duration"] = format_duration
 _last_heartbeat: dict[str, float] = {}
 _HEARTBEAT_MIN_INTERVAL = 10  # seconds (must be < client heartbeat interval)
 
-# Track whether limit notification was already sent today
-_limit_notified_date: str = ""
-
 # Channel sidebar cache: allowlisted channels → fresh YouTube videos
 _channel_cache: dict = {"channels": {}, "updated_at": 0.0}
 _channel_cache_task = None  # prevent GC of background task
@@ -237,10 +234,10 @@ async def _refresh_channel_cache():
         _channel_cache["updated_at"] = time.monotonic()
         return
     max_vids = youtube_config.channel_cache_results if youtube_config else 200
-    tasks = [fetch_channel_videos(name, max_results=max_vids, channel_id=cid) for name, cid, _handle in allowed]
+    tasks = [fetch_channel_videos(name, max_results=max_vids, channel_id=cid) for name, cid, _handle, _cat in allowed]
     results = await asyncio.gather(*tasks, return_exceptions=True)
     channels = {}
-    for (ch_name, _, _h), result in zip(allowed, results):
+    for (ch_name, _, _h, _c), result in zip(allowed, results):
         if isinstance(result, Exception):
             logger.error("Channel cache fetch failed for '%s': %s", ch_name, result)
             channels[ch_name] = []
@@ -316,6 +313,15 @@ def _build_catalog(channel_filter: str = "") -> list[dict]:
                     seen_ids.add(vid)
                     filtered.append(v)
         filtered.sort(key=lambda v: v.get("timestamp") or 0, reverse=True)
+        # Attach category to each filtered video
+        if video_store:
+            _chan_cats = {}
+            for ch_name, _cid, _h, cat in video_store.get_channels_with_ids("allowed"):
+                if cat:
+                    _chan_cats[ch_name] = cat
+            for v in filtered:
+                if not v.get("category"):
+                    v["category"] = _chan_cats.get(v.get("channel_name", ""), "fun")
         return filtered
 
     # Return cached full catalog if fresh
@@ -351,6 +357,17 @@ def _build_catalog(channel_filter: str = "") -> list[dict]:
                 seen_ids.add(vid)
                 catalog.append(v)
 
+    # Attach category to each catalog video
+    if video_store:
+        # Build channel->category lookup
+        _chan_cats = {}
+        for ch_name, _cid, _h, cat in video_store.get_channels_with_ids("allowed"):
+            if cat:
+                _chan_cats[ch_name] = cat
+        for v in catalog:
+            if not v.get("category"):
+                v["category"] = _chan_cats.get(v.get("channel_name", ""), "fun")
+
     _catalog_cache = catalog
     _catalog_cache_time = time.monotonic()
     return catalog
@@ -363,9 +380,12 @@ async def api_catalog(
     offset: int = Query(0, ge=0),
     limit: int = Query(24, ge=1, le=100),
     channel: str = Query("", max_length=200),
+    category: str = Query("", max_length=10),
 ):
     """Paginated catalog of all watchable videos."""
     full = _build_catalog(channel_filter=channel)
+    if category:
+        full = [v for v in full if v.get("category", "fun") == category]
     page = full[offset:offset + limit]
     return JSONResponse({
         "videos": page,
@@ -400,6 +420,61 @@ def _get_time_limit_info() -> dict | None:
         "remaining_sec": int(remaining_min * 60),
         "exceeded": remaining_min <= 0,
     }
+
+
+def _resolve_video_category(video: dict) -> str:
+    """Resolve effective category: video override > channel default > fun."""
+    cat = video.get("category")
+    if cat:
+        return cat
+    channel_name = video.get("channel_name", "")
+    if channel_name and video_store:
+        ch_cat = video_store.get_channel_category(channel_name)
+        if ch_cat:
+            return ch_cat
+    return "fun"
+
+
+def _get_category_time_info() -> dict | None:
+    """Get per-category time budget info. Returns None if no category limits configured."""
+    if not video_store:
+        return None
+    edu_limit_str = video_store.get_setting("edu_limit_minutes", "")
+    fun_limit_str = video_store.get_setting("fun_limit_minutes", "")
+    edu_limit = int(edu_limit_str) if edu_limit_str else 0
+    fun_limit = int(fun_limit_str) if fun_limit_str else 0
+    # If neither category limit is set, fall back to legacy global limit
+    if edu_limit == 0 and fun_limit == 0:
+        return None
+    today = get_today_str(wl_config.timezone if wl_config else "")
+    usage = video_store.get_daily_watch_by_category(today)
+    # Bonus minutes apply to both categories
+    bonus = 0
+    bonus_date = video_store.get_setting("daily_bonus_date", "")
+    if bonus_date == today:
+        bonus = int(video_store.get_setting("daily_bonus_minutes", "0") or "0")
+
+    result = {"categories": {}}
+    for cat, limit in [("edu", edu_limit), ("fun", fun_limit)]:
+        used = usage.get(cat, 0.0)
+        # Uncategorized counts as fun
+        if cat == "fun":
+            used += usage.get(None, 0.0)
+        effective_limit = limit + bonus if limit > 0 else 0
+        if effective_limit == 0:
+            result["categories"][cat] = {
+                "limit_min": 0, "used_min": round(used, 1),
+                "remaining_min": -1, "remaining_sec": -1, "exceeded": False,
+            }
+        else:
+            remaining = max(0.0, effective_limit - used)
+            result["categories"][cat] = {
+                "limit_min": effective_limit, "used_min": round(used, 1),
+                "remaining_min": round(remaining, 1),
+                "remaining_sec": int(remaining * 60),
+                "exceeded": remaining <= 0,
+            }
+    return result
 
 
 def _get_schedule_info() -> dict | None:
@@ -466,6 +541,7 @@ async def index(request: Request):
     catalog = full_catalog[:page_size]
     time_info = _get_time_limit_info()
     schedule_info = _get_schedule_info()
+    cat_info = _get_category_time_info()
     channel_videos = _channel_cache.get("channels", {})
     # Pick a random video from each channel for the hero carousel
     hero_highlights = []
@@ -480,6 +556,7 @@ async def index(request: Request):
         "total_catalog": len(full_catalog),
         "time_info": time_info,
         "schedule_info": schedule_info,
+        "cat_info": cat_info,
         "channel_videos": channel_videos,
         "hero_highlights": hero_highlights,
     })
@@ -491,12 +568,23 @@ async def activity_page(request: Request):
     today = get_today_str(wl_config.timezone if wl_config else "")
     breakdown = video_store.get_daily_watch_breakdown(today)
     time_info = _get_time_limit_info()
+    cat_info = _get_category_time_info()
     total_min = sum(v["minutes"] for v in breakdown)
+    # Resolve effective category for each breakdown entry
+    if video_store:
+        _chan_cats = {}
+        for ch_name, _cid, _h, cat in video_store.get_channels_with_ids("allowed"):
+            if cat:
+                _chan_cats[ch_name] = cat
+        for v in breakdown:
+            if not v.get("category"):
+                v["category"] = _chan_cats.get(v.get("channel_name", ""), "fun")
     return templates.TemplateResponse("activity.html", {
         "request": request,
         "breakdown": breakdown,
         "total_min": round(total_min, 1),
         "time_info": time_info,
+        "cat_info": cat_info,
     })
 
 
@@ -675,13 +763,35 @@ async def watch_video(request: Request, video_id: str):
     if not video or video["status"] != "approved":
         return RedirectResponse(url="/", status_code=303)
 
-    # Check time limit before allowing playback
-    time_info = _get_time_limit_info()
-    if time_info and time_info["exceeded"]:
-        return templates.TemplateResponse("timesup.html", {
-            "request": request,
-            "time_info": time_info,
-        })
+    # Check category-specific time limit before allowing playback
+    video_cat = _resolve_video_category(video)
+    cat_label = "Educational" if video_cat == "edu" else "Entertainment"
+    cat_info = _get_category_time_info()
+    time_info = None
+    if cat_info:
+        cat_budget = cat_info["categories"].get(video_cat, {})
+        if cat_budget.get("exceeded"):
+            # Find categories that still have time
+            available = []
+            for c, info in cat_info["categories"].items():
+                if not info["exceeded"] and c != video_cat:
+                    c_label = "Educational" if c == "edu" else "Entertainment"
+                    available.append({"name": c, "label": c_label, "remaining_min": info["remaining_min"]})
+            return templates.TemplateResponse("timesup.html", {
+                "request": request,
+                "time_info": cat_budget,
+                "category": cat_label,
+                "available_categories": available,
+            })
+        if cat_budget.get("limit_min", 0) > 0:
+            time_info = cat_budget
+    else:
+        time_info = _get_time_limit_info()
+        if time_info and time_info["exceeded"]:
+            return templates.TemplateResponse("timesup.html", {
+                "request": request,
+                "time_info": time_info,
+            })
 
     # Check schedule window before allowing playback
     schedule_info = _get_schedule_info()
@@ -701,6 +811,8 @@ async def watch_video(request: Request, video_id: str):
         "embed_url": embed_url,
         "time_info": time_info,
         "schedule_info": schedule_info,
+        "video_cat": video_cat,
+        "cat_label": cat_label,
     })
 
 
@@ -720,7 +832,6 @@ async def api_status(request: Request, video_id: str):
 @limiter.limit("30/minute")
 async def watch_heartbeat(request: Request, body: HeartbeatRequest):
     """Log playback seconds and return remaining budget."""
-    global _limit_notified_date
     vid = body.video_id
     seconds = min(max(body.seconds, 0), 60)  # clamp 0-60
 
@@ -747,14 +858,21 @@ async def watch_heartbeat(request: Request, body: HeartbeatRequest):
     if seconds > 0:
         video_store.record_watch_seconds(vid, seconds)
 
-    time_info = _get_time_limit_info()
-    remaining = time_info["remaining_sec"] if time_info else -1
-
-    # Notify parent if limit just reached (once per day)
-    if time_info and time_info["exceeded"] and time_limit_notify_cb:
-        today = get_today_str(wl_config.timezone if wl_config else "")
-        if _limit_notified_date != today:
-            _limit_notified_date = today
+    # Per-category time limit check
+    video_cat = _resolve_video_category(video) if video else "fun"
+    cat_info = _get_category_time_info()
+    remaining = -1
+    if cat_info:
+        cat_budget = cat_info["categories"].get(video_cat, {})
+        if cat_budget.get("limit_min", 0) > 0:
+            remaining = cat_budget.get("remaining_sec", -1)
+        # Notify parent if category limit just reached
+        if cat_budget.get("exceeded") and time_limit_notify_cb:
+            await time_limit_notify_cb(cat_budget["used_min"], cat_budget["limit_min"], video_cat)
+    else:
+        time_info = _get_time_limit_info()
+        remaining = time_info["remaining_sec"] if time_info else -1
+        if time_info and time_info["exceeded"] and time_limit_notify_cb:
             await time_limit_notify_cb(time_info["used_min"], time_info["limit_min"])
 
     return JSONResponse({"remaining": remaining})

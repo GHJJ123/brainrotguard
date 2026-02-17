@@ -64,6 +64,8 @@ class VideoStore:
         self._add_column_if_missing("channels", "channel_id", "TEXT")
         self._add_column_if_missing("channels", "handle", "TEXT")
         self._add_column_if_missing("videos", "channel_id", "TEXT")
+        self._add_column_if_missing("channels", "category", "TEXT")
+        self._add_column_if_missing("videos", "category", "TEXT")
         self.conn.execute("""
             CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
@@ -285,6 +287,53 @@ class VideoStore:
             cursor = self.conn.execute("SELECT word FROM word_filters")
             return {row[0].lower() for row in cursor.fetchall()}
 
+    # --- Categories (edu / fun) ---
+
+    def set_channel_category(self, channel_name: str, category: Optional[str]) -> bool:
+        """Set a channel's category. Pass None to unset."""
+        with self._lock:
+            cursor = self.conn.execute(
+                "UPDATE channels SET category = ? WHERE channel_name = ? COLLATE NOCASE",
+                (category, channel_name),
+            )
+            self.conn.commit()
+            return cursor.rowcount > 0
+
+    def set_video_category(self, video_id: str, category: Optional[str]) -> bool:
+        """Set a video's category (overrides channel default). Pass None to unset."""
+        with self._lock:
+            cursor = self.conn.execute(
+                "UPDATE videos SET category = ? WHERE video_id = ?",
+                (category, video_id),
+            )
+            self.conn.commit()
+            return cursor.rowcount > 0
+
+    def get_channel_category(self, channel_name: str) -> Optional[str]:
+        """Get a channel's assigned category."""
+        with self._lock:
+            cursor = self.conn.execute(
+                "SELECT category FROM channels WHERE channel_name = ? COLLATE NOCASE",
+                (channel_name,),
+            )
+            row = cursor.fetchone()
+            return row[0] if row and row[0] else None
+
+    def get_daily_watch_by_category(self, date_str: str) -> dict:
+        """Sum watch time per effective category for a date. Returns {category_or_None: minutes}."""
+        with self._lock:
+            cursor = self.conn.execute(
+                "SELECT COALESCE(v.category, c.category) as cat, "
+                "       COALESCE(SUM(w.duration), 0) as total_sec "
+                "FROM watch_log w "
+                "LEFT JOIN videos v ON w.video_id = v.video_id "
+                "LEFT JOIN channels c ON v.channel_name = c.channel_name COLLATE NOCASE "
+                "WHERE w.watched_at >= ? AND w.watched_at < date(?, '+1 day') "
+                "GROUP BY cat",
+                (date_str, date_str),
+            )
+            return {row[0]: row[1] / 60.0 for row in cursor.fetchall()}
+
     # --- Watch time tracking ---
 
     def record_watch_seconds(self, video_id: str, seconds: int) -> None:
@@ -339,8 +388,10 @@ class VideoStore:
             cursor = self.conn.execute(
                 "SELECT w.video_id, COALESCE(SUM(w.duration), 0) as total_sec,"
                 "       v.title, v.channel_name, v.thumbnail_url,"
-                "       v.duration, v.channel_id "
+                "       v.duration, v.channel_id,"
+                "       COALESCE(v.category, c.category) as category "
                 "FROM watch_log w LEFT JOIN videos v ON w.video_id = v.video_id "
+                "LEFT JOIN channels c ON v.channel_name = c.channel_name COLLATE NOCASE "
                 "WHERE w.watched_at >= ? AND w.watched_at < date(?, '+1 day') "
                 "GROUP BY w.video_id ORDER BY total_sec DESC",
                 (date_str, date_str),
@@ -354,6 +405,7 @@ class VideoStore:
                     "thumbnail_url": row[4] or "",
                     "duration": row[5],
                     "channel_id": row[6],
+                    "category": row[7],
                 }
                 for row in cursor.fetchall()
             ]
@@ -361,16 +413,17 @@ class VideoStore:
     # --- Channel allow/block lists ---
 
     def add_channel(self, name: str, status: str, channel_id: Optional[str] = None,
-                    handle: Optional[str] = None) -> bool:
+                    handle: Optional[str] = None, category: Optional[str] = None) -> bool:
         """Add or update a channel in allow/block list. Returns True if inserted/updated."""
         with self._lock:
             self.conn.execute(
-                """INSERT INTO channels (channel_name, status, channel_id, handle) VALUES (?, ?, ?, ?)
+                """INSERT INTO channels (channel_name, status, channel_id, handle, category) VALUES (?, ?, ?, ?, ?)
                    ON CONFLICT(channel_name) DO UPDATE SET status = ?,
                    channel_id = COALESCE(?, channel_id),
                    handle = COALESCE(?, handle),
+                   category = COALESCE(?, category),
                    added_at = datetime('now')""",
-                (name, status, channel_id, handle, status, channel_id, handle),
+                (name, status, channel_id, handle, category, status, channel_id, handle, category),
             )
             self.conn.commit()
             return True
@@ -394,14 +447,14 @@ class VideoStore:
             )
             return [row[0] for row in cursor.fetchall()]
 
-    def get_channels_with_ids(self, status: str) -> list[tuple[str, Optional[str], Optional[str]]]:
-        """List (channel_name, channel_id, handle) tuples by status."""
+    def get_channels_with_ids(self, status: str) -> list[tuple[str, Optional[str], Optional[str], Optional[str]]]:
+        """List (channel_name, channel_id, handle, category) tuples by status."""
         with self._lock:
             cursor = self.conn.execute(
-                "SELECT channel_name, channel_id, handle FROM channels WHERE status = ? ORDER BY channel_name",
+                "SELECT channel_name, channel_id, handle, category FROM channels WHERE status = ? ORDER BY channel_name",
                 (status,),
             )
-            return [(row[0], row[1], row[2]) for row in cursor.fetchall()]
+            return [(row[0], row[1], row[2], row[3]) for row in cursor.fetchall()]
 
     def is_channel_allowed(self, name: str) -> bool:
         """Check if channel is on the allowlist."""
