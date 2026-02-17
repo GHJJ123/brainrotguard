@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.11.0 - Edu/Fun Category Time Limits
+
+- Two fixed categories: edu (educational) and fun (entertainment)
+- Per-category daily time limits via `/time edu|fun <min|off>`
+- Approve buttons split into "Approve (Edu)" / "Approve (Fun)"
+- Allow Channel buttons split into "Allow Ch (Edu)" / "Allow Ch (Fun)"
+- `/channel allow @handle edu|fun` sets category on allowlist
+- Homepage: category filter pills with remaining-time badges
+- Video thumbnails: edu (green) / fun (orange) category badges
+- Watch page: category-specific countdown ("Entertainment: 12 min left")
+- Time's up page: shows which category is exceeded + links to browse other category
+- Activity page: per-category grouped breakdown with progress bars
+- `/watch` and `/time` commands show per-category usage
+- Bonus minutes (`/time add`) apply to both categories equally
+- Uncategorized videos default to "fun"
+
 ## v1.10.3 - Fix Homepage Channel Variety
 
 - Restored round-robin interleaving for homepage catalog
