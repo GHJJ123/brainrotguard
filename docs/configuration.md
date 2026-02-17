@@ -31,10 +31,23 @@ database:
   path: db/videos.db
 
 watch_limits:
-  daily_limit_minutes: 120       # 0 = unlimited
+  daily_limit_minutes: 120       # 0 = unlimited (global fallback when no category limits set)
   timezone: America/New_York     # your local timezone
   notify_on_limit: true          # notify parent when limit is hit
 ```
+
+### Category Time Limits
+
+Category limits are managed via Telegram commands, not config files. They're stored in the SQLite database:
+
+- `/time edu 120` — 120 minutes/day for educational content
+- `/time fun 60` — 60 minutes/day for entertainment content
+- `/time edu off` — unlimited educational content
+- `/time fun off` — unlimited entertainment content
+
+When category limits are set, they replace the global `daily_limit_minutes`. When neither category limit is set, the global limit applies as a fallback.
+
+Channels are tagged when allowlisted (`/channel allow @handle edu`) or recategorized later (`/channel cat <name> edu`). Individual videos are tagged during approval (Approve Edu / Approve Fun buttons) or toggled after approval.
 
 If you skip `config.yaml` entirely, everything falls back to environment variables:
 

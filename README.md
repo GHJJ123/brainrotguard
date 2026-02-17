@@ -71,7 +71,7 @@ BrainRotGuard removes the algorithm entirely. There's no autoplay, no "up next" 
 
 Don't want them watching gaming content? Block those channels. Tired of a specific creator? One tap. You can allow the channels you trust (educational, science, building, nature) and block the ones you don't — and it sticks. He picks what to ask for, I have the final say.
 
-Now I curate his content and I can see the difference. He's not parroting gamer lingo back at me anymore. The stuff he watches is actually interesting — things he's curious about, things he's learning from. I pair this with Google Family Link on his device for general screen time, but BrainRotGuard is what controls YouTube specifically: daily time limits, scheduled access windows, and per-channel approval. Family Link says "the tablet turns off at 8pm." BrainRotGuard says "you can watch 2 hours of YouTube today, but only from channels I've approved."
+Now I curate his content and I can see the difference. He's not parroting gamer lingo back at me anymore. The stuff he watches is actually interesting — things he's curious about, things he's learning from. I pair this with Google Family Link on his device for general screen time, but BrainRotGuard is what controls YouTube specifically: daily time limits, scheduled access windows, and per-channel approval. Family Link says "the tablet turns off at 8pm." BrainRotGuard says "you can watch 2 hours of entertainment YouTube today, but educational content is unlimited — and only from channels I've approved."
 
 ## Features
 
@@ -80,16 +80,18 @@ Now I curate his content and I can see the difference. He's not parroting gamer 
 - **Simple search** — type what you want, see results, tap Request
 - **Instant playback** — approved videos play immediately, no waiting
 - **Video library** — browse everything that's been approved before
+- **Category browsing** — filter by educational or entertainment content with one tap
 - **Channel browsing** — see latest videos from pre-approved channels without needing to request each one
 - **Dark theme** — easy on the eyes, designed for tablets
 
 ### For Parents
 - **Telegram approval** — approve/deny from anywhere with one tap
 - **Channel allow/block lists** — trust a channel once, and new videos from it are auto-approved
-- **Daily screen time limits** — set how many minutes per day, get notified when time runs out
+- **Edu/Fun categories** — label channels and videos as educational or entertainment, each with its own daily time limit
+- **Daily screen time limits** — set separate limits for educational and entertainment content, or a single global limit
 - **Scheduled hours** — define when watching is allowed (e.g., 8am–7pm, not during school)
 - **Bonus time** — grant extra minutes for today only (`/time add 30`)
-- **Watch activity log** — see what was watched, for how long, and when
+- **Watch activity log** — see what was watched, for how long, grouped by category
 - **Word filters** — block videos whose titles contain specific words
 - **Search history** — see everything your child has searched for
 - **PIN lock** — optional PIN gate so only your kid can access the web UI on the right device
