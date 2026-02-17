@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.10.1 - Screenshot & Demo Refresh
+
+- Updated all device screenshots for new UI (swipe hero, search in header)
+- Re-recorded and compressed demo video for GitHub inline playback (18MB → 1.4MB)
+- New combined showcase: landscape iPad (top) + 3 iPhone bezels (bottom) + full-page strip (right)
+- Added landscape tablet screenshot for showcase layout
+
 ## v1.9.7 - Screenshot Refresh & Search Results
 
 - Retook phone screenshots at iPhone 17 Pro Max resolution (440x956 @2x) for proper tall aspect ratio
