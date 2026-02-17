@@ -323,15 +323,25 @@ def _build_catalog(channel_filter: str = "") -> list[dict]:
     if _catalog_cache and _catalog_cache_time >= cache_age and _catalog_cache_time > 0:
         return _catalog_cache
 
-    # Collect all channel cache videos, deduped
+    # Round-robin interleave channels (each already newest-first from YouTube)
     seen_ids = set()
     catalog = []
-    for vids in channels.values():
-        for v in vids:
-            vid = v.get("video_id", "")
-            if vid and vid not in seen_ids:
-                seen_ids.add(vid)
-                catalog.append(v)
+    if channels:
+        chan_lists = [list(vids) for vids in channels.values() if vids]
+        indices = [0] * len(chan_lists)
+        while True:
+            added = False
+            for i, vids in enumerate(chan_lists):
+                if indices[i] < len(vids):
+                    v = vids[indices[i]]
+                    vid = v.get("video_id", "")
+                    if vid and vid not in seen_ids:
+                        seen_ids.add(vid)
+                        catalog.append(v)
+                    indices[i] += 1
+                    added = True
+            if not added:
+                break
 
     # Append individually approved DB videos not already in channel set
     if video_store:
@@ -340,9 +350,6 @@ def _build_catalog(channel_filter: str = "") -> list[dict]:
             if vid and vid not in seen_ids:
                 seen_ids.add(vid)
                 catalog.append(v)
-
-    # Sort by YouTube upload date (newest first); videos without timestamp go last
-    catalog.sort(key=lambda v: v.get("timestamp") or 0, reverse=True)
 
     _catalog_cache = catalog
     _catalog_cache_time = time.monotonic()
