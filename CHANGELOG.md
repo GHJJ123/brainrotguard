@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.11.1 - Category Filter Cards + Desktop Scrollbar Fix
+
+- Redesigned category filter from pills to compact horizontal cards
+- Cards show category name, time remaining (large), and progress bar
+- Unlimited categories display "Unlimited" label without progress bar
+- Exhausted categories show "time's up" with dimmed state
+- Fixed channel pill scrollbar hidden on desktop (now shows thin scrollbar on mouse devices, hidden on touch)
+
 ## v1.11.0 - Edu/Fun Category Time Limits
 
 - Two fixed categories: edu (educational) and fun (entertainment)
