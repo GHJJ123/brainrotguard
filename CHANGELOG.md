@@ -1,4 +1,9 @@
 # Changelog
+## v1.11.5 - Auto-resolve @handles for Inline Channel Actions
+- Inline Allow/Block Channel buttons now resolve @handle in background via yt-dlp
+- Startup backfill resolves missing @handles for legacy channels
+- Both paths ensure /channel list always shows @handles
+
 
 ## v1.11.4 - Channel Handle Support in Commands
 
