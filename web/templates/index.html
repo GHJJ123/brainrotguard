@@ -58,14 +58,26 @@
 {% endif %}
 
 {% if cat_info %}
-<div class="channel-pills" style="margin-top:4px;">
-    <button class="cat-pill active" data-category="__all__">All</button>
+<div class="cat-cards-row">
+    <button class="cat-card-all active" data-category="__all__">All</button>
     {% for cat_name, info in cat_info.categories.items() %}
     {% set cat_label = "Educational" if cat_name == "edu" else "Entertainment" %}
-    <button class="cat-pill{% if info.exceeded %} cat-exceeded{% endif %}" data-category="{{ cat_name }}">
-        {{ cat_label }}
+    <button class="cat-card cat-card-{{ cat_name }}{% if info.exceeded %} cat-card-exceeded{% endif %}" data-category="{{ cat_name }}">
+        <span class="cat-card-left">
+            <span class="cat-card-name">{{ cat_label }}</span>
+            {% if info.exceeded %}
+            <span class="cat-card-sub">time's up</span>
+            {% elif info.limit_min > 0 %}
+            <span class="cat-card-sub">of {{ info.limit_min }}m</span>
+            {% else %}
+            <span class="cat-card-sub">Unlimited</span>
+            {% endif %}
+        </span>
         {% if info.limit_min > 0 %}
-        <span class="cat-time-badge">{{ info.remaining_min | int }}m</span>
+        <span class="cat-card-right">
+            <span class="cat-card-time">{{ info.remaining_min | int }}<span class="cat-card-m">m</span></span>
+            <span class="cat-card-bar"><span class="cat-card-bar-fill" style="width:{{ ((info.remaining_min / info.limit_min) * 100) | int }}%"></span></span>
+        </span>
         {% endif %}
     </button>
     {% endfor %}
@@ -281,8 +293,8 @@
 
             activeFilter = channel;
             activeCatFilter = '';
-            document.querySelectorAll('.cat-pill').forEach(function(p) { p.classList.remove('active'); });
-            var allCatPill = document.querySelector('.cat-pill[data-category="__all__"]');
+            document.querySelectorAll('.cat-card, .cat-card-all').forEach(function(p) { p.classList.remove('active'); });
+            var allCatPill = document.querySelector('.cat-card-all[data-category="__all__"]');
             if (allCatPill) allCatPill.classList.add('active');
             catalogGrid.innerHTML = '<p style="color:#666;text-align:center;padding:20px;">Loading...</p>';
 
@@ -303,19 +315,19 @@
         });
     });
 
-    // Category pills: filter by edu/fun
-    document.querySelectorAll('.cat-pill').forEach(function(pill) {
-        pill.addEventListener('click', function() {
+    // Category cards: filter by edu/fun
+    document.querySelectorAll('.cat-card, .cat-card-all').forEach(function(card) {
+        card.addEventListener('click', function() {
             var category = this.dataset.category;
             var isAll = category === '__all__';
             var isActive = this.classList.contains('active');
 
-            document.querySelectorAll('.cat-pill').forEach(function(p) {
+            document.querySelectorAll('.cat-card, .cat-card-all').forEach(function(p) {
                 p.classList.remove('active');
             });
 
             if (isActive && !isAll) {
-                document.querySelector('.cat-pill[data-category="__all__"]').classList.add('active');
+                document.querySelector('.cat-card-all[data-category="__all__"]').classList.add('active');
                 activeCatFilter = '';
                 restoreAll();
                 return;
