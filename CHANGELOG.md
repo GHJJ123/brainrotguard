@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.11.3 - Channel Block Fix + Search Query Filter
+
+- Fixed `/channel block @handle` not resolving handle to display name (blocked channels weren't filtered from search results)
+- `/channel block` now requires @handle and resolves via yt-dlp, matching `/channel allow` behavior
+- Search word filters now block the query itself (returns zero results immediately instead of only filtering titles)
+
 ## v1.11.2 - Timezone Fix + Category Cache + Activity Link
 
 - Fixed watch time queries using wrong timezone boundaries (UTC timestamps queried with local date, causing time to reset on redeploy)
