@@ -832,7 +832,8 @@ class BrainRotGuardBot:
         if cat not in ("edu", "fun"):
             await update.message.reply_text("Category must be `edu` or `fun`.")
             return
-        channel = " ".join(args[:-1])
+        raw = " ".join(args[:-1])
+        channel = self.video_store.resolve_channel_name(raw) or raw
         if self.video_store.set_channel_category(channel, cat):
             self.video_store.set_channel_videos_category(channel, cat)
             cat_label = "Educational" if cat == "edu" else "Entertainment"
@@ -840,7 +841,7 @@ class BrainRotGuardBot:
                 self.on_channel_change()
             await update.message.reply_text(f"**{channel}** → {cat_label}", parse_mode=MD2)
         else:
-            await update.message.reply_text(f"Channel not found: {channel}")
+            await update.message.reply_text(f"Channel not found: {raw}")
 
     _CHANNEL_PAGE_SIZE = 10
 
@@ -871,7 +872,8 @@ class BrainRotGuardBot:
                 url = f"https://www.youtube.com/{handle}"
             else:
                 url = f"https://www.youtube.com/results?search_query={quote(ch)}"
-            lines.append(f"  [{ch}]({url}) *{label}{cat_tag}*")
+            handle_tag = f" `{handle}`" if handle else ""
+            lines.append(f"  [{ch}]({url}){handle_tag} *{label}{cat_tag}*")
             btn_label = f"Unallow: {ch}" if status == "allowed" else f"Unblock: {ch}"
             btn_action = "unallow" if status == "allowed" else "unblock"
             buttons.append([InlineKeyboardButton(

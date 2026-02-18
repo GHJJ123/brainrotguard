@@ -294,12 +294,12 @@ class VideoStore:
 
     # --- Categories (edu / fun) ---
 
-    def set_channel_category(self, channel_name: str, category: Optional[str]) -> bool:
-        """Set a channel's category. Pass None to unset."""
+    def set_channel_category(self, name_or_handle: str, category: Optional[str]) -> bool:
+        """Set a channel's category by name or @handle. Pass None to unset."""
         with self._lock:
             cursor = self.conn.execute(
-                "UPDATE channels SET category = ? WHERE channel_name = ? COLLATE NOCASE",
-                (category, channel_name),
+                "UPDATE channels SET category = ? WHERE channel_name = ? COLLATE NOCASE OR handle = ? COLLATE NOCASE",
+                (category, name_or_handle, name_or_handle),
             )
             self.conn.commit()
             return cursor.rowcount > 0
@@ -458,6 +458,16 @@ class VideoStore:
             )
             self.conn.commit()
             return cursor.rowcount > 0
+
+    def resolve_channel_name(self, name_or_handle: str) -> Optional[str]:
+        """Look up channel_name by name or @handle. Returns the display name or None."""
+        with self._lock:
+            cursor = self.conn.execute(
+                "SELECT channel_name FROM channels WHERE channel_name = ? COLLATE NOCASE OR handle = ? COLLATE NOCASE",
+                (name_or_handle, name_or_handle),
+            )
+            row = cursor.fetchone()
+            return row[0] if row else None
 
     def get_channels(self, status: str) -> list[str]:
         """List channel names by status."""
