@@ -28,6 +28,29 @@ def get_today_str(tz_name: str = "") -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 
+def get_day_utc_bounds(date_str: str, tz_name: str = "") -> tuple[str, str]:
+    """Convert a local date (YYYY-MM-DD) to UTC start/end timestamps.
+
+    Returns (start_utc, end_utc) as ISO strings for use in SQL queries
+    against UTC-stored watched_at timestamps.
+    """
+    from datetime import timedelta
+    local_date = datetime.strptime(date_str, "%Y-%m-%d")
+    if tz_name:
+        try:
+            from zoneinfo import ZoneInfo
+            tz = ZoneInfo(tz_name)
+            start_local = local_date.replace(tzinfo=tz)
+            end_local = (local_date + timedelta(days=1)).replace(tzinfo=tz)
+            start_utc = start_local.astimezone(timezone.utc)
+            end_utc = end_local.astimezone(timezone.utc)
+            return (start_utc.strftime("%Y-%m-%d %H:%M:%S"),
+                    end_utc.strftime("%Y-%m-%d %H:%M:%S"))
+        except Exception:
+            logger.warning("Invalid timezone %r for day bounds, using date as-is", tz_name)
+    return (date_str, f"{date_str} 23:59:59")
+
+
 def parse_time_input(raw: str) -> str | None:
     """Parse flexible time input into 24-hour "HH:MM" format.
 

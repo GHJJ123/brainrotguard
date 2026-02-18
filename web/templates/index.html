@@ -59,28 +59,31 @@
 
 {% if cat_info %}
 <div class="cat-cards-row">
-    <button class="cat-card-all active" data-category="__all__">All</button>
-    {% for cat_name, info in cat_info.categories.items() %}
-    {% set cat_label = "Educational" if cat_name == "edu" else "Entertainment" %}
-    <button class="cat-card cat-card-{{ cat_name }}{% if info.exceeded %} cat-card-exceeded{% endif %}" data-category="{{ cat_name }}">
-        <span class="cat-card-left">
-            <span class="cat-card-name">{{ cat_label }}</span>
-            {% if info.exceeded %}
-            <span class="cat-card-sub">time's up</span>
-            {% elif info.limit_min > 0 %}
-            <span class="cat-card-sub">of {{ info.limit_min }}m</span>
-            {% else %}
-            <span class="cat-card-sub">Unlimited</span>
+    <div class="cat-cards-group">
+        <button class="cat-card-all active" data-category="__all__">All</button>
+        {% for cat_name, info in cat_info.categories.items() %}
+        {% set cat_label = "Educational" if cat_name == "edu" else "Entertainment" %}
+        <button class="cat-card cat-card-{{ cat_name }}{% if info.exceeded %} cat-card-exceeded{% endif %}" data-category="{{ cat_name }}">
+            <span class="cat-card-left">
+                <span class="cat-card-name">{{ cat_label }}</span>
+                {% if info.exceeded %}
+                <span class="cat-card-sub">time's up</span>
+                {% elif info.limit_min > 0 %}
+                <span class="cat-card-sub">of {{ info.limit_min }}m</span>
+                {% else %}
+                <span class="cat-card-sub">Unlimited</span>
+                {% endif %}
+            </span>
+            {% if info.limit_min > 0 %}
+            <span class="cat-card-right">
+                <span class="cat-card-time">{{ info.remaining_min | int }}<span class="cat-card-m">m</span></span>
+                <span class="cat-card-bar"><span class="cat-card-bar-fill" style="width:{{ ((info.remaining_min / info.limit_min) * 100) | int }}%"></span></span>
+            </span>
             {% endif %}
-        </span>
-        {% if info.limit_min > 0 %}
-        <span class="cat-card-right">
-            <span class="cat-card-time">{{ info.remaining_min | int }}<span class="cat-card-m">m</span></span>
-            <span class="cat-card-bar"><span class="cat-card-bar-fill" style="width:{{ ((info.remaining_min / info.limit_min) * 100) | int }}%"></span></span>
-        </span>
-        {% endif %}
-    </button>
-    {% endfor %}
+        </button>
+        {% endfor %}
+    </div>
+    <a href="/activity" class="cat-card-activity" title="Watch activity">&#x1f552;</a>
 </div>
 {% endif %}
 

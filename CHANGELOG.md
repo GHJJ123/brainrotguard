@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.11.2 - Timezone Fix + Category Cache + Activity Link
+
+- Fixed watch time queries using wrong timezone boundaries (UTC timestamps queried with local date, causing time to reset on redeploy)
+- Added `get_day_utc_bounds()` to convert local dates to UTC ranges for all watch time queries
+- Fixed channel category changes not persisting in video cache (always re-apply current channel category)
+- Added clock icon linking to activity page from category cards row
+- Category cards: progress bar visibility fix, desktop width cap, layout refinements
+
 ## v1.11.1 - Category Filter Cards + Desktop Scrollbar Fix
 
 - Redesigned category filter from pills to compact horizontal cards

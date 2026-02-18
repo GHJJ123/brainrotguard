@@ -1306,9 +1306,15 @@ main {
 /* Category filter cards */
 .cat-cards-row {
     display: flex;
+    align-items: center;
     gap: 8px;
     margin-top: 4px;
     margin-bottom: 8px;
+}
+.cat-cards-group {
+    display: flex;
+    gap: 8px;
+    max-width: 480px;
 }
 .cat-card-all {
     padding: 8px 14px;
@@ -1328,7 +1334,6 @@ main {
     border-color: rgba(255,255,255,0.15);
 }
 .cat-card {
-    flex: 1;
     padding: 8px 12px;
     border-radius: 8px;
     cursor: pointer;
@@ -1339,6 +1344,8 @@ main {
     gap: 10px;
     background: none;
     font-family: inherit;
+    min-width: 0;
+    flex: 1 1 0;
 }
 .cat-card-edu {
     background: rgba(46, 125, 50, 0.10);
@@ -1370,9 +1377,10 @@ main {
 }
 .cat-card-exceeded .cat-card-sub { color: #e74c6f; }
 .cat-card-right {
-    margin-left: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
     flex-shrink: 0;
-    text-align: right;
 }
 .cat-card-time {
     font-size: 20px;
@@ -1386,19 +1394,34 @@ main {
     font-weight: 400;
 }
 .cat-card-bar {
+    display: block;
     margin-top: 4px;
-    height: 3px;
-    width: 48px;
-    background: rgba(255,255,255,0.08);
-    border-radius: 2px;
+    height: 6px;
+    width: 52px;
+    background: rgba(255,255,255,0.12);
+    border-radius: 3px;
     overflow: hidden;
 }
 .cat-card-bar-fill {
+    display: block;
     height: 100%;
     border-radius: 2px;
 }
 .cat-card-edu .cat-card-bar-fill { background: #43a047; }
 .cat-card-fun .cat-card-bar-fill { background: #ff8f00; }
+.cat-card-activity {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-left: auto;
+    width: 28px;
+    font-size: 16px;
+    text-decoration: none;
+    opacity: 0.45;
+    transition: opacity 0.2s;
+}
+.cat-card-activity:hover { opacity: 0.8; }
 
 /* Activity category headers */
 .activity-category-header {

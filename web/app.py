@@ -21,7 +21,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
-from utils import get_today_str, is_within_schedule, format_time_12h
+from utils import get_today_str, get_day_utc_bounds, is_within_schedule, format_time_12h
 from youtube.extractor import extract_video_id, extract_metadata, search, fetch_channel_videos, format_duration, configure_timeout
 
 VIDEO_ID_RE = re.compile(r'^[a-zA-Z0-9_-]{11}$')
@@ -320,8 +320,7 @@ def _build_catalog(channel_filter: str = "") -> list[dict]:
                 if cat:
                     _chan_cats[ch_name] = cat
             for v in filtered:
-                if not v.get("category"):
-                    v["category"] = _chan_cats.get(v.get("channel_name", ""), "fun")
+                v["category"] = _chan_cats.get(v.get("channel_name", ""), v.get("category") or "fun")
         return filtered
 
     # Return cached full catalog if fresh
@@ -357,16 +356,14 @@ def _build_catalog(channel_filter: str = "") -> list[dict]:
                 seen_ids.add(vid)
                 catalog.append(v)
 
-    # Attach category to each catalog video
+    # Attach category to each catalog video (always refresh from channel setting)
     if video_store:
-        # Build channel->category lookup
         _chan_cats = {}
         for ch_name, _cid, _h, cat in video_store.get_channels_with_ids("allowed"):
             if cat:
                 _chan_cats[ch_name] = cat
         for v in catalog:
-            if not v.get("category"):
-                v["category"] = _chan_cats.get(v.get("channel_name", ""), "fun")
+            v["category"] = _chan_cats.get(v.get("channel_name", ""), v.get("category") or "fun")
 
     _catalog_cache = catalog
     _catalog_cache_time = time.monotonic()
@@ -405,13 +402,15 @@ def _get_time_limit_info() -> dict | None:
         limit_min = int(limit_str) if limit_str else 0
     if limit_min == 0:
         return None
-    today = get_today_str(wl_config.timezone if wl_config else "")
+    tz = wl_config.timezone if wl_config else ""
+    today = get_today_str(tz)
+    bounds = get_day_utc_bounds(today, tz)
     # Add today's bonus minutes (auto-expires when date doesn't match)
     bonus_date = video_store.get_setting("daily_bonus_date", "")
     if bonus_date == today:
         bonus = int(video_store.get_setting("daily_bonus_minutes", "0") or "0")
         limit_min += bonus
-    used_min = video_store.get_daily_watch_minutes(today)
+    used_min = video_store.get_daily_watch_minutes(today, utc_bounds=bounds)
     remaining_min = max(0.0, limit_min - used_min)
     return {
         "limit_min": limit_min,
@@ -446,8 +445,10 @@ def _get_category_time_info() -> dict | None:
     # If neither category limit is set, fall back to legacy global limit
     if edu_limit == 0 and fun_limit == 0:
         return None
-    today = get_today_str(wl_config.timezone if wl_config else "")
-    usage = video_store.get_daily_watch_by_category(today)
+    tz = wl_config.timezone if wl_config else ""
+    today = get_today_str(tz)
+    bounds = get_day_utc_bounds(today, tz)
+    usage = video_store.get_daily_watch_by_category(today, utc_bounds=bounds)
     # Bonus minutes apply to both categories
     bonus = 0
     bonus_date = video_store.get_setting("daily_bonus_date", "")
@@ -565,8 +566,10 @@ async def index(request: Request):
 @app.get("/activity", response_class=HTMLResponse)
 async def activity_page(request: Request):
     """Today's watch log — per-video breakdown and total."""
-    today = get_today_str(wl_config.timezone if wl_config else "")
-    breakdown = video_store.get_daily_watch_breakdown(today)
+    tz = wl_config.timezone if wl_config else ""
+    today = get_today_str(tz)
+    bounds = get_day_utc_bounds(today, tz)
+    breakdown = video_store.get_daily_watch_breakdown(today, utc_bounds=bounds)
     time_info = _get_time_limit_info()
     cat_info = _get_category_time_info()
     total_min = sum(v["minutes"] for v in breakdown)
@@ -577,8 +580,7 @@ async def activity_page(request: Request):
             if cat:
                 _chan_cats[ch_name] = cat
         for v in breakdown:
-            if not v.get("category"):
-                v["category"] = _chan_cats.get(v.get("channel_name", ""), "fun")
+            v["category"] = _chan_cats.get(v.get("channel_name", ""), v.get("category") or "fun")
     return templates.TemplateResponse("activity.html", {
         "request": request,
         "breakdown": breakdown,

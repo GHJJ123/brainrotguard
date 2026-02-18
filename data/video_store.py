@@ -319,8 +319,10 @@ class VideoStore:
             row = cursor.fetchone()
             return row[0] if row and row[0] else None
 
-    def get_daily_watch_by_category(self, date_str: str) -> dict:
+    def get_daily_watch_by_category(self, date_str: str, utc_bounds: tuple[str, str] | None = None) -> dict:
         """Sum watch time per effective category for a date. Returns {category_or_None: minutes}."""
+        start, end = utc_bounds if utc_bounds else (date_str, date_str)
+        end_clause = "?" if utc_bounds else "date(?, '+1 day')"
         with self._lock:
             cursor = self.conn.execute(
                 "SELECT COALESCE(v.category, c.category) as cat, "
@@ -328,9 +330,9 @@ class VideoStore:
                 "FROM watch_log w "
                 "LEFT JOIN videos v ON w.video_id = v.video_id "
                 "LEFT JOIN channels c ON v.channel_name = c.channel_name COLLATE NOCASE "
-                "WHERE w.watched_at >= ? AND w.watched_at < date(?, '+1 day') "
+                f"WHERE w.watched_at >= ? AND w.watched_at < {end_clause} "
                 "GROUP BY cat",
-                (date_str, date_str),
+                (start, end),
             )
             return {row[0]: row[1] / 60.0 for row in cursor.fetchall()}
 
@@ -371,19 +373,23 @@ class VideoStore:
                     result[vid] = 0.0
             return result
 
-    def get_daily_watch_minutes(self, date_str: str) -> float:
+    def get_daily_watch_minutes(self, date_str: str, utc_bounds: tuple[str, str] | None = None) -> float:
         """Sum watch time for a date (YYYY-MM-DD). Returns minutes."""
+        start, end = utc_bounds if utc_bounds else (date_str, date_str)
+        end_clause = "?" if utc_bounds else "date(?, '+1 day')"
         with self._lock:
             cursor = self.conn.execute(
                 "SELECT COALESCE(SUM(duration), 0) FROM watch_log "
-                "WHERE watched_at >= ? AND watched_at < date(?, '+1 day')",
-                (date_str, date_str),
+                f"WHERE watched_at >= ? AND watched_at < {end_clause}",
+                (start, end),
             )
             total_seconds = cursor.fetchone()[0]
             return total_seconds / 60.0
 
-    def get_daily_watch_breakdown(self, date_str: str) -> list[dict]:
+    def get_daily_watch_breakdown(self, date_str: str, utc_bounds: tuple[str, str] | None = None) -> list[dict]:
         """Per-video watch time for a date, sorted by most watched. Returns list of dicts."""
+        start, end = utc_bounds if utc_bounds else (date_str, date_str)
+        end_clause = "?" if utc_bounds else "date(?, '+1 day')"
         with self._lock:
             cursor = self.conn.execute(
                 "SELECT w.video_id, COALESCE(SUM(w.duration), 0) as total_sec,"
@@ -392,9 +398,9 @@ class VideoStore:
                 "       COALESCE(v.category, c.category) as category "
                 "FROM watch_log w LEFT JOIN videos v ON w.video_id = v.video_id "
                 "LEFT JOIN channels c ON v.channel_name = c.channel_name COLLATE NOCASE "
-                "WHERE w.watched_at >= ? AND w.watched_at < date(?, '+1 day') "
+                f"WHERE w.watched_at >= ? AND w.watched_at < {end_clause} "
                 "GROUP BY w.video_id ORDER BY total_sec DESC",
-                (date_str, date_str),
+                (start, end),
             )
             return [
                 {

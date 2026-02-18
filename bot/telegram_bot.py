@@ -14,7 +14,7 @@ from telegram.ext import (
     MessageHandler, filters,
 )
 
-from utils import get_today_str, parse_time_input, format_time_12h, is_within_schedule
+from utils import get_today_str, get_day_utc_bounds, parse_time_input, format_time_12h, is_within_schedule
 from youtube.extractor import format_duration
 
 logger = logging.getLogger(__name__)
@@ -573,7 +573,8 @@ class BrainRotGuardBot:
                 limit_min = self.config.watch_limits.daily_limit_minutes
             else:
                 limit_min = int(limit_str) if limit_str else 120
-            used = self.video_store.get_daily_watch_minutes(today)
+            bounds = get_day_utc_bounds(today, self._get_tz())
+            used = self.video_store.get_daily_watch_minutes(today, utc_bounds=bounds)
 
             bonus = 0
             bonus_date = self.video_store.get_setting("daily_bonus_date", "")
@@ -596,7 +597,7 @@ class BrainRotGuardBot:
 
         # Per-day breakdown
         for date_str in dates:
-            breakdown = self.video_store.get_daily_watch_breakdown(date_str)
+            breakdown = self.video_store.get_daily_watch_breakdown(date_str, utc_bounds=get_day_utc_bounds(date_str, self._get_tz()))
             if not breakdown:
                 if len(dates) == 1:
                     lines.append("_No videos watched._")
@@ -1140,7 +1141,8 @@ class BrainRotGuardBot:
         else:
             limit_min = int(limit_str) if limit_str else 120
         today = get_today_str(self._get_tz())
-        used = self.video_store.get_daily_watch_minutes(today)
+        bounds = get_day_utc_bounds(today, self._get_tz())
+        used = self.video_store.get_daily_watch_minutes(today, utc_bounds=bounds)
 
         # Check for today's bonus
         bonus = 0
@@ -1162,7 +1164,7 @@ class BrainRotGuardBot:
             lines.append(f"**Remaining:** {int(remaining)} min")
 
         # Per-category limits
-        cat_usage = self.video_store.get_daily_watch_by_category(today)
+        cat_usage = self.video_store.get_daily_watch_by_category(today, utc_bounds=bounds)
         for cat, cat_label in [("edu", "Educational"), ("fun", "Entertainment")]:
             cat_limit_str = self.video_store.get_setting(f"{cat}_limit_minutes", "")
             cat_limit = int(cat_limit_str) if cat_limit_str else 0
