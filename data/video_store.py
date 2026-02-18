@@ -469,6 +469,25 @@ class VideoStore:
             row = cursor.fetchone()
             return row[0] if row else None
 
+    def get_channels_missing_handles(self) -> list[tuple[str, str]]:
+        """Get (channel_name, channel_id) for channels with a channel_id but no handle."""
+        with self._lock:
+            cursor = self.conn.execute(
+                "SELECT channel_name, channel_id FROM channels "
+                "WHERE channel_id IS NOT NULL AND (handle IS NULL OR handle = '')"
+            )
+            return [(row[0], row[1]) for row in cursor.fetchall()]
+
+    def update_channel_handle(self, channel_name: str, handle: str) -> bool:
+        """Set a channel's handle by name."""
+        with self._lock:
+            cursor = self.conn.execute(
+                "UPDATE channels SET handle = ? WHERE channel_name = ? COLLATE NOCASE",
+                (handle, channel_name),
+            )
+            self.conn.commit()
+            return cursor.rowcount > 0
+
     def get_channels(self, status: str) -> list[str]:
         """List channel names by status."""
         with self._lock:

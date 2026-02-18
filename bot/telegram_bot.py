@@ -56,6 +56,40 @@ class BrainRotGuardBot:
             return False
         return str(update.effective_user.id) == str(self.admin_chat_id)
 
+    def _resolve_handle_bg(self, channel_name: str, channel_id: str) -> None:
+        """Fire a background task to resolve and store the @handle for a channel."""
+        import asyncio
+        async def _resolve():
+            try:
+                from youtube.extractor import resolve_channel_handle
+                # resolve_channel_handle takes @handle, but we need to go from channel_id
+                # Use yt-dlp to fetch the channel page and extract the handle
+                from youtube.extractor import _ydl_opts
+                import yt_dlp
+                def _fetch():
+                    opts = _ydl_opts()
+                    opts['extract_flat'] = True
+                    opts['playlistend'] = 1
+                    url = f"https://www.youtube.com/channel/{channel_id}/videos"
+                    with yt_dlp.YoutubeDL(opts) as ydl:
+                        info = ydl.extract_info(url, download=False)
+                        if not info:
+                            return None
+                        uploader_id = info.get('uploader_id', '')
+                        if uploader_id and uploader_id.startswith('@'):
+                            return uploader_id
+                        channel_url = info.get('channel_url', '') or info.get('uploader_url', '')
+                        if '/@' in channel_url:
+                            return '@' + channel_url.split('/@', 1)[1].split('/')[0]
+                        return None
+                handle = await asyncio.wait_for(asyncio.to_thread(_fetch), timeout=30)
+                if handle:
+                    self.video_store.update_channel_handle(channel_name, handle)
+                    logger.info(f"Resolved handle: {channel_name} → {handle}")
+            except Exception as e:
+                logger.debug(f"Background handle resolve failed for {channel_name}: {e}")
+        asyncio.create_task(_resolve())
+
     async def start(self) -> None:
         """Start the bot."""
         logger.info("Starting BrainRotGuard bot...")
@@ -282,7 +316,10 @@ class BrainRotGuardBot:
             status_label = "REVOKED"
         elif action == "allowchan":
             channel = video['channel_name']
-            self.video_store.add_channel(channel, "allowed", channel_id=video.get('channel_id'))
+            cid = video.get('channel_id')
+            self.video_store.add_channel(channel, "allowed", channel_id=cid)
+            if cid:
+                self._resolve_handle_bg(channel, cid)
             if video['status'] == 'pending':
                 self.video_store.update_status(video_id, "approved")
                 self.video_store.set_video_category(video_id, "fun")
@@ -293,7 +330,10 @@ class BrainRotGuardBot:
         elif action in ("allowchan_edu", "allowchan_fun"):
             cat = "edu" if action == "allowchan_edu" else "fun"
             channel = video['channel_name']
-            self.video_store.add_channel(channel, "allowed", channel_id=video.get('channel_id'), category=cat)
+            cid = video.get('channel_id')
+            self.video_store.add_channel(channel, "allowed", channel_id=cid, category=cat)
+            if cid:
+                self._resolve_handle_bg(channel, cid)
             if video['status'] == 'pending':
                 self.video_store.update_status(video_id, "approved")
                 self.video_store.set_video_category(video_id, cat)
@@ -304,7 +344,10 @@ class BrainRotGuardBot:
                 self.on_channel_change()
         elif action == "blockchan":
             channel = video['channel_name']
-            self.video_store.add_channel(channel, "blocked", channel_id=video.get('channel_id'))
+            cid = video.get('channel_id')
+            self.video_store.add_channel(channel, "blocked", channel_id=cid)
+            if cid:
+                self._resolve_handle_bg(channel, cid)
             if video['status'] == 'pending':
                 self.video_store.update_status(video_id, "denied")
             await query.answer(f"Blocked: {channel}")

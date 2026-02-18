@@ -95,6 +95,9 @@ class BrainRotGuard:
         if w_pruned or s_pruned:
             logger.info(f"Pruned {w_pruned} watch_log and {s_pruned} search_log entries")
 
+        # Backfill missing @handles in background
+        asyncio.create_task(self._backfill_handles())
+
         stats = self.video_store.get_stats()
         logger.info(
             f"BrainRotGuard started - {stats['approved']} approved videos, "
@@ -105,6 +108,39 @@ class BrainRotGuard:
             await server.serve()
         except asyncio.CancelledError:
             logger.info("Server cancelled")
+
+    async def _backfill_handles(self) -> None:
+        """Resolve missing @handles for channels that have a channel_id."""
+        missing = self.video_store.get_channels_missing_handles()
+        if not missing:
+            return
+        logger.info(f"Backfilling @handles for {len(missing)} channels")
+        for name, channel_id in missing:
+            try:
+                from youtube.extractor import _ydl_opts
+                import yt_dlp
+                def _resolve():
+                    opts = _ydl_opts()
+                    opts['extract_flat'] = True
+                    opts['playlistend'] = 1
+                    url = f"https://www.youtube.com/channel/{channel_id}/videos"
+                    with yt_dlp.YoutubeDL(opts) as ydl:
+                        info = ydl.extract_info(url, download=False)
+                        if not info:
+                            return None
+                        uploader_id = info.get('uploader_id', '')
+                        if uploader_id and uploader_id.startswith('@'):
+                            return uploader_id
+                        channel_url = info.get('channel_url', '') or info.get('uploader_url', '')
+                        if '/@' in channel_url:
+                            return '@' + channel_url.split('/@', 1)[1].split('/')[0]
+                        return None
+                handle = await asyncio.wait_for(asyncio.to_thread(_resolve), timeout=30)
+                if handle:
+                    self.video_store.update_channel_handle(name, handle)
+                    logger.info(f"Backfilled handle: {name} → {handle}")
+            except Exception as e:
+                logger.debug(f"Failed to resolve handle for {name}: {e}")
 
     async def stop(self) -> None:
         """Stop all components."""
