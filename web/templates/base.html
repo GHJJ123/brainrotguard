@@ -12,9 +12,10 @@
 </head>
 <body>
     <header>
-        <a href="/" class="logo">
-            <img src="/static/logo.png" alt="BrainRotGuard" class="logo-img">
-        </a>
+        <div class="logo">
+            <a href="/"><img src="/static/logo.png" alt="BrainRotGuard" class="logo-img"></a>
+            <a href="https://github.com/GHJJ123/brainrotguard/blob/main/CHANGELOG.md" target="_blank" rel="noopener" class="version-tag">v{{ app_version }}</a>
+        </div>
         <form action="/search" method="GET" class="header-search">
             <input type="text" name="q" placeholder="Search or paste a link..." class="header-search-input" {% block search_attrs %}{% endblock %}>
             <button type="submit" class="btn-primary header-search-btn">Search</button>

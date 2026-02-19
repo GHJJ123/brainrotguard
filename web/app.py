@@ -238,8 +238,10 @@ def setup(store, notify_cb, yt_config=None, w_config=None,
     app.add_middleware(SessionMiddleware, secret_key=session_secret)
 
 
-# Add format_duration to Jinja2 globals
+# Add globals to Jinja2
 templates.env.globals["format_duration"] = format_duration
+from version import __version__
+templates.env.globals["app_version"] = __version__
 
 
 # Heartbeat dedup: video_id -> monotonic timestamp of last heartbeat
