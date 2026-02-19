@@ -52,6 +52,35 @@ class HeartbeatRequest(BaseModel):
     seconds: int
 
 
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Add security headers to all responses."""
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' https://i.ytimg.com https://i1.ytimg.com https://i2.ytimg.com "
+            "https://i3.ytimg.com https://i4.ytimg.com https://i9.ytimg.com https://img.youtube.com; "
+            "frame-src https://www.youtube-nocookie.com; "
+            "connect-src 'self'; "
+            "media-src https://*.googlevideo.com; "
+            "object-src 'none'; "
+            "base-uri 'self'"
+        )
+        return response
+
+
+# API paths that are safe to access without PIN auth:
+# - /api/status/ — needed for pending page polling (only leaks approved/denied/pending status)
+# - /api/yt-iframe-api.js, /api/yt-widget-api.js — proxied YouTube player scripts
+_API_AUTH_EXEMPT = ("/api/status/", "/api/yt-iframe-api.js", "/api/yt-widget-api.js")
+
+
 class PinAuthMiddleware(BaseHTTPMiddleware):
     """Require PIN authentication when configured."""
 
@@ -62,11 +91,10 @@ class PinAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         if not self.pin:
             return await call_next(request)
-        # Allow unauthenticated access to login, static assets, and read-only API endpoints.
-        # /api/watch-heartbeat requires auth (handled below by session check).
+        # Allow unauthenticated access to login, static assets, and specific read-only APIs
         if request.url.path.startswith(("/login", "/static")):
             return await call_next(request)
-        if request.url.path.startswith("/api/") and request.url.path != "/api/watch-heartbeat":
+        if request.url.path.startswith(_API_AUTH_EXEMPT):
             return await call_next(request)
         if request.session.get("authenticated"):
             return await call_next(request)
@@ -205,6 +233,7 @@ def setup(store, notify_cb, yt_config=None, w_config=None,
             logger.info("Generated and persisted new session secret")
     pin = w_config.pin if w_config else ""
 
+    app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(PinAuthMiddleware, pin=pin)
     app.add_middleware(SessionMiddleware, secret_key=session_secret)
 
@@ -216,6 +245,8 @@ templates.env.globals["format_duration"] = format_duration
 # Heartbeat dedup: video_id -> monotonic timestamp of last heartbeat
 _last_heartbeat: dict[str, float] = {}
 _HEARTBEAT_MIN_INTERVAL = 10  # seconds (must be < client heartbeat interval)
+_HEARTBEAT_EVICT_AGE = 120  # evict entries older than this (seconds)
+_heartbeat_last_cleanup: float = 0.0
 
 # Channel sidebar cache: allowlisted channels → fresh YouTube videos
 _channel_cache: dict = {"channels": {}, "updated_at": 0.0}
@@ -305,7 +336,7 @@ def _build_catalog(channel_filter: str = "") -> list[dict]:
             vid = v.get("video_id", "")
             if vid and vid not in seen_ids:
                 seen_ids.add(vid)
-                filtered.append(v)
+                filtered.append(dict(v))
         if video_store:
             for v in video_store.get_by_status("approved", channel_name=channel_filter):
                 vid = v.get("video_id", "")
@@ -329,6 +360,7 @@ def _build_catalog(channel_filter: str = "") -> list[dict]:
         return _catalog_cache
 
     # Round-robin interleave channels (each already newest-first from YouTube)
+    # Copy dicts to avoid mutating shared channel cache references
     seen_ids = set()
     catalog = []
     if channels:
@@ -342,7 +374,7 @@ def _build_catalog(channel_filter: str = "") -> list[dict]:
                     vid = v.get("video_id", "")
                     if vid and vid not in seen_ids:
                         seen_ids.add(vid)
-                        catalog.append(v)
+                        catalog.append(dict(v))
                     indices[i] += 1
                     added = True
             if not added:
@@ -870,6 +902,14 @@ async def watch_heartbeat(request: Request, body: HeartbeatRequest):
     if last and (now - last) < _HEARTBEAT_MIN_INTERVAL:
         seconds = 0
     _last_heartbeat[vid] = now
+
+    # Periodic cleanup: evict stale entries to prevent unbounded growth
+    global _heartbeat_last_cleanup
+    if now - _heartbeat_last_cleanup > _HEARTBEAT_EVICT_AGE:
+        _heartbeat_last_cleanup = now
+        stale = [k for k, t in _last_heartbeat.items() if now - t > _HEARTBEAT_EVICT_AGE]
+        for k in stale:
+            del _last_heartbeat[k]
 
     if seconds > 0:
         video_store.record_watch_seconds(vid, seconds)

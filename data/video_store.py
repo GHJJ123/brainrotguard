@@ -7,6 +7,26 @@ import sqlite3
 import threading
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
+
+# Allowlisted thumbnail CDN hostnames (YouTube image servers)
+_THUMB_ALLOWED_HOSTS = frozenset({
+    "i.ytimg.com", "i1.ytimg.com", "i2.ytimg.com", "i3.ytimg.com",
+    "i4.ytimg.com", "i9.ytimg.com", "img.youtube.com",
+})
+
+
+def _validate_thumbnail_url(url: Optional[str]) -> Optional[str]:
+    """Return the URL only if it points to an allowlisted YouTube CDN host."""
+    if not url:
+        return None
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme in ("http", "https") and parsed.hostname in _THUMB_ALLOWED_HOSTS:
+            return url
+    except Exception:
+        pass
+    return None
 
 
 class VideoStore:
@@ -125,6 +145,7 @@ class VideoStore:
         Add a new video request. If already exists, return existing.
         Returns the video row as a dict.
         """
+        thumbnail_url = _validate_thumbnail_url(thumbnail_url)
         with self._lock:
             self.conn.execute(
                 """

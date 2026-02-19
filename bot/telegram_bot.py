@@ -61,28 +61,8 @@ class BrainRotGuardBot:
         import asyncio
         async def _resolve():
             try:
-                from youtube.extractor import resolve_channel_handle
-                # resolve_channel_handle takes @handle, but we need to go from channel_id
-                # Use yt-dlp to fetch the channel page and extract the handle
-                from youtube.extractor import _ydl_opts
-                import yt_dlp
-                def _fetch():
-                    opts = _ydl_opts()
-                    opts['extract_flat'] = True
-                    opts['playlistend'] = 1
-                    url = f"https://www.youtube.com/channel/{channel_id}/videos"
-                    with yt_dlp.YoutubeDL(opts) as ydl:
-                        info = ydl.extract_info(url, download=False)
-                        if not info:
-                            return None
-                        uploader_id = info.get('uploader_id', '')
-                        if uploader_id and uploader_id.startswith('@'):
-                            return uploader_id
-                        channel_url = info.get('channel_url', '') or info.get('uploader_url', '')
-                        if '/@' in channel_url:
-                            return '@' + channel_url.split('/@', 1)[1].split('/')[0]
-                        return None
-                handle = await asyncio.wait_for(asyncio.to_thread(_fetch), timeout=30)
+                from youtube.extractor import resolve_handle_from_channel_id
+                handle = await resolve_handle_from_channel_id(channel_id)
                 if handle:
                     self.video_store.update_channel_handle(channel_name, handle)
                     logger.info(f"Resolved handle: {channel_name} → {handle}")
@@ -481,22 +461,19 @@ class BrainRotGuardBot:
     async def _cmd_approved(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not self._check_admin(update):
             return
-        approved = self.video_store.get_approved()
-        if not approved:
+        page_items, total = self.video_store.get_approved_page(0, self._APPROVED_PAGE_SIZE)
+        if not page_items:
             await update.message.reply_text("No approved videos.")
             return
-        text, keyboard = self._render_approved_page(approved, 0)
+        text, keyboard = self._render_approved_page(page_items, total, 0)
         await update.message.reply_text(
             text, parse_mode=MD2, reply_markup=keyboard, disable_web_page_preview=True,
         )
 
-    def _render_approved_page(self, approved: list, page: int) -> tuple[str, InlineKeyboardMarkup | None]:
+    def _render_approved_page(self, page_items: list, total: int, page: int) -> tuple[str, InlineKeyboardMarkup | None]:
         """Render a page of the approved list."""
-        total = len(approved)
         ps = self._APPROVED_PAGE_SIZE
-        start = page * ps
-        end = min(start + ps, total)
-        page_items = approved[start:end]
+        end = (page + 1) * ps
         total_pages = (total + ps - 1) // ps
 
         header = f"\U0001f4cb **Approved ({total})**"
@@ -526,7 +503,7 @@ class BrainRotGuardBot:
         nav = []
         if page > 0:
             nav.append(InlineKeyboardButton("\u25c0 Back", callback_data=f"approved_page:{page - 1}"))
-        remaining = total - end
+        remaining = total - min(end, total)
         if remaining > 0:
             nav.append(InlineKeyboardButton(
                 f"Show more ({remaining})", callback_data=f"approved_page:{page + 1}",
@@ -536,12 +513,12 @@ class BrainRotGuardBot:
 
     async def _cb_approved_page(self, query, page: int) -> None:
         """Handle approved list pagination."""
-        approved = self.video_store.get_approved()
-        if not approved:
+        page_items, total = self.video_store.get_approved_page(page, self._APPROVED_PAGE_SIZE)
+        if not page_items and page == 0:
             await query.answer("No approved videos.")
             return
         await query.answer()
-        text, keyboard = self._render_approved_page(approved, page)
+        text, keyboard = self._render_approved_page(page_items, total, page)
         await query.edit_message_text(
             text=text, parse_mode=MD2, reply_markup=keyboard, disable_web_page_preview=True,
         )

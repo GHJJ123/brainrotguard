@@ -1,14 +1,33 @@
 import logging
 import re
 from typing import Optional
+from urllib.parse import urlparse
 import yt_dlp
 
 logger = logging.getLogger(__name__)
+
+# Allowlisted YouTube thumbnail CDN hostnames
+_THUMB_ALLOWED_HOSTS = frozenset({
+    "i.ytimg.com", "i1.ytimg.com", "i2.ytimg.com", "i3.ytimg.com",
+    "i4.ytimg.com", "i9.ytimg.com", "img.youtube.com",
+})
 
 # Regex to extract video ID from various YouTube URL formats
 YOUTUBE_URL_PATTERN = re.compile(
     r'(?:https?://)?(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/shorts/)([a-zA-Z0-9_-]{11})'
 )
+
+def _safe_thumbnail(url: Optional[str], video_id: str) -> str:
+    """Return the thumbnail URL if it's from an allowlisted host, else use ytimg fallback."""
+    if url:
+        try:
+            parsed = urlparse(url)
+            if parsed.scheme in ("http", "https") and parsed.hostname in _THUMB_ALLOWED_HOSTS:
+                return url
+        except Exception:
+            pass
+    return f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
+
 
 def extract_video_id(url_or_id: str) -> Optional[str]:
     """Extract YouTube video ID from URL or return as-is if already an ID."""
@@ -54,7 +73,7 @@ async def extract_metadata(video_id: str) -> Optional[dict]:
                     'title': info.get('title', 'Unknown'),
                     'channel_name': info.get('channel', info.get('uploader', 'Unknown')),
                     'channel_id': info.get('channel_id'),
-                    'thumbnail_url': info.get('thumbnail'),
+                    'thumbnail_url': _safe_thumbnail(info.get('thumbnail'), video_id),
                     'duration': info.get('duration'),
                 }
         except Exception as e:
@@ -88,7 +107,7 @@ async def search(query: str, max_results: int = 10) -> list[dict]:
                         'video_id': vid_id,
                         'title': entry.get('title', 'Unknown'),
                         'channel_name': entry.get('channel', entry.get('uploader', 'Unknown')),
-                        'thumbnail_url': entry.get('thumbnail') or f"https://i.ytimg.com/vi/{vid_id}/hqdefault.jpg",
+                        'thumbnail_url': _safe_thumbnail(entry.get('thumbnail'), vid_id),
                         'duration': entry.get('duration'),
                     })
                 return videos
@@ -127,6 +146,36 @@ async def resolve_channel_handle(handle: str) -> Optional[dict]:
         return await asyncio.wait_for(asyncio.to_thread(_resolve), timeout=_YDL_TIMEOUT)
     except asyncio.TimeoutError:
         logger.error(f"Handle resolve timed out for '@{clean}'")
+        return None
+
+
+async def resolve_handle_from_channel_id(channel_id: str) -> Optional[str]:
+    """Resolve a channel_id to its @handle. Returns '@handle' string or None."""
+    import asyncio
+    def _resolve():
+        try:
+            opts = _ydl_opts()
+            opts['extract_flat'] = True
+            opts['playlistend'] = 1
+            url = f"https://www.youtube.com/channel/{channel_id}/videos"
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                if not info:
+                    return None
+                uploader_id = info.get('uploader_id', '')
+                if uploader_id and uploader_id.startswith('@'):
+                    return uploader_id
+                channel_url = info.get('channel_url', '') or info.get('uploader_url', '')
+                if '/@' in channel_url:
+                    return '@' + channel_url.split('/@', 1)[1].split('/')[0]
+                return None
+        except Exception as e:
+            logger.debug(f"Handle resolve failed for channel {channel_id}: {e}")
+            return None
+    try:
+        return await asyncio.wait_for(asyncio.to_thread(_resolve), timeout=_YDL_TIMEOUT)
+    except asyncio.TimeoutError:
+        logger.error(f"Handle resolve timed out for channel {channel_id}")
         return None
 
 
@@ -175,7 +224,7 @@ def _fetch_from_channel_page(channel_id: str, channel_name: str, max_results: in
                     'video_id': vid_id,
                     'title': entry.get('title', 'Unknown'),
                     'channel_name': resolved_name,
-                    'thumbnail_url': entry.get('thumbnail') or f"https://i.ytimg.com/vi/{vid_id}/hqdefault.jpg",
+                    'thumbnail_url': _safe_thumbnail(entry.get('thumbnail'), vid_id),
                     'duration': entry.get('duration'),
                     'timestamp': entry.get('timestamp'),
                 })
@@ -223,7 +272,7 @@ async def fetch_channel_videos(channel_name: str, max_results: int = 10, channel
                         'video_id': vid_id,
                         'title': entry.get('title', 'Unknown'),
                         'channel_name': entry_channel,
-                        'thumbnail_url': entry.get('thumbnail') or f"https://i.ytimg.com/vi/{vid_id}/hqdefault.jpg",
+                        'thumbnail_url': _safe_thumbnail(entry.get('thumbnail'), vid_id),
                         'duration': entry.get('duration'),
                         'timestamp': entry.get('timestamp'),
                         })

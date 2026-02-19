@@ -115,27 +115,10 @@ class BrainRotGuard:
         if not missing:
             return
         logger.info(f"Backfilling @handles for {len(missing)} channels")
+        from youtube.extractor import resolve_handle_from_channel_id
         for name, channel_id in missing:
             try:
-                from youtube.extractor import _ydl_opts
-                import yt_dlp
-                def _resolve():
-                    opts = _ydl_opts()
-                    opts['extract_flat'] = True
-                    opts['playlistend'] = 1
-                    url = f"https://www.youtube.com/channel/{channel_id}/videos"
-                    with yt_dlp.YoutubeDL(opts) as ydl:
-                        info = ydl.extract_info(url, download=False)
-                        if not info:
-                            return None
-                        uploader_id = info.get('uploader_id', '')
-                        if uploader_id and uploader_id.startswith('@'):
-                            return uploader_id
-                        channel_url = info.get('channel_url', '') or info.get('uploader_url', '')
-                        if '/@' in channel_url:
-                            return '@' + channel_url.split('/@', 1)[1].split('/')[0]
-                        return None
-                handle = await asyncio.wait_for(asyncio.to_thread(_resolve), timeout=30)
+                handle = await resolve_handle_from_channel_id(channel_id)
                 if handle:
                     self.video_store.update_channel_handle(name, handle)
                     logger.info(f"Backfilled handle: {name} → {handle}")
