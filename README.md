@@ -282,7 +282,9 @@ deploy.sh              # Deployment script for remote servers
 
 ## Support
 
-If you find BrainRotGuard useful, consider [☕ buying me a coffee](https://ko-fi.com/coffee4jj).
+If you find BrainRotGuard useful:
+
+[![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/coffee4jj)
 
 ## License
 
