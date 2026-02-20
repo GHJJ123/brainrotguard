@@ -3,6 +3,12 @@
 {% block search_attrs %}value="{{ query }}" autofocus{% endblock %}
 
 {% block content %}
+{% if error_message %}
+<div class="error-banner" id="error-banner">
+    <span>{{ error_message }}</span>
+    <button class="error-dismiss" onclick="document.getElementById('error-banner').remove()">&times;</button>
+</div>
+{% endif %}
 <section class="results-section">
     <h2 class="section-title">Results for "{{ query }}"</h2>
     {% if results %}

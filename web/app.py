@@ -662,10 +662,13 @@ async def search_videos(request: Request, q: str = Query("", max_length=200)):
         word_patterns = []
 
     video_id = extract_video_id(q)
+    fetch_failed = False
 
     if video_id:
         metadata = await extract_metadata(video_id)
         results = [metadata] if metadata else []
+        if not metadata:
+            fetch_failed = True
     else:
         max_results = youtube_config.search_max_results if youtube_config else 10
         results = await search(q, max_results=max_results)
@@ -686,11 +689,13 @@ async def search_videos(request: Request, q: str = Query("", max_length=200)):
     video_store.record_search(q, len(results))
 
     csrf_token = _get_csrf_token(request)
+    error_message = _ERROR_MESSAGES["fetch_failed"] if fetch_failed else ""
     return templates.TemplateResponse("search.html", {
         "request": request,
         "results": results,
         "query": q,
         "csrf_token": csrf_token,
+        "error_message": error_message,
     })
 
 

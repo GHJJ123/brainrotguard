@@ -47,6 +47,7 @@ def _ydl_opts() -> dict:
         'no_warnings': True,
         'extract_flat': False,
         'skip_download': True,
+        'ignore_no_formats_error': True,
         'socket_timeout': _YDL_TIMEOUT,
     }
 
