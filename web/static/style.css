@@ -550,6 +550,29 @@ main {
 }
 
 /* === Schedule Banner (Index) === */
+.error-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 18px;
+    border-radius: 12px;
+    margin-bottom: 12px;
+    font-size: 15px;
+    background: #2a1a1a;
+    color: #e09090;
+    border: 1px solid rgba(200, 100, 100, 0.3);
+}
+
+.error-dismiss {
+    background: none;
+    border: none;
+    color: #e09090;
+    font-size: 20px;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+}
+
 .schedule-banner {
     display: flex;
     align-items: center;

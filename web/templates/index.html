@@ -3,6 +3,12 @@
 {% block search_attrs %}autofocus{% endblock %}
 
 {% block content %}
+{% if error_message %}
+<div class="error-banner" id="error-banner">
+    <span>{{ error_message }}</span>
+    <button class="error-dismiss" onclick="document.getElementById('error-banner').remove()">&times;</button>
+</div>
+{% endif %}
 {% if schedule_info and not schedule_info.allowed %}
 <div class="schedule-banner schedule-closed">
     <span>Videos available at {{ schedule_info.unlock_time }}</span>

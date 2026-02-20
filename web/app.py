@@ -235,7 +235,7 @@ def setup(store, notify_cb, yt_config=None, w_config=None,
 
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(PinAuthMiddleware, pin=pin)
-    app.add_middleware(SessionMiddleware, secret_key=session_secret)
+    app.add_middleware(SessionMiddleware, secret_key=session_secret, max_age=86400)
 
 
 # Add globals to Jinja2
@@ -568,8 +568,14 @@ async def login_submit(
     })
 
 
+_ERROR_MESSAGES = {
+    "invalid_video": "That doesn't look like a valid YouTube link.",
+    "fetch_failed": "Couldn't load video info — it may be unavailable or region-restricted.",
+}
+
+
 @app.get("/", response_class=HTMLResponse)
-async def index(request: Request):
+async def index(request: Request, error: str = Query("", max_length=50)):
     """Homepage: search bar + unified video catalog."""
     page_size = 24
     full_catalog = _build_catalog()
@@ -584,6 +590,7 @@ async def index(request: Request):
         if ch_vids:
             hero_highlights.append(random.choice(ch_vids))
     random.shuffle(hero_highlights)
+    error_message = _ERROR_MESSAGES.get(error, "") if error else ""
     return templates.TemplateResponse("index.html", {
         "request": request,
         "catalog": catalog,
@@ -594,6 +601,7 @@ async def index(request: Request):
         "cat_info": cat_info,
         "channel_videos": channel_videos,
         "hero_highlights": hero_highlights,
+        "error_message": error_message,
     })
 
 
@@ -709,7 +717,7 @@ async def request_video(
 
     metadata = await extract_metadata(video_id)
     if not metadata:
-        return RedirectResponse(url="/?error=invalid_video", status_code=303)
+        return RedirectResponse(url="/?error=fetch_failed", status_code=303)
 
     channel_name = metadata['channel_name']
     channel_id = metadata.get('channel_id')
