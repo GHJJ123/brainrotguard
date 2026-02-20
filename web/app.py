@@ -330,9 +330,12 @@ def _build_catalog(channel_filter: str = "") -> list[dict]:
     global _catalog_cache, _catalog_cache_time
     channels = _channel_cache.get("channels", {})
 
+    # Excluded: videos explicitly denied/revoked (shouldn't appear even if channel is allowed)
+    denied_ids = video_store.get_denied_video_ids() if video_store else set()
+
     # If filtering by channel, build on demand (not cached — small result set)
     if channel_filter:
-        seen_ids = set()
+        seen_ids = set(denied_ids)
         filtered = []
         for v in channels.get(channel_filter, []):
             vid = v.get("video_id", "")
@@ -363,7 +366,7 @@ def _build_catalog(channel_filter: str = "") -> list[dict]:
 
     # Round-robin interleave channels (each already newest-first from YouTube)
     # Copy dicts to avoid mutating shared channel cache references
-    seen_ids = set()
+    seen_ids = set(denied_ids)
     catalog = []
     if channels:
         chan_lists = [list(vids) for vids in channels.values() if vids]

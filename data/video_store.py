@@ -202,6 +202,14 @@ class VideoStore:
                 )
             return [dict(row) for row in cursor.fetchall()]
 
+    def get_denied_video_ids(self) -> set[str]:
+        """Get set of denied/revoked video IDs (for catalog filtering)."""
+        with self._lock:
+            cursor = self.conn.execute(
+                "SELECT video_id FROM videos WHERE status = 'denied'"
+            )
+            return {row[0] for row in cursor.fetchall()}
+
     def get_approved(self) -> list[dict]:
         """Get all approved videos."""
         return self.get_by_status("approved")

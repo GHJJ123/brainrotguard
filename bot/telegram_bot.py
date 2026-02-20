@@ -600,7 +600,7 @@ class BrainRotGuardBot:
             if not limit_str and self.config:
                 limit_min = self.config.watch_limits.daily_limit_minutes
             else:
-                limit_min = int(limit_str) if limit_str else 120
+                limit_min = int(limit_str) if limit_str else 0
             bounds = get_day_utc_bounds(today, self._get_tz())
             used = self.video_store.get_daily_watch_minutes(today, utc_bounds=bounds)
 
@@ -1185,7 +1185,7 @@ class BrainRotGuardBot:
         if not limit_str and self.config:
             limit_min = self.config.watch_limits.daily_limit_minutes
         else:
-            limit_min = int(limit_str) if limit_str else 120
+            limit_min = int(limit_str) if limit_str else 0
         today = get_today_str(self._get_tz())
         bounds = get_day_utc_bounds(today, self._get_tz())
         used = self.video_store.get_daily_watch_minutes(today, utc_bounds=bounds)

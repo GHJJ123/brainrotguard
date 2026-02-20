@@ -49,13 +49,6 @@ class BrainRotGuard:
             self.bot.on_video_change = _invalidate_catalog_cache
             logger.info("Telegram bot initialized")
 
-        # Seed daily_limit_minutes from config if not already set
-        if not self.video_store.get_setting("daily_limit_minutes"):
-            self.video_store.set_setting(
-                "daily_limit_minutes",
-                str(self.config.watch_limits.daily_limit_minutes),
-            )
-
         # Wire up web app with video store and notification callbacks
         async def notify_callback(video: dict):
             if self.bot:
