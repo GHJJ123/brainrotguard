@@ -51,10 +51,17 @@ class BrainRotGuardBot:
         self.on_video_change = None  # callback when video status changes
 
     def _check_admin(self, update: Update) -> bool:
-        """Check if message is from admin (parent)."""
+        """Check if interaction is from an authorized admin context.
+
+        Matches when:
+        - DM from admin user (effective_user.id == admin_chat_id)
+        - Message/callback in admin group chat (effective_chat.id == admin_chat_id)
+        """
         if not self.admin_chat_id:
             return False
-        return str(update.effective_user.id) == str(self.admin_chat_id)
+        admin = str(self.admin_chat_id)
+        return (str(update.effective_chat.id) == admin
+                or str(update.effective_user.id) == admin)
 
     def _resolve_handle_bg(self, channel_name: str, channel_id: str) -> None:
         """Fire a background task to resolve and store the @handle for a channel."""
