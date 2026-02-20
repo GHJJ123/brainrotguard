@@ -154,6 +154,8 @@ cd brainrotguard
 
 # Create your secrets file
 cp .env.example .env
+# Create your config file
+cp config.example.yaml config.yaml
 ```
 
 Edit the `.env` file and fill in your values:
@@ -162,6 +164,7 @@ BRG_BOT_TOKEN=123456789:ABCdefGhIjKlMnOpQrStUvWxYz
 BRG_ADMIN_CHAT_ID=987654321
 BRG_PIN=1234
 ```
+You can optionally edit the defaults in the config.yaml.
 
 | Setting | What to put | Required? |
 |---------|------------|-----------|
