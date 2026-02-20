@@ -19,6 +19,11 @@ These won't cause errors on upgrade, but you may notice different behavior:
 
 ---
 
+## v1.12.2 - Fix Video Extraction Failures
+
+- Fix yt-dlp failing on videos where playable formats aren't available but metadata is (fixes #4 — thanks @EricReiche)
+- Search page now shows error banner when a pasted URL can't be loaded
+
 ## v1.12.1 - Config & Catalog Fixes
 
 - Fix `daily_limit_minutes` in config.yaml being ignored after first boot (fixes #7 — thanks @TheDogg)
