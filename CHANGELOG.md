@@ -21,9 +21,10 @@ These won't cause errors on upgrade, but you may notice different behavior:
 
 ## v1.12.0 - Group Chat Support & Error Handling
 
-- Group chat admin authorization: bot now works in Telegram group chats, allowing multiple parents to approve/deny videos (fixes #1)
-- Error banner on homepage when video metadata extraction fails instead of silent redirect (addresses #4)
+- Group chat admin authorization: bot now works in Telegram group chats, allowing multiple parents to approve/deny videos (fixes #1 — thanks @EricReiche)
+- Error banner on homepage when video metadata extraction fails instead of silent redirect (addresses #4 — thanks @EricReiche)
 - Session cookie max_age reduced from 14 days to 24 hours (security hardening)
+- README: added config file setup step (PR #2 — thanks @EricReiche)
 
 ## v1.11.8 - Version Tag & Ko-fi Link
 - Version badge below logo in web header, links to GitHub changelog
