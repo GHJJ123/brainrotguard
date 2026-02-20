@@ -225,8 +225,9 @@ class BrainRotGuardBot:
             return
 
         # Channel management callbacks (unallow:name or unblock:name)
-        if parts[0] in ("unallow", "unblock") and len(parts) == 2:
-            ch_name = parts[1]
+        # Channel names may contain colons, so rejoin everything after first ':'
+        if parts[0] in ("unallow", "unblock") and len(parts) >= 2:
+            ch_name = ":".join(parts[1:])
             if self.video_store.remove_channel(ch_name):
                 if self.on_channel_change:
                     self.on_channel_change()
@@ -569,7 +570,7 @@ class BrainRotGuardBot:
             if arg == "yesterday":
                 days = 1
             elif arg.isdigit():
-                days = int(arg)
+                days = min(int(arg), 365)
 
         tz = self._get_tz()
         from datetime import timedelta
@@ -960,7 +961,7 @@ class BrainRotGuardBot:
             if arg == "today":
                 days = 1
             elif arg.isdigit():
-                days = int(arg)
+                days = min(int(arg), 365)
         activity = self.video_store.get_recent_activity(days)
         if not activity:
             period = "today" if days == 1 else f"last {days} days"
@@ -1041,7 +1042,7 @@ class BrainRotGuardBot:
             if arg == "today":
                 days = 1
             elif arg.isdigit():
-                days = int(arg)
+                days = min(int(arg), 365)
         searches = self.video_store.get_recent_searches(days)
         if not searches:
             period = "today" if days == 1 else f"last {days} days"

@@ -779,6 +779,8 @@ async def request_video(
 @app.get("/pending/{video_id}", response_class=HTMLResponse)
 async def pending_video(request: Request, video_id: str):
     """Waiting screen with polling."""
+    if not VIDEO_ID_RE.match(video_id):
+        return RedirectResponse(url="/", status_code=303)
     video = video_store.get_video(video_id)
 
     if not video:
@@ -803,12 +805,12 @@ async def pending_video(request: Request, video_id: str):
 @app.get("/watch/{video_id}", response_class=HTMLResponse)
 async def watch_video(request: Request, video_id: str):
     """Play approved video (embed)."""
+    if not VIDEO_ID_RE.match(video_id):
+        return RedirectResponse(url="/", status_code=303)
     video = video_store.get_video(video_id)
 
     if not video:
         # Video not in DB — auto-approve if channel is allowlisted
-        if not VIDEO_ID_RE.match(video_id):
-            return RedirectResponse(url="/", status_code=303)
         metadata = await extract_metadata(video_id)
         if not metadata:
             return RedirectResponse(url="/", status_code=303)

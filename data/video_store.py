@@ -22,7 +22,7 @@ def _validate_thumbnail_url(url: Optional[str]) -> Optional[str]:
         return None
     try:
         parsed = urlparse(url)
-        if parsed.scheme in ("http", "https") and parsed.hostname in _THUMB_ALLOWED_HOSTS:
+        if parsed.scheme == "https" and parsed.hostname in _THUMB_ALLOWED_HOSTS:
             return url
     except Exception:
         pass

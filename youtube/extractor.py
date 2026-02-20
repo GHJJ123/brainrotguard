@@ -22,7 +22,7 @@ def _safe_thumbnail(url: Optional[str], video_id: str) -> str:
     if url:
         try:
             parsed = urlparse(url)
-            if parsed.scheme in ("http", "https") and parsed.hostname in _THUMB_ALLOWED_HOSTS:
+            if parsed.scheme == "https" and parsed.hostname in _THUMB_ALLOWED_HOSTS:
                 return url
         except Exception:
             pass
