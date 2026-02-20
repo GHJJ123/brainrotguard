@@ -19,6 +19,13 @@ These won't cause errors on upgrade, but you may notice different behavior:
 
 ---
 
+## v1.12.3 - Security Hardening
+
+- Add video_id format validation at entry of `/pending/` and `/watch/` routes
+- Fix unallow/unblock buttons failing on channel names containing colons
+- Require HTTPS scheme for thumbnail URLs (reject HTTP)
+- Cap `days` parameter in `/watch`, `/logs`, `/search history` commands to 365
+
 ## v1.12.2 - Fix Video Extraction Failures
 
 - Fix yt-dlp failing on videos where playable formats aren't available but metadata is (fixes #4 — thanks @EricReiche)
