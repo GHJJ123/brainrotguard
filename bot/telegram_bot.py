@@ -108,32 +108,19 @@ class BrainRotGuardBot:
         await self._app.updater.start_polling(drop_pending_updates=True)
         logger.info("BrainRotGuard bot started")
 
-        # First-run: send welcome + starter channels if channel list is empty
+        # First-run: send welcome with starter prompt if channel list is empty
         if self._starter_channels and not self.video_store.get_channel_handles_set():
             try:
-                from version import __version__
-                await self._app.bot.send_message(
-                    chat_id=self.admin_chat_id,
-                    text=_md(
-                        f"**BrainRotGuard v{__version__}**\n\n"
-                        "YouTube approval system for kids. Your child searches and "
-                        "requests videos through the web UI — you approve or deny "
-                        "them right here in Telegram.\n\n"
-                        "Use `/help` to see all available commands."
-                    ),
-                    parse_mode=MD2,
-                )
-                text, markup = self._render_starter_message()
+                text, markup = self._build_welcome_message()
                 await self._app.bot.send_message(
                     chat_id=self.admin_chat_id,
                     text=text,
                     reply_markup=markup,
                     parse_mode=MD2,
-                    disable_web_page_preview=True,
                 )
-                logger.info("Sent welcome + starter channels to admin (first run)")
+                logger.info("Sent welcome message to admin (first run)")
             except Exception as e:
-                logger.error(f"Failed to send first-run messages: {e}")
+                logger.error(f"Failed to send first-run message: {e}")
 
     async def stop(self) -> None:
         """Stop the bot."""
@@ -252,8 +239,25 @@ class BrainRotGuardBot:
             if parts[0] == "pending_page" and len(parts) == 2:
                 await self._cb_pending_page(query, int(parts[1]))
                 return
+            if parts[0] == "starter_page" and len(parts) == 2:
+                await self._cb_starter_page(query, int(parts[1]))
+                return
         except (ValueError, IndexError):
             await query.answer("Invalid callback.")
+            return
+
+        # Starter channels prompt (Yes/No from welcome message)
+        if parts[0] == "starter_prompt" and len(parts) == 2:
+            if parts[1] == "yes":
+                await query.answer()
+                text, markup = self._render_starter_message()
+                await query.edit_message_text(
+                    text=text, reply_markup=markup, parse_mode=MD2,
+                    disable_web_page_preview=True,
+                )
+            else:
+                await query.answer("Got it!")
+                await query.edit_message_reply_markup(reply_markup=None)
             return
 
         # Starter channel import
@@ -421,21 +425,27 @@ class BrainRotGuardBot:
         if not self._check_admin(update):
             await update.message.reply_text("Unauthorized.")
             return
+        text, markup = self._build_welcome_message()
+        await update.message.reply_text(text, parse_mode=MD2, reply_markup=markup)
+
+    def _build_welcome_message(self) -> tuple[str, InlineKeyboardMarkup | None]:
+        """Build the welcome message with optional starter channels prompt."""
         from version import __version__
-        await update.message.reply_text(_md(
+        msg = (
             f"**BrainRotGuard v{__version__}**\n\n"
             "YouTube approval system for kids. Your child searches and "
             "requests videos through the web UI — you approve or deny "
             "them right here in Telegram.\n\n"
             "Use `/help` to see all available commands."
-        ), parse_mode=MD2)
-        # Follow up with starter channels if available
+        )
+        markup = None
         if self._starter_channels:
-            text, markup = self._render_starter_message()
-            await update.message.reply_text(
-                text, parse_mode=MD2, reply_markup=markup,
-                disable_web_page_preview=True,
-            )
+            msg += "\n\nWould you like to browse starter channels to get started?"
+            markup = InlineKeyboardMarkup([[
+                InlineKeyboardButton("Yes, show me", callback_data="starter_prompt:yes"),
+                InlineKeyboardButton("No thanks", callback_data="starter_prompt:no"),
+            ]])
+        return _md(msg), markup
 
     async def _cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not self._check_admin(update):
@@ -862,12 +872,24 @@ class BrainRotGuardBot:
             text, parse_mode=MD2, reply_markup=markup, disable_web_page_preview=True,
         )
 
-    def _render_starter_message(self) -> tuple[str, InlineKeyboardMarkup | None]:
-        """Build starter channels message with per-channel Import buttons."""
+    _STARTER_PAGE_SIZE = 10
+
+    def _render_starter_message(self, page: int = 0) -> tuple[str, InlineKeyboardMarkup | None]:
+        """Build starter channels message with per-channel Import buttons and pagination."""
         existing = self.video_store.get_channel_handles_set()
-        lines = ["**Starter Channels**\n"]
+        total = len(self._starter_channels)
+        ps = self._STARTER_PAGE_SIZE
+        start = page * ps
+        end = min(start + ps, total)
+        total_pages = (total + ps - 1) // ps
+
+        header = f"**Starter Channels** ({total})"
+        if total_pages > 1:
+            header += f" \u00b7 pg {page + 1}/{total_pages}"
+        lines = [header, ""]
         buttons = []
-        for idx, ch in enumerate(self._starter_channels):
+        for idx in range(start, end):
+            ch = self._starter_channels[idx]
             handle = ch["handle"]
             name = ch["name"]
             cat = ch.get("category") or ""
@@ -884,8 +906,28 @@ class BrainRotGuardBot:
                 buttons.append([InlineKeyboardButton(
                     f"Import: {name}", callback_data=f"starter_import:{idx}",
                 )])
+
+        nav = []
+        if page > 0:
+            nav.append(InlineKeyboardButton("\u25c0 Back", callback_data=f"starter_page:{page - 1}"))
+        if end < total:
+            remaining = total - end
+            nav.append(InlineKeyboardButton(
+                f"Show more ({remaining})", callback_data=f"starter_page:{page + 1}",
+            ))
+        if nav:
+            buttons.append(nav)
         markup = InlineKeyboardMarkup(buttons) if buttons else None
         return _md("\n".join(lines)), markup
+
+    async def _cb_starter_page(self, query, page: int) -> None:
+        """Handle starter channels pagination."""
+        await query.answer()
+        text, markup = self._render_starter_message(page)
+        await query.edit_message_text(
+            text=text, reply_markup=markup, parse_mode=MD2,
+            disable_web_page_preview=True,
+        )
 
     async def _cb_starter_import(self, query, idx: int) -> None:
         """Handle Import button press from starter channels message."""
@@ -907,8 +949,9 @@ class BrainRotGuardBot:
                 self.on_channel_change()
             await query.answer(f"Imported: {name}")
 
-        # Re-render the message with updated check marks
-        text, markup = self._render_starter_message()
+        # Re-render the current page with updated check marks
+        page = idx // self._STARTER_PAGE_SIZE
+        text, markup = self._render_starter_message(page)
         try:
             await query.edit_message_text(
                 text=text, reply_markup=markup, parse_mode=MD2,
