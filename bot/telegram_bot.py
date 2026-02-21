@@ -594,19 +594,7 @@ class BrainRotGuardBot:
             ]
             header = f"Watch Activity (last {days} days)"
 
-        # Trim to available data range
-        data_note = ""
-        if len(dates) > 1:
-            earliest = self.video_store.get_earliest_watch_date()
-            if earliest:
-                dates = [d for d in dates if d >= earliest]
-                if len(dates) < days:
-                    data_note = f"_Only {len(dates)} days of data available — try_ `/watch {len(dates)}`"
-
         lines = [f"**{header}**\n"]
-        if data_note:
-            lines.append(data_note)
-            lines.append("")
 
         # Time budget (only for today)
         today = get_today_str(tz)
@@ -645,6 +633,16 @@ class BrainRotGuardBot:
             bd = self.video_store.get_daily_watch_breakdown(date_str, utc_bounds=get_day_utc_bounds(date_str, self._get_tz()))
             all_breakdowns[date_str] = bd
             daily_totals[date_str] = sum(v['minutes'] for v in bd) if bd else 0
+
+        # Data availability hint for multi-day requests
+        if len(dates) > 1:
+            days_with_data = sum(1 for t in daily_totals.values() if t > 0)
+            if days_with_data < len(dates):
+                if days_with_data == 0:
+                    lines.append("_No watch data in this range._")
+                else:
+                    lines.append(f"_Only {days_with_data} of {len(dates)} days have data — try_ `/watch {days_with_data}`")
+                lines.append("")
 
         # Multi-day summary chart
         if len(dates) > 1:

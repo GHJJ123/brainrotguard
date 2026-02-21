@@ -417,15 +417,6 @@ class VideoStore:
                     result[vid] = 0.0
             return result
 
-    def get_earliest_watch_date(self) -> str | None:
-        """Return the earliest watched_at date as YYYY-MM-DD, or None if no data."""
-        with self._lock:
-            cursor = self.conn.execute("SELECT MIN(watched_at) FROM watch_log")
-            row = cursor.fetchone()
-            if row and row[0]:
-                return row[0][:10]
-            return None
-
     def get_daily_watch_minutes(self, date_str: str, utc_bounds: tuple[str, str] | None = None) -> float:
         """Sum watch time for a date (YYYY-MM-DD). Returns minutes."""
         start, end = utc_bounds if utc_bounds else (date_str, date_str)
