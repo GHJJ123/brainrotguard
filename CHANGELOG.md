@@ -1,4 +1,9 @@
 # Changelog
+## v1.12.5 - 2026-02-20
+
+**Added**
+- `/watch N` now trims to available data range and shows a hint when fewer days exist (e.g. "Only 3 days of data available — try `/watch 3`")
+
 ## v1.12.4 - 2026-02-20
 
 **Fixed**

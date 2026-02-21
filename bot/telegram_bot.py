@@ -594,7 +594,19 @@ class BrainRotGuardBot:
             ]
             header = f"Watch Activity (last {days} days)"
 
+        # Trim to available data range
+        data_note = ""
+        if len(dates) > 1:
+            earliest = self.video_store.get_earliest_watch_date()
+            if earliest:
+                dates = [d for d in dates if d >= earliest]
+                if len(dates) < days:
+                    data_note = f"_Only {len(dates)} days of data available — try_ `/watch {len(dates)}`"
+
         lines = [f"**{header}**\n"]
+        if data_note:
+            lines.append(data_note)
+            lines.append("")
 
         # Time budget (only for today)
         today = get_today_str(tz)
