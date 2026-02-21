@@ -1,4 +1,10 @@
 # Changelog
+## v1.13.2 - 2026-02-21
+
+**Changed**
+- `/channel` now shows Allowed/Blocked menu with inline buttons instead of a combined list
+- Filtered channel views with pagination and back-to-menu navigation
+
 ## v1.13.1 - 2026-02-21
 
 **Changed**
