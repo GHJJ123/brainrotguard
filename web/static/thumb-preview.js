@@ -10,10 +10,10 @@
 (function() {
     'use strict';
 
-    // YouTube numbered thumbnail URLs (auto-generated at ~25%, 50%, 75%)
-    var THUMB_INDICES = [1, 2, 3];
+    // YouTube HQ numbered thumbnails (auto-generated at ~25%, 50%, 75%)
+    var THUMB_NAMES = ['hq1', 'hq2', 'hq3'];
     var CYCLE_INTERVAL = 1200; // ms between frames
-    var MIN_VALID_WIDTH = 121; // YouTube placeholder is 120x90
+    var MIN_VALID_WIDTH = 200; // real HQ thumbs are 480x360; placeholders are 120x90
 
     // Shared state: only one card previews at a time
     var activeCard = null;
@@ -33,8 +33,8 @@
             callback(previewCache[videoId]);
             return;
         }
-        var urls = THUMB_INDICES.map(function(i) {
-            return 'https://i.ytimg.com/vi/' + videoId + '/' + i + '.jpg';
+        var urls = THUMB_NAMES.map(function(name) {
+            return 'https://i.ytimg.com/vi/' + videoId + '/' + name + '.jpg';
         });
         var valid = [];
         var pending = urls.length;
