@@ -239,6 +239,16 @@ main {
     color: #777;
 }
 
+.video-views-inline {
+    color: var(--text-dim);
+    font-size: 11px;
+}
+
+.video-views-inline::before {
+    content: "\b7";
+    margin: 0 4px;
+}
+
 .video-date {
     font-size: 12px;
     color: var(--text-dim);
