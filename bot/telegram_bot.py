@@ -51,11 +51,11 @@ def _nav_row(page: int, total: int, page_size: int, callback_prefix: str) -> lis
     if total <= page_size:
         return None
     end = min((page + 1) * page_size, total)
-    remaining = total - end
+    has_next = end < total
     return [
         InlineKeyboardButton("\u25c0 Back", callback_data=f"{callback_prefix}:{page - 1}") if page > 0
         else InlineKeyboardButton(" ", callback_data="noop"),
-        InlineKeyboardButton(f"Next ({remaining}) \u25b6", callback_data=f"{callback_prefix}:{page + 1}") if remaining > 0
+        InlineKeyboardButton("Next \u25b6", callback_data=f"{callback_prefix}:{page + 1}") if has_next
         else InlineKeyboardButton(" ", callback_data="noop"),
     ]
 
