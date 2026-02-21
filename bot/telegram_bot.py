@@ -662,54 +662,45 @@ class BrainRotGuardBot:
                 lines.append(f"`{day_label}  {bar}` {total_str}")
             lines.append("")
 
-        # Per-day breakdown
-        for date_str in dates:
-            breakdown = all_breakdowns[date_str]
+        # Per-day breakdown (detailed view only for single-day)
+        if len(dates) == 1:
+            breakdown = all_breakdowns[dates[0]]
             if not breakdown:
-                if len(dates) == 1:
-                    lines.append("_No videos watched._")
-                continue
+                lines.append("_No videos watched._")
+            else:
+                # Group by category (uncategorized treated as fun)
+                by_cat: dict = {}
+                for v in breakdown:
+                    cat = v.get('category') or 'fun'
+                    by_cat.setdefault(cat, []).append(v)
 
-            if len(dates) > 1:
-                total_day = daily_totals[date_str]
-                lines.append(f"**{date_str}** \u2014 {int(total_day)} min total")
-
-            # Group by category (uncategorized treated as fun)
-            by_cat: dict = {}
-            for v in breakdown:
-                cat = v.get('category') or 'fun'
-                by_cat.setdefault(cat, []).append(v)
-
-            for cat, cat_label in [("edu", "Educational"), ("fun", "Entertainment")]:
-                vids = by_cat.get(cat, [])
-                if not vids:
-                    continue
-                cat_total = sum(v['minutes'] for v in vids)
-                cat_limit_str = self.video_store.get_setting(f"{cat}_limit_minutes", "")
-                cat_limit = int(cat_limit_str) if cat_limit_str else 0
-                if cat_limit > 0:
-                    lines.append(f"\n**{cat_label}** \u2014 {int(cat_total)}/{cat_limit} min")
-                    pct = min(1.0, cat_total / cat_limit) if cat_limit > 0 else 0
-                    lines.append(f"`{self._progress_bar(pct)}` {int(pct * 100)}%")
-                else:
-                    lines.append(f"\n**{cat_label}** \u2014 {int(cat_total)} min (no limit)")
-
-                for v in vids:
-                    title = v['title'][:40]
-                    ch_link = _channel_md_link(v['channel_name'], v.get('channel_id'))
-                    watched_min = int(v['minutes'])
-                    vid_dur = v.get('duration')
-                    if vid_dur and vid_dur > 0:
-                        dur_min = vid_dur // 60
-                        pct = min(100, int(v['minutes'] / (vid_dur / 60) * 100)) if vid_dur > 0 else 0
-                        lines.append(f"\u2022 **{title}**")
-                        lines.append(f"  {ch_link} \u00b7 {watched_min}m / {dur_min}m ({pct}%)")
+                for cat, cat_label in [("edu", "Educational"), ("fun", "Entertainment")]:
+                    vids = by_cat.get(cat, [])
+                    if not vids:
+                        continue
+                    cat_total = sum(v['minutes'] for v in vids)
+                    cat_limit_str = self.video_store.get_setting(f"{cat}_limit_minutes", "")
+                    cat_limit = int(cat_limit_str) if cat_limit_str else 0
+                    if cat_limit > 0:
+                        lines.append(f"\n**{cat_label}** \u2014 {int(cat_total)}/{cat_limit} min")
+                        pct = min(1.0, cat_total / cat_limit) if cat_limit > 0 else 0
+                        lines.append(f"`{self._progress_bar(pct)}` {int(pct * 100)}%")
                     else:
-                        lines.append(f"\u2022 **{title}**")
-                        lines.append(f"  {ch_link} \u00b7 {watched_min}m watched")
+                        lines.append(f"\n**{cat_label}** \u2014 {int(cat_total)} min (no limit)")
 
-            if len(dates) > 1:
-                lines.append("")
+                    for v in vids:
+                        title = v['title'][:40]
+                        ch_link = _channel_md_link(v['channel_name'], v.get('channel_id'))
+                        watched_min = int(v['minutes'])
+                        vid_dur = v.get('duration')
+                        if vid_dur and vid_dur > 0:
+                            dur_min = vid_dur // 60
+                            pct = min(100, int(v['minutes'] / (vid_dur / 60) * 100)) if vid_dur > 0 else 0
+                            lines.append(f"\u2022 **{title}**")
+                            lines.append(f"  {ch_link} \u00b7 {watched_min}m / {dur_min}m ({pct}%)")
+                        else:
+                            lines.append(f"\u2022 **{title}**")
+                            lines.append(f"  {ch_link} \u00b7 {watched_min}m watched")
 
         await update.message.reply_text(
             _md("\n".join(lines)), parse_mode=MD2, disable_web_page_preview=True,
