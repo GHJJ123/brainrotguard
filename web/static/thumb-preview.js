@@ -155,20 +155,23 @@
         var isTouch = window.matchMedia('(pointer: coarse)').matches;
 
         if (!isTouch) {
-            // Desktop: event delegation on thumbnail wraps
-            container.addEventListener('mouseenter', function(e) {
+            // Desktop: event delegation via mouseover/mouseout (these bubble, unlike mouseenter/mouseleave)
+            container.addEventListener('mouseover', function(e) {
                 var wrap = e.target.closest('.thumbnail-wrap');
                 if (!wrap) return;
                 var card = wrap.closest(config.cardSelector);
                 if (card) startPreview(card, config.thumbClass);
-            }, true);
+            });
 
-            container.addEventListener('mouseleave', function(e) {
+            container.addEventListener('mouseout', function(e) {
                 var wrap = e.target.closest('.thumbnail-wrap');
                 if (!wrap) return;
+                // Only stop if mouse actually left the thumbnail-wrap (not just moved between children)
+                var related = e.relatedTarget;
+                if (related && wrap.contains(related)) return;
                 var card = wrap.closest(config.cardSelector);
                 if (card && card === activeCard) stopPreview();
-            }, true);
+            });
         } else {
             // Tablet: IntersectionObserver at 70% threshold
             var observer = new IntersectionObserver(function(entries) {
