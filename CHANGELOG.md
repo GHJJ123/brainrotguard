@@ -1,4 +1,12 @@
 # Changelog
+## v1.12.4 - 2026-02-20
+
+**Fixed**
+- Fix `/watch yesterday` and `/watch N` commands crashing due to passing timezone string instead of `ZoneInfo` object to `datetime.now()`
+
+**Added**
+- Text-based summary chart in multi-day `/watch` output — shows daily totals with progress bars scaled to busiest day
+
 
 ## Upgrading
 

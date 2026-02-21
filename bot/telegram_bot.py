@@ -575,6 +575,8 @@ class BrainRotGuardBot:
         tz = self._get_tz()
         from datetime import timedelta
         import datetime as _dt
+        from zoneinfo import ZoneInfo
+        tz_info = ZoneInfo(tz) if tz else None
 
         if days == 0:
             # Single day: today
@@ -582,12 +584,12 @@ class BrainRotGuardBot:
             dates = [today]
             header = "Today's Watch Activity"
         elif days == 1:
-            yesterday = (_dt.datetime.now(tz) - timedelta(days=1)).strftime("%Y-%m-%d")
+            yesterday = (_dt.datetime.now(tz_info) - timedelta(days=1)).strftime("%Y-%m-%d")
             dates = [yesterday]
             header = "Yesterday's Watch Activity"
         else:
             dates = [
-                (_dt.datetime.now(tz) - timedelta(days=i)).strftime("%Y-%m-%d")
+                (_dt.datetime.now(tz_info) - timedelta(days=i)).strftime("%Y-%m-%d")
                 for i in range(days)
             ]
             header = f"Watch Activity (last {days} days)"
@@ -624,16 +626,42 @@ class BrainRotGuardBot:
                 lines.append(f"`{self._progress_bar(pct)}` {int(pct * 100)}%")
             lines.append("")
 
+        # Pre-fetch all breakdowns
+        all_breakdowns: dict[str, list[dict]] = {}
+        daily_totals: dict[str, float] = {}
+        for date_str in dates:
+            bd = self.video_store.get_daily_watch_breakdown(date_str, utc_bounds=get_day_utc_bounds(date_str, self._get_tz()))
+            all_breakdowns[date_str] = bd
+            daily_totals[date_str] = sum(v['minutes'] for v in bd) if bd else 0
+
+        # Multi-day summary chart
+        if len(dates) > 1:
+            max_min = max(daily_totals.values()) if daily_totals else 1
+            if max_min == 0:
+                max_min = 1
+            grand_total = sum(daily_totals.values())
+            lines.append(f"**Overview** \u2014 {int(grand_total)} min total")
+            bar_width = 10
+            for date_str in dates:
+                total = daily_totals[date_str]
+                frac = total / max_min
+                bar = self._progress_bar(frac, bar_width)
+                dt = _dt.datetime.strptime(date_str, "%Y-%m-%d")
+                day_label = dt.strftime("%b %d")
+                total_str = f"{int(total)}m" if total >= 1 else "\u2014"
+                lines.append(f"`{day_label}  {bar}` {total_str}")
+            lines.append("")
+
         # Per-day breakdown
         for date_str in dates:
-            breakdown = self.video_store.get_daily_watch_breakdown(date_str, utc_bounds=get_day_utc_bounds(date_str, self._get_tz()))
+            breakdown = all_breakdowns[date_str]
             if not breakdown:
                 if len(dates) == 1:
                     lines.append("_No videos watched._")
                 continue
 
             if len(dates) > 1:
-                total_day = sum(v['minutes'] for v in breakdown)
+                total_day = daily_totals[date_str]
                 lines.append(f"**{date_str}** \u2014 {int(total_day)} min total")
 
             # Group by category (uncategorized treated as fun)
