@@ -281,10 +281,10 @@ class BrainRotGuardBot:
             if parts[0] == "search_page" and len(parts) == 3:
                 await self._cb_search_page(query, int(parts[1]), int(parts[2]))
                 return
-            if parts[0] == "chan_page" and len(parts) == 3:
+            if parts[0] == "chan_page" and len(parts) == 3 and parts[1] in ("allowed", "blocked"):
                 await self._cb_channel_page(query, parts[1], int(parts[2]))
                 return
-            if parts[0] == "chan_filter" and len(parts) == 2:
+            if parts[0] == "chan_filter" and len(parts) == 2 and parts[1] in ("allowed", "blocked"):
                 await self._cb_channel_filter(query, parts[1])
                 return
             if parts[0] == "chan_menu" and len(parts) == 1:
@@ -407,8 +407,10 @@ class BrainRotGuardBot:
             if video['status'] == 'pending':
                 self.video_store.update_status(video_id, "approved")
                 self.video_store.set_video_category(video_id, "fun")
+                status_label = "APPROVED + CHANNEL ALLOWED"
+            else:
+                status_label = f"CHANNEL ALLOWED (video already {video['status']})"
             _answer_bg(query, f"Allowlisted: {channel}")
-            status_label = "APPROVED + CHANNEL ALLOWED"
             if self.on_channel_change:
                 self.on_channel_change()
         elif action in ("allowchan_edu", "allowchan_fun"):
@@ -418,12 +420,14 @@ class BrainRotGuardBot:
             self.video_store.add_channel(channel, "allowed", channel_id=cid, category=cat)
             if cid:
                 self._resolve_handle_bg(channel, cid)
+            cat_label = "Educational" if cat == "edu" else "Entertainment"
             if video['status'] == 'pending':
                 self.video_store.update_status(video_id, "approved")
                 self.video_store.set_video_category(video_id, cat)
-            cat_label = "Educational" if cat == "edu" else "Entertainment"
+                status_label = f"APPROVED + CHANNEL ALLOWED ({cat_label})"
+            else:
+                status_label = f"CHANNEL ALLOWED ({cat_label}) (video already {video['status']})"
             _answer_bg(query, f"Allowlisted ({cat_label}): {channel}")
-            status_label = f"APPROVED + CHANNEL ALLOWED ({cat_label})"
             if self.on_channel_change:
                 self.on_channel_change()
         elif action == "blockchan":
@@ -434,8 +438,10 @@ class BrainRotGuardBot:
                 self._resolve_handle_bg(channel, cid)
             if video['status'] == 'pending':
                 self.video_store.update_status(video_id, "denied")
+                status_label = "DENIED + CHANNEL BLOCKED"
+            else:
+                status_label = f"CHANNEL BLOCKED (video already {video['status']})"
             _answer_bg(query, f"Blocked: {channel}")
-            status_label = "DENIED + CHANNEL BLOCKED"
             if self.on_channel_change:
                 self.on_channel_change()
         else:
@@ -1225,6 +1231,7 @@ class BrainRotGuardBot:
 
     async def _cb_logs_page(self, query, days: int, page: int) -> None:
         """Handle logs pagination."""
+        days = min(max(1, days), 365)
         activity = self.video_store.get_recent_activity(days)
         if not activity:
             await query.answer("No activity.")
@@ -1299,6 +1306,7 @@ class BrainRotGuardBot:
 
     async def _cb_search_page(self, query, days: int, page: int) -> None:
         """Handle search history pagination."""
+        days = min(max(1, days), 365)
         searches = self.video_store.get_recent_searches(days)
         if not searches:
             await query.answer("No searches.")

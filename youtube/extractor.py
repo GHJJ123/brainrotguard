@@ -17,6 +17,8 @@ YOUTUBE_URL_PATTERN = re.compile(
     r'(?:https?://)?(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/shorts/)([a-zA-Z0-9_-]{11})'
 )
 
+_VIDEO_ID_RE = re.compile(r'^[a-zA-Z0-9_-]{11}$')
+
 def _safe_thumbnail(url: Optional[str], video_id: str) -> str:
     """Return the thumbnail URL if it's from an allowlisted host, else use ytimg fallback."""
     if url:
@@ -26,7 +28,9 @@ def _safe_thumbnail(url: Optional[str], video_id: str) -> str:
                 return url
         except Exception:
             pass
-    return f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
+    if video_id and _VIDEO_ID_RE.match(video_id):
+        return f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
+    return ""
 
 
 def extract_video_id(url_or_id: str) -> Optional[str]:

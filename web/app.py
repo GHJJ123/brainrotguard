@@ -556,7 +556,10 @@ async def login_submit(
         return RedirectResponse(url="/login", status_code=303)
 
     expected_pin = web_config.pin if web_config else ""
-    if not expected_pin or hmac.compare_digest(pin, expected_pin):
+    if not expected_pin:
+        # PIN auth disabled — session is already open via middleware
+        return RedirectResponse(url="/", status_code=303)
+    if hmac.compare_digest(pin, expected_pin):
         request.session["authenticated"] = True
         request.session["csrf_token"] = secrets.token_hex(32)
         return RedirectResponse(url="/", status_code=303)
@@ -870,6 +873,7 @@ async def watch_video(request: Request, video_id: str):
         })
 
     video_store.record_view(video_id)
+    request.session["watching"] = video_id
 
     embed_url = f"https://www.youtube-nocookie.com/embed/{video_id}?enablejsapi=1"
 
@@ -888,6 +892,9 @@ async def watch_video(request: Request, video_id: str):
 @limiter.limit("30/minute")
 async def api_status(request: Request, video_id: str):
     """JSON status endpoint for polling."""
+    if not VIDEO_ID_RE.match(video_id):
+        return JSONResponse({"status": "not_found"})
+
     video = video_store.get_video(video_id)
 
     if not video:
@@ -905,6 +912,10 @@ async def watch_heartbeat(request: Request, body: HeartbeatRequest):
 
     if not VIDEO_ID_RE.match(vid):
         return JSONResponse({"error": "invalid"}, status_code=400)
+
+    # Verify heartbeat matches the video currently being watched in this session
+    if request.session.get("watching") != vid:
+        return JSONResponse({"error": "not_watching"}, status_code=400)
 
     # Verify the video exists and is approved before accepting heartbeat
     video = video_store.get_video(vid)
