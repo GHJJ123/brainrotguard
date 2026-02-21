@@ -138,7 +138,7 @@ Now I curate his content and I can see the difference. He's not parroting gamer 
 
 ### Step 2: Get Your Chat ID
 
-1. Open a chat with the bot you just created and send it any message (e.g., "hello")
+1. Open a new chat with your bot — search for `@yourbotname_bot` in Telegram, or go to `https://t.me/yourbotname_bot` in your browser. Press **Start**, then send any message (e.g., "hello")
 2. Open this URL in your browser (replace `YOUR_TOKEN` with the token from Step 1):
    ```
    https://api.telegram.org/botYOUR_TOKEN/getUpdates
