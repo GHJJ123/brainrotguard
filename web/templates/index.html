@@ -98,7 +98,7 @@
     <h2 class="section-title">Your Videos</h2>
     <div class="video-grid" id="catalog-grid">
         {% for video in catalog %}
-        <a href="/watch/{{ video.video_id }}" class="video-card" data-channel="{{ video.channel_name }}" data-category="{{ video.category or 'fun' }}">
+        <a href="/watch/{{ video.video_id }}" class="video-card" data-channel="{{ video.channel_name }}" data-category="{{ video.category or 'fun' }}" data-video-id="{{ video.video_id }}">
             <div class="thumbnail-wrap">
                 <img src="{{ video.thumbnail_url }}" alt="{{ video.title }}" class="video-thumbnail" loading="lazy">
                 {% if video.duration %}
@@ -231,6 +231,7 @@
         a.className = 'video-card';
         a.dataset.channel = v.channel_name || '';
         a.dataset.category = v.category || 'fun';
+        a.dataset.videoId = v.video_id || '';
         var dur = v.duration ? '<span class="duration-badge">' + escapeHtml(formatDuration(v.duration)) + '</span>' : '';
         var catBadge = v.category ? '<span class="category-badge category-' + escapeHtml(v.category) + '">' + (v.category === 'edu' ? 'Edu' : 'Fun') + '</span>' : '';
         // eslint-disable-next-line no-unsanitized/property -- values are escaped via escapeHtml()
@@ -420,5 +421,14 @@
         });
     }
 })();
+</script>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/thumb-preview.js"></script>
+<script>
+if (window.initThumbPreview) {
+    initThumbPreview({ containerId: 'catalog-grid', cardSelector: '.video-card', thumbClass: 'video-thumbnail' });
+}
 </script>
 {% endblock %}

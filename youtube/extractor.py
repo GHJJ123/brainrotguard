@@ -114,6 +114,7 @@ async def search(query: str, max_results: int = 10) -> list[dict]:
                         'channel_name': entry.get('channel', entry.get('uploader', 'Unknown')),
                         'thumbnail_url': _safe_thumbnail(entry.get('thumbnail'), vid_id),
                         'duration': entry.get('duration'),
+                        'view_count': entry.get('view_count'),
                     })
                 return videos
         except Exception as e:
