@@ -1511,7 +1511,7 @@ main {
     height: 100%;
     object-fit: cover;
     opacity: 0;
-    transition: opacity 0.35s ease;
+    transition: opacity 0.5s ease;
     z-index: 1;
     pointer-events: none;
 }

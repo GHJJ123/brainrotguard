@@ -12,13 +12,14 @@
 
     // YouTube HQ numbered thumbnails (auto-generated at ~25%, 50%, 75%)
     var THUMB_NAMES = ['hq1', 'hq2', 'hq3'];
-    var CYCLE_INTERVAL = 1200; // ms between frames
+    var CYCLE_INTERVAL = 2000; // ms between frames
     var MIN_VALID_WIDTH = 200; // real HQ thumbs are 480x360; placeholders are 120x90
 
     // Shared state: only one card previews at a time
     var activeCard = null;
     var cycleTimer = null;
     var previewCache = {}; // videoId -> [valid thumb URLs]
+    var decodedImages = {}; // url -> HTMLImageElement (pre-decoded)
 
     function getVideoId(card) {
         return card.dataset.videoId || '';
@@ -44,6 +45,12 @@
             img.onload = function() {
                 if (img.naturalWidth > MIN_VALID_WIDTH) {
                     valid.push(url);
+                    // Pre-decode so the browser rasterizes the image before we display it
+                    if (img.decode) {
+                        img.decode().then(function() {
+                            decodedImages[url] = img;
+                        }).catch(function() {});
+                    }
                 }
                 if (--pending === 0) {
                     previewCache[videoId] = valid;
@@ -101,16 +108,31 @@
 
             function showFrame(idx) {
                 frameIndex = idx;
+                var updateDots = function() {
+                    var dots = dotsWrap.children;
+                    for (var i = 0; i < dots.length; i++) {
+                        dots[i].classList.toggle('active', i === idx);
+                    }
+                };
                 if (idx === 0) {
-                    // Show original — hide overlay
                     overlay.classList.remove('visible');
+                    updateDots();
                 } else {
                     overlay.src = frames[idx];
-                    overlay.classList.add('visible');
-                }
-                var dots = dotsWrap.children;
-                for (var i = 0; i < dots.length; i++) {
-                    dots[i].classList.toggle('active', i === idx);
+                    // Wait for decode before revealing to prevent jank
+                    if (overlay.decode) {
+                        overlay.decode().then(function() {
+                            if (activeCard !== card) return;
+                            overlay.classList.add('visible');
+                            updateDots();
+                        }).catch(function() {
+                            overlay.classList.add('visible');
+                            updateDots();
+                        });
+                    } else {
+                        overlay.classList.add('visible');
+                        updateDots();
+                    }
                 }
             }
 
@@ -148,9 +170,43 @@
         activeCard = null;
     }
 
+    // Eagerly preload thumbnails for cards visible on screen
+    function eagerPreload(container, cardSelector) {
+        var observer = new IntersectionObserver(function(entries, obs) {
+            entries.forEach(function(entry) {
+                if (entry.isIntersecting) {
+                    var videoId = getVideoId(entry.target);
+                    if (videoId && !previewCache[videoId]) {
+                        preloadThumbs(videoId, function() {});
+                    }
+                    obs.unobserve(entry.target);
+                }
+            });
+        }, { threshold: 0.1 });
+
+        container.querySelectorAll(cardSelector).forEach(function(card) {
+            observer.observe(card);
+        });
+
+        // Also observe dynamically added cards
+        var mutObs = new MutationObserver(function(mutations) {
+            mutations.forEach(function(m) {
+                m.addedNodes.forEach(function(node) {
+                    if (node.nodeType === 1 && node.matches(cardSelector)) {
+                        observer.observe(node);
+                    }
+                });
+            });
+        });
+        mutObs.observe(container, { childList: true });
+    }
+
     window.initThumbPreview = function(config) {
         var container = document.getElementById(config.containerId);
         if (!container) return;
+
+        // Eagerly preload thumbs for visible cards so they're ready before activation
+        eagerPreload(container, config.cardSelector);
 
         var isTouch = window.matchMedia('(pointer: coarse)').matches;
 
