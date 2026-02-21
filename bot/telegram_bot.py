@@ -967,12 +967,12 @@ class BrainRotGuardBot:
 
     async def _channel_allow(self, update: Update, args: list[str]) -> None:
         if not args:
-            await update.message.reply_text("Usage: /channel allow @handle\nExample: /channel allow @MarkRober")
+            await update.message.reply_text("Usage: /channel allow @handle\nExample: /channel allow @LEGO")
             return
         raw = args[0]
         if not raw.startswith("@"):
             await update.message.reply_text(
-                "Please use the channel's @handle (e.g. @MarkRober).\n"
+                "Please use the channel's @handle (e.g. @LEGO).\n"
                 "You can find it on the channel's YouTube page."
             )
             return
