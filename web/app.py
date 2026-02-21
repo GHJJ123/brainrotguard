@@ -238,10 +238,31 @@ def setup(store, notify_cb, yt_config=None, w_config=None,
     app.add_middleware(SessionMiddleware, secret_key=session_secret, max_age=86400)
 
 
-# Add globals to Jinja2
+# Add globals and filters to Jinja2
 templates.env.globals["format_duration"] = format_duration
 from version import __version__
 templates.env.globals["app_version"] = __version__
+
+
+def format_views(count) -> str:
+    """Format view count: 847, 527K, 2.3M."""
+    if not count:
+        return ""
+    count = int(count)
+    if count < 1_000:
+        return str(count)
+    if count < 999_500:
+        k = count / 1_000
+        if k >= 10:
+            return f"{k:.0f}K"
+        return f"{k:.1f}".rstrip("0").rstrip(".") + "K"
+    m = count / 1_000_000
+    if m >= 10:
+        return f"{m:.0f}M"
+    return f"{m:.1f}".rstrip("0").rstrip(".") + "M"
+
+
+templates.env.filters["format_views"] = format_views
 
 
 # Heartbeat dedup: video_id -> monotonic timestamp of last heartbeat

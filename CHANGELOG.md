@@ -1,4 +1,11 @@
 # Changelog
+## v1.15.0 - 2026-02-21
+
+**Added**
+- Search cards now show view count below channel name (e.g. "2.3M views")
+- Thumbnail preview cycling: hover (desktop) or scroll-into-view (tablet) cycles through YouTube auto-generated thumbnails with crossfade and progress dots
+- Preview engine supports dynamically loaded cards (catalog pagination, channel/category filters)
+
 ## v1.14.1 - 2026-02-21
 
 **Security**

@@ -14,7 +14,7 @@
     {% if results %}
     <div class="results-list" id="results-list">
         {% for result in results %}
-        <div class="result-card" data-index="{{ loop.index }}"{% if loop.index > 5 %} style="display:none"{% endif %}>
+        <div class="result-card" data-index="{{ loop.index }}" data-video-id="{{ result.video_id }}"{% if loop.index > 5 %} style="display:none"{% endif %}>
             <div class="thumbnail-wrap result-thumb-wrap">
                 <img src="{{ result.thumbnail_url }}" alt="{{ result.title }}" class="result-thumbnail" loading="lazy">
                 <span class="duration-badge">{{ format_duration(result.duration) }}</span>
@@ -22,6 +22,7 @@
             <div class="result-info">
                 <h3 class="result-title">{{ result.title }}</h3>
                 <p class="result-channel">{{ result.channel_name }}</p>
+                {% if result.view_count %}<p class="result-meta">{{ result.view_count | format_views }} views</p>{% endif %}
             </div>
             <form action="/request" method="POST" class="request-form">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -59,4 +60,13 @@
     </div>
     {% endif %}
 </section>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/thumb-preview.js"></script>
+<script>
+if (window.initThumbPreview) {
+    initThumbPreview({ containerId: 'results-list', cardSelector: '.result-card', thumbClass: 'result-thumbnail' });
+}
+</script>
 {% endblock %}

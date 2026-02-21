@@ -98,7 +98,7 @@
     <h2 class="section-title">Your Videos</h2>
     <div class="video-grid" id="catalog-grid">
         {% for video in catalog %}
-        <a href="/watch/{{ video.video_id }}" class="video-card" data-channel="{{ video.channel_name }}" data-category="{{ video.category or 'fun' }}">
+        <a href="/watch/{{ video.video_id }}" class="video-card" data-channel="{{ video.channel_name }}" data-category="{{ video.category or 'fun' }}" data-video-id="{{ video.video_id }}">
             <div class="thumbnail-wrap">
                 <img src="{{ video.thumbnail_url }}" alt="{{ video.title }}" class="video-thumbnail" loading="lazy">
                 {% if video.duration %}
@@ -110,7 +110,7 @@
             </div>
             <div class="video-info">
                 <h3 class="video-title">{{ video.title }}</h3>
-                <p class="video-channel">{{ video.channel_name }}</p>
+                <p class="video-channel">{{ video.channel_name }}{% if video.view_count %} <span class="video-views-inline">{{ video.view_count | format_views }} views</span>{% endif %}</p>
             </div>
         </a>
         {% endfor %}
@@ -224,6 +224,17 @@
         return m + ':' + String(s).padStart(2, '0');
     }
 
+    function formatViews(count) {
+        if (!count) return '';
+        if (count < 1000) return count;
+        if (count < 999500) {
+            var k = count / 1000;
+            return k >= 10 ? Math.round(k) + 'K' : (Math.round(k * 10) / 10 + 'K').replace(/\.0K$/, 'K');
+        }
+        var m = count / 1000000;
+        return m >= 10 ? Math.round(m) + 'M' : (Math.round(m * 10) / 10 + 'M').replace(/\.0M$/, 'M');
+    }
+
     // Shared: build a video card element
     function buildCard(v) {
         var a = document.createElement('a');
@@ -231,6 +242,7 @@
         a.className = 'video-card';
         a.dataset.channel = v.channel_name || '';
         a.dataset.category = v.category || 'fun';
+        a.dataset.videoId = v.video_id || '';
         var dur = v.duration ? '<span class="duration-badge">' + escapeHtml(formatDuration(v.duration)) + '</span>' : '';
         var catBadge = v.category ? '<span class="category-badge category-' + escapeHtml(v.category) + '">' + (v.category === 'edu' ? 'Edu' : 'Fun') + '</span>' : '';
         // eslint-disable-next-line no-unsanitized/property -- values are escaped via escapeHtml()
@@ -242,7 +254,7 @@
             '</div>' +
             '<div class="video-info">' +
                 '<h3 class="video-title">' + escapeHtml(v.title || '') + '</h3>' +
-                '<p class="video-channel">' + escapeHtml(v.channel_name || '') + '</p>' +
+                '<p class="video-channel">' + escapeHtml(v.channel_name || '') + (v.view_count ? ' <span class="video-views-inline">' + escapeHtml(formatViews(v.view_count)) + ' views</span>' : '') + '</p>' +
             '</div>';
         return a;
     }
@@ -420,5 +432,14 @@
         });
     }
 })();
+</script>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/thumb-preview.js"></script>
+<script>
+if (window.initThumbPreview) {
+    initThumbPreview({ containerId: 'catalog-grid', cardSelector: '.video-card', thumbClass: 'video-thumbnail' });
+}
 </script>
 {% endblock %}
