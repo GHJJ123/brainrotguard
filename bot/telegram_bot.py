@@ -941,15 +941,13 @@ class BrainRotGuardBot:
 
         # Idempotency: already imported?
         existing = self.video_store.get_channel_handles_set()
-        if handle.lower() in existing:
-            await query.answer(f"Already imported: {name}")
-        else:
+        already = handle.lower() in existing
+        if not already:
             self.video_store.add_channel(name, "allowed", channel_id=None, handle=handle, category=cat)
             if self.on_channel_change:
                 self.on_channel_change()
-            await query.answer(f"Imported: {name}")
 
-        # Re-render the current page with updated check marks
+        # Re-render first (priority: update the UI before the toast)
         page = idx // self._STARTER_PAGE_SIZE
         text, markup = self._render_starter_message(page)
         try:
@@ -959,6 +957,13 @@ class BrainRotGuardBot:
             )
         except Exception:
             pass  # Message unchanged (all already imported)
+
+        # Toast notification (non-critical, may time out)
+        try:
+            msg = f"Already imported: {name}" if already else f"Imported: {name}"
+            await query.answer(msg)
+        except Exception:
+            pass
 
     async def _channel_allow(self, update: Update, args: list[str]) -> None:
         if not args:
