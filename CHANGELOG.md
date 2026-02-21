@@ -1,4 +1,14 @@
 # Changelog
+## v1.14.1 - 2026-02-21
+
+**Security**
+- Validate `video_id` against regex on `/api/status/` endpoint (prevents DB probing with arbitrary strings)
+- Bind watch heartbeat to session — only the video loaded on `/watch` can send heartbeats (prevents cross-video time inflation)
+- Validate callback data: `chan_filter`/`chan_page` status checked against allowlist, `logs_page`/`search_page` days clamped to 1-365
+- Validate `video_id` in thumbnail URL fallback construction (defense-in-depth for yt-dlp output)
+- Separate empty-PIN logic from HMAC check for clarity and correctness
+- Fix misleading status labels when `allowchan`/`blockchan` pressed on already-resolved videos
+
 ## v1.14.0 - 2026-02-21
 
 **Changed**
