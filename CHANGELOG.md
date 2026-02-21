@@ -1,4 +1,12 @@
 # Changelog
+## v1.13.0 - 2026-02-21
+
+**Added**
+- Starter channels: ~15 curated kid-friendly YouTube channels available on first boot and via `/channel starter` (closes #9)
+- Per-channel Import buttons with check mark feedback for already-imported channels
+- Welcome message on `/start` and first-run (empty DB) explaining the bot's purpose
+- `/channel starter` command always available for browsing and importing starter channels
+
 ## v1.12.5 - 2026-02-20
 
 **Added**
