@@ -634,16 +634,6 @@ class BrainRotGuardBot:
             all_breakdowns[date_str] = bd
             daily_totals[date_str] = sum(v['minutes'] for v in bd) if bd else 0
 
-        # Data availability hint for multi-day requests
-        if len(dates) > 1:
-            days_with_data = sum(1 for t in daily_totals.values() if t > 0)
-            if days_with_data < len(dates):
-                if days_with_data == 0:
-                    lines.append("_No watch data in this range._")
-                else:
-                    lines.append(f"_Only {days_with_data} of {len(dates)} days have data — try_ `/watch {days_with_data}`")
-                lines.append("")
-
         # Multi-day summary chart
         if len(dates) > 1:
             max_min = max(daily_totals.values()) if daily_totals else 1
