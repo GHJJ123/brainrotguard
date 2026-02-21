@@ -85,7 +85,9 @@ class BrainRotGuardBot:
     async def start(self) -> None:
         """Start the bot."""
         logger.info("Starting BrainRotGuard bot...")
-        self._app = ApplicationBuilder().token(self.bot_token).build()
+        from telegram.request import HTTPXRequest
+        request = HTTPXRequest(connect_timeout=10.0, read_timeout=15.0, write_timeout=15.0)
+        self._app = ApplicationBuilder().token(self.bot_token).request(request).build()
 
         self._app.add_handler(CommandHandler("start", self._cmd_start))
         self._app.add_handler(CommandHandler("help", self._cmd_help))
