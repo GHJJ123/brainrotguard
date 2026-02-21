@@ -1,5 +1,6 @@
 """BrainRotGuard Telegram Bot - parent approval for YouTube videos."""
 
+import asyncio
 import logging
 from io import BytesIO
 from pathlib import Path
@@ -29,6 +30,16 @@ def _md(text: str) -> str:
         return telegramify_markdown.markdownify(text)
     except Exception:
         return text
+
+
+def _answer_bg(query, text: str = "") -> None:
+    """Fire answerCallbackQuery in background so it never blocks the message edit."""
+    async def _do():
+        try:
+            await query.answer(text)
+        except Exception:
+            pass
+    asyncio.create_task(_do())
 
 
 def _channel_md_link(name: str, channel_id: Optional[str] = None) -> str:
@@ -86,7 +97,10 @@ class BrainRotGuardBot:
         """Start the bot."""
         logger.info("Starting BrainRotGuard bot...")
         from telegram.request import HTTPXRequest
-        request = HTTPXRequest(connect_timeout=10.0, read_timeout=15.0, write_timeout=15.0)
+        request = HTTPXRequest(
+            connect_timeout=10.0, read_timeout=15.0, write_timeout=15.0,
+            connection_pool_size=10, pool_timeout=5.0,
+        )
         self._app = ApplicationBuilder().token(self.bot_token).request(request).build()
 
         self._app.add_handler(CommandHandler("start", self._cmd_start))
@@ -250,16 +264,18 @@ class BrainRotGuardBot:
 
         # Starter channels prompt (Yes/No from welcome message)
         if parts[0] == "starter_prompt" and len(parts) == 2:
-            if parts[1] == "yes":
-                await query.answer()
-                text, markup = self._render_starter_message()
-                await query.edit_message_text(
-                    text=text, reply_markup=markup, parse_mode=MD2,
-                    disable_web_page_preview=True,
-                )
-            else:
-                await query.answer("Got it!")
-                await query.edit_message_reply_markup(reply_markup=None)
+            _answer_bg(query, "Got it!" if parts[1] == "no" else "")
+            try:
+                if parts[1] == "yes":
+                    text, markup = self._render_starter_message()
+                    await query.edit_message_text(
+                        text=text, reply_markup=markup, parse_mode=MD2,
+                        disable_web_page_preview=True,
+                    )
+                else:
+                    await query.edit_message_reply_markup(reply_markup=None)
+            except Exception:
+                pass
             return
 
         # Starter channel import
@@ -277,11 +293,10 @@ class BrainRotGuardBot:
             if self.video_store.remove_channel(ch_name):
                 if self.on_channel_change:
                     self.on_channel_change()
-                await query.answer(f"Removed: {ch_name}")
-                # Refresh the channel list message
+                _answer_bg(query, f"Removed: {ch_name}")
                 await self._update_channel_list_message(query)
             else:
-                await query.answer(f"Not found: {ch_name}")
+                _answer_bg(query, f"Not found: {ch_name}")
             return
 
         # Resend notification callback from /pending
@@ -290,7 +305,7 @@ class BrainRotGuardBot:
             if not video or video['status'] != 'pending':
                 await query.answer("No longer pending.")
                 return
-            await query.answer("Resending...")
+            _answer_bg(query, "Resending...")
             await self.notify_new_request(video)
             return
 
@@ -309,7 +324,7 @@ class BrainRotGuardBot:
             cat = "edu" if action == "setcat_edu" else "fun"
             self.video_store.set_video_category(video_id, cat)
             cat_label = "Educational" if cat == "edu" else "Entertainment"
-            await query.answer(f"→ {cat_label}")
+            _answer_bg(query, f"→ {cat_label}")
             # Refresh buttons with updated toggle
             toggle_cat = "edu" if cat == "fun" else "fun"
             toggle_label = "→ Edu" if toggle_cat == "edu" else "→ Fun"
@@ -331,22 +346,22 @@ class BrainRotGuardBot:
         if action == "approve" and video['status'] == 'pending':
             self.video_store.update_status(video_id, "approved")
             self.video_store.set_video_category(video_id, "fun")
-            await query.answer("Approved!")
+            _answer_bg(query, "Approved!")
             status_label = "APPROVED"
         elif action in ("approve_edu", "approve_fun") and video['status'] == 'pending':
             cat = "edu" if action == "approve_edu" else "fun"
             self.video_store.update_status(video_id, "approved")
             self.video_store.set_video_category(video_id, cat)
             cat_label = "Educational" if cat == "edu" else "Entertainment"
-            await query.answer(f"Approved ({cat_label})!")
+            _answer_bg(query, f"Approved ({cat_label})!")
             status_label = f"APPROVED ({cat_label})"
         elif action == "deny" and video['status'] == 'pending':
             self.video_store.update_status(video_id, "denied")
-            await query.answer("Denied.")
+            _answer_bg(query, "Denied.")
             status_label = "DENIED"
         elif action == "revoke" and video['status'] == 'approved':
             self.video_store.update_status(video_id, "denied")
-            await query.answer("Revoked!")
+            _answer_bg(query, "Revoked!")
             status_label = "REVOKED"
         elif action == "allowchan":
             channel = video['channel_name']
@@ -357,7 +372,7 @@ class BrainRotGuardBot:
             if video['status'] == 'pending':
                 self.video_store.update_status(video_id, "approved")
                 self.video_store.set_video_category(video_id, "fun")
-            await query.answer(f"Allowlisted: {channel}")
+            _answer_bg(query, f"Allowlisted: {channel}")
             status_label = "APPROVED + CHANNEL ALLOWED"
             if self.on_channel_change:
                 self.on_channel_change()
@@ -372,7 +387,7 @@ class BrainRotGuardBot:
                 self.video_store.update_status(video_id, "approved")
                 self.video_store.set_video_category(video_id, cat)
             cat_label = "Educational" if cat == "edu" else "Entertainment"
-            await query.answer(f"Allowlisted ({cat_label}): {channel}")
+            _answer_bg(query, f"Allowlisted ({cat_label}): {channel}")
             status_label = f"APPROVED + CHANNEL ALLOWED ({cat_label})"
             if self.on_channel_change:
                 self.on_channel_change()
@@ -384,12 +399,12 @@ class BrainRotGuardBot:
                 self._resolve_handle_bg(channel, cid)
             if video['status'] == 'pending':
                 self.video_store.update_status(video_id, "denied")
-            await query.answer(f"Blocked: {channel}")
+            _answer_bg(query, f"Blocked: {channel}")
             status_label = "DENIED + CHANNEL BLOCKED"
             if self.on_channel_change:
                 self.on_channel_change()
         else:
-            await query.answer(f"Already {video['status']}.")
+            _answer_bg(query, f"Already {video['status']}.")
             return
 
         if self.on_video_change:
@@ -535,9 +550,12 @@ class BrainRotGuardBot:
         if not pending:
             await query.answer("No pending requests.")
             return
-        await query.answer()
+        _answer_bg(query)
         text, keyboard = self._render_pending_page(pending, page)
-        await query.edit_message_text(text=text, parse_mode=MD2, reply_markup=keyboard)
+        try:
+            await query.edit_message_text(text=text, parse_mode=MD2, reply_markup=keyboard)
+        except Exception:
+            pass
 
     _APPROVED_PAGE_SIZE = 10
 
@@ -600,11 +618,14 @@ class BrainRotGuardBot:
         if not page_items and page == 0:
             await query.answer("No approved videos.")
             return
-        await query.answer()
+        _answer_bg(query)
         text, keyboard = self._render_approved_page(page_items, total, page)
-        await query.edit_message_text(
-            text=text, parse_mode=MD2, reply_markup=keyboard, disable_web_page_preview=True,
-        )
+        try:
+            await query.edit_message_text(
+                text=text, parse_mode=MD2, reply_markup=keyboard, disable_web_page_preview=True,
+            )
+        except Exception:
+            pass
 
     async def _cmd_revoke(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not self._check_admin(update):
@@ -924,12 +945,15 @@ class BrainRotGuardBot:
 
     async def _cb_starter_page(self, query, page: int) -> None:
         """Handle starter channels pagination."""
-        await query.answer()
+        _answer_bg(query)
         text, markup = self._render_starter_message(page)
-        await query.edit_message_text(
-            text=text, reply_markup=markup, parse_mode=MD2,
-            disable_web_page_preview=True,
-        )
+        try:
+            await query.edit_message_text(
+                text=text, reply_markup=markup, parse_mode=MD2,
+                disable_web_page_preview=True,
+            )
+        except Exception:
+            pass
 
     async def _cb_starter_import(self, query, idx: int) -> None:
         """Handle Import button press from starter channels message."""
@@ -949,7 +973,11 @@ class BrainRotGuardBot:
             if self.on_channel_change:
                 self.on_channel_change()
 
-        # Re-render first (priority: update the UI before the toast)
+        # Acknowledge callback in background (non-blocking)
+        msg = f"Already imported: {name}" if already else f"Imported: {name}"
+        _answer_bg(query, msg)
+
+        # Re-render the message immediately
         page = idx // self._STARTER_PAGE_SIZE
         text, markup = self._render_starter_message(page)
         try:
@@ -957,13 +985,6 @@ class BrainRotGuardBot:
                 text=text, reply_markup=markup, parse_mode=MD2,
                 disable_web_page_preview=True,
             )
-        except Exception:
-            pass  # Message unchanged (all already imported)
-
-        # Toast notification (non-critical, may time out)
-        try:
-            msg = f"Already imported: {name}" if already else f"Imported: {name}"
-            await query.answer(msg)
         except Exception:
             pass
 
@@ -1132,19 +1153,26 @@ class BrainRotGuardBot:
 
     async def _cb_channel_page(self, query, page: int) -> None:
         """Handle channel list pagination."""
+        _answer_bg(query)
         text, markup = self._render_channel_page(page)
-        await query.edit_message_text(
-            text, parse_mode=MD2, disable_web_page_preview=True,
-            reply_markup=markup,
-        )
+        try:
+            await query.edit_message_text(
+                text, parse_mode=MD2, disable_web_page_preview=True,
+                reply_markup=markup,
+            )
+        except Exception:
+            pass
 
     async def _update_channel_list_message(self, query) -> None:
         """Refresh the channel list message after a button press (stay on page 0)."""
         text, markup = self._render_channel_page(0)
-        await query.edit_message_text(
-            text, parse_mode=MD2, disable_web_page_preview=True,
-            reply_markup=markup,
-        )
+        try:
+            await query.edit_message_text(
+                text, parse_mode=MD2, disable_web_page_preview=True,
+                reply_markup=markup,
+            )
+        except Exception:
+            pass
 
     # --- Activity report ---
 
@@ -1207,9 +1235,12 @@ class BrainRotGuardBot:
         if not activity:
             await query.answer("No activity.")
             return
-        await query.answer()
+        _answer_bg(query)
         text, keyboard = self._render_logs_page(activity, days, page)
-        await query.edit_message_text(text=text, parse_mode=MD2, reply_markup=keyboard)
+        try:
+            await query.edit_message_text(text=text, parse_mode=MD2, reply_markup=keyboard)
+        except Exception:
+            pass
 
     # --- /search subcommands ---
 
@@ -1288,11 +1319,14 @@ class BrainRotGuardBot:
         if not searches:
             await query.answer("No searches.")
             return
-        await query.answer()
+        _answer_bg(query)
         text, keyboard = self._render_search_page(searches, days, page)
-        await query.edit_message_text(
-            text=text, parse_mode=MD2, reply_markup=keyboard, disable_web_page_preview=True,
-        )
+        try:
+            await query.edit_message_text(
+                text=text, parse_mode=MD2, reply_markup=keyboard, disable_web_page_preview=True,
+            )
+        except Exception:
+            pass
 
     async def _search_filter(self, update: Update, args: list[str]) -> None:
         if not args:
