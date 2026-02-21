@@ -40,24 +40,24 @@ channels:
     description: "Short physics explainers with hand-drawn animation"
 
   - handle: "@DrBecky"
-    name: "Dr Becky"
+    name: "Dr. Becky"
     category: edu
     description: "Astrophysics and space discoveries"
 
-  - handle: "@itsokaytobesmart"
+  - handle: "@besmart"
     name: "Be Smart"
     category: edu
     description: "Science, nature, and curiosity"
 
-  - handle: "@DudePerfect"
-    name: "Dude Perfect"
+  - handle: "@BraveWilderness"
+    name: "Brave Wilderness"
     category: fun
-    description: "Trick shots and family-friendly stunts"
+    description: "Wildlife encounters and animal close-ups"
 
-  - handle: "@MrBeast"
-    name: "MrBeast"
+  - handle: "@okgo"
+    name: "OK Go"
     category: fun
-    description: "Challenges and philanthropy"
+    description: "Creative music videos with elaborate stunts"
 
   - handle: "@CorridorCrew"
     name: "Corridor Crew"
