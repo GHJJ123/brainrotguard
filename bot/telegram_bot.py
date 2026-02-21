@@ -249,8 +249,14 @@ class BrainRotGuardBot:
             if parts[0] == "search_page" and len(parts) == 3:
                 await self._cb_search_page(query, int(parts[1]), int(parts[2]))
                 return
-            if parts[0] == "chan_page" and len(parts) == 2:
-                await self._cb_channel_page(query, int(parts[1]))
+            if parts[0] == "chan_page" and len(parts) == 3:
+                await self._cb_channel_page(query, parts[1], int(parts[2]))
+                return
+            if parts[0] == "chan_filter" and len(parts) == 2:
+                await self._cb_channel_filter(query, parts[1])
+                return
+            if parts[0] == "chan_menu" and len(parts) == 1:
+                await self._cb_channel_menu(query)
                 return
             if parts[0] == "pending_page" and len(parts) == 2:
                 await self._cb_pending_page(query, int(parts[1]))
@@ -1093,26 +1099,41 @@ class BrainRotGuardBot:
 
     _CHANNEL_PAGE_SIZE = 10
 
-    def _render_channel_page(self, page: int = 0) -> tuple[str, InlineKeyboardMarkup | None]:
-        """Build text + inline buttons for a page of the channel list."""
+    def _render_channel_menu(self) -> tuple[str, InlineKeyboardMarkup | None]:
+        """Build the channel menu with Allowed/Blocked buttons."""
         allowed = self.video_store.get_channels_with_ids("allowed")
         blocked = self.video_store.get_channels_with_ids("blocked")
         if not allowed and not blocked:
             return "No channels configured.", None
+        lines = ["**Channels**\n"]
+        buttons = []
+        if allowed:
+            buttons.append([InlineKeyboardButton(
+                f"Allowed ({len(allowed)})", callback_data="chan_filter:allowed",
+            )])
+        if blocked:
+            buttons.append([InlineKeyboardButton(
+                f"Blocked ({len(blocked)})", callback_data="chan_filter:blocked",
+            )])
+        text = _md("\n".join(lines))
+        return text, InlineKeyboardMarkup(buttons) if buttons else None
 
-        # Build flat list: (channel_name, channel_id, handle, category, status)
-        entries = [(ch, cid, h, cat, "allowed") for ch, cid, h, cat in allowed]
-        entries += [(ch, cid, h, cat, "blocked") for ch, cid, h, cat in blocked]
+    def _render_channel_page(self, status: str, page: int = 0) -> tuple[str, InlineKeyboardMarkup | None]:
+        """Build text + inline buttons for a page of the channel list filtered by status."""
+        entries = self.video_store.get_channels_with_ids(status)
+        if not entries:
+            return f"No {status} channels.", None
+
         total = len(entries)
         page_size = self._CHANNEL_PAGE_SIZE
         start = page * page_size
         end = min(start + page_size, total)
         page_entries = entries[start:end]
 
-        lines = [f"**Channels** ({total} total)\n"]
+        label = "Allowed" if status == "allowed" else "Blocked"
+        lines = [f"**{label} Channels** ({total})\n"]
         buttons = []
-        for ch, cid, handle, cat, status in page_entries:
-            label = "allowed" if status == "allowed" else "blocked"
+        for ch, cid, handle, cat in page_entries:
             cat_tag = f" [{cat}]" if cat else ""
             if cid:
                 url = f"https://www.youtube.com/channel/{cid}"
@@ -1121,7 +1142,7 @@ class BrainRotGuardBot:
             else:
                 url = f"https://www.youtube.com/results?search_query={quote(ch)}"
             handle_tag = f" `{handle}`" if handle else ""
-            lines.append(f"  [{ch}]({url}){handle_tag} *{label}{cat_tag}*")
+            lines.append(f"  [{ch}]({url}){handle_tag}{cat_tag}")
             btn_label = f"Unallow: {ch}" if status == "allowed" else f"Unblock: {ch}"
             btn_action = "unallow" if status == "allowed" else "unblock"
             buttons.append([InlineKeyboardButton(
@@ -1131,30 +1152,56 @@ class BrainRotGuardBot:
         # Navigation row
         nav = []
         if page > 0:
-            nav.append(InlineKeyboardButton("\u25c0 Back", callback_data=f"chan_page:{page - 1}"))
+            nav.append(InlineKeyboardButton("\u25c0 Back", callback_data=f"chan_page:{status}:{page - 1}"))
         remaining = total - end
         if remaining > 0:
             nav.append(InlineKeyboardButton(
-                f"Show more ({remaining})", callback_data=f"chan_page:{page + 1}",
+                f"Show more ({remaining})", callback_data=f"chan_page:{status}:{page + 1}",
             ))
         if nav:
             buttons.append(nav)
+        # Back to menu
+        buttons.append([InlineKeyboardButton("\u25c0 Channels", callback_data="chan_menu")])
 
         text = _md("\n".join(lines))
         markup = InlineKeyboardMarkup(buttons) if buttons else None
         return text, markup
 
     async def _channel_list(self, update: Update) -> None:
-        text, markup = self._render_channel_page(0)
+        text, markup = self._render_channel_menu()
         await update.message.reply_text(
             text, parse_mode=MD2, disable_web_page_preview=True,
             reply_markup=markup,
         )
 
-    async def _cb_channel_page(self, query, page: int) -> None:
+    async def _cb_channel_filter(self, query, status: str) -> None:
+        """Handle Allowed/Blocked button press from channel menu."""
+        _answer_bg(query)
+        text, markup = self._render_channel_page(status, 0)
+        try:
+            await query.edit_message_text(
+                text, parse_mode=MD2, disable_web_page_preview=True,
+                reply_markup=markup,
+            )
+        except Exception:
+            pass
+
+    async def _cb_channel_menu(self, query) -> None:
+        """Handle back-to-menu button press."""
+        _answer_bg(query)
+        text, markup = self._render_channel_menu()
+        try:
+            await query.edit_message_text(
+                text, parse_mode=MD2, disable_web_page_preview=True,
+                reply_markup=markup,
+            )
+        except Exception:
+            pass
+
+    async def _cb_channel_page(self, query, status: str, page: int) -> None:
         """Handle channel list pagination."""
         _answer_bg(query)
-        text, markup = self._render_channel_page(page)
+        text, markup = self._render_channel_page(status, page)
         try:
             await query.edit_message_text(
                 text, parse_mode=MD2, disable_web_page_preview=True,
@@ -1164,8 +1211,8 @@ class BrainRotGuardBot:
             pass
 
     async def _update_channel_list_message(self, query) -> None:
-        """Refresh the channel list message after a button press (stay on page 0)."""
-        text, markup = self._render_channel_page(0)
+        """Refresh back to channel menu after unallow/unblock."""
+        text, markup = self._render_channel_menu()
         try:
             await query.edit_message_text(
                 text, parse_mode=MD2, disable_web_page_preview=True,
