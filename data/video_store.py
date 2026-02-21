@@ -553,6 +553,14 @@ class VideoStore:
             )
             return cursor.fetchone() is not None
 
+    def get_channel_handles_set(self) -> set[str]:
+        """Get lowercased set of all channel handles in DB (any status)."""
+        with self._lock:
+            cursor = self.conn.execute(
+                "SELECT handle FROM channels WHERE handle IS NOT NULL AND handle != ''"
+            )
+            return {row[0].lower() for row in cursor.fetchall()}
+
     def get_blocked_channels_set(self) -> set[str]:
         """Get set of blocked channel names (lowercased for bulk filtering).
 

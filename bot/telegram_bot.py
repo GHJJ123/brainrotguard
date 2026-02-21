@@ -2,6 +2,7 @@
 
 import logging
 from io import BytesIO
+from pathlib import Path
 from typing import Optional
 from urllib.parse import quote, urlparse
 
@@ -40,7 +41,8 @@ def _channel_md_link(name: str, channel_id: Optional[str] = None) -> str:
 class BrainRotGuardBot:
     """Telegram bot for parent video approval."""
 
-    def __init__(self, bot_token: str, admin_chat_id: str, video_store, config=None):
+    def __init__(self, bot_token: str, admin_chat_id: str, video_store, config=None,
+                 starter_channels_path: Optional[Path] = None):
         self.bot_token = bot_token
         self.admin_chat_id = admin_chat_id
         self.video_store = video_store
@@ -49,6 +51,9 @@ class BrainRotGuardBot:
         self._limit_notified_cats: dict[str, str] = {}  # category -> date string of last limit notification
         self.on_channel_change = None  # callback when channel lists change
         self.on_video_change = None  # callback when video status changes
+        # Load starter channels
+        from data.starter_channels import load_starter_channels
+        self._starter_channels = load_starter_channels(starter_channels_path)
 
     def _check_admin(self, update: Update) -> bool:
         """Check if interaction is from an authorized admin context.
@@ -82,7 +87,7 @@ class BrainRotGuardBot:
         logger.info("Starting BrainRotGuard bot...")
         self._app = ApplicationBuilder().token(self.bot_token).build()
 
-        self._app.add_handler(CommandHandler("start", self._cmd_help))
+        self._app.add_handler(CommandHandler("start", self._cmd_start))
         self._app.add_handler(CommandHandler("help", self._cmd_help))
         self._app.add_handler(CommandHandler("pending", self._cmd_pending))
         self._app.add_handler(CommandHandler("approved", self._cmd_approved))
@@ -102,6 +107,33 @@ class BrainRotGuardBot:
         await self._app.start()
         await self._app.updater.start_polling(drop_pending_updates=True)
         logger.info("BrainRotGuard bot started")
+
+        # First-run: send welcome + starter channels if channel list is empty
+        if self._starter_channels and not self.video_store.get_channel_handles_set():
+            try:
+                from version import __version__
+                await self._app.bot.send_message(
+                    chat_id=self.admin_chat_id,
+                    text=_md(
+                        f"**BrainRotGuard v{__version__}**\n\n"
+                        "YouTube approval system for kids. Your child searches and "
+                        "requests videos through the web UI — you approve or deny "
+                        "them right here in Telegram.\n\n"
+                        "Use `/help` to see all available commands."
+                    ),
+                    parse_mode=MD2,
+                )
+                text, markup = self._render_starter_message()
+                await self._app.bot.send_message(
+                    chat_id=self.admin_chat_id,
+                    text=text,
+                    reply_markup=markup,
+                    parse_mode=MD2,
+                    disable_web_page_preview=True,
+                )
+                logger.info("Sent welcome + starter channels to admin (first run)")
+            except Exception as e:
+                logger.error(f"Failed to send first-run messages: {e}")
 
     async def stop(self) -> None:
         """Stop the bot."""
@@ -222,6 +254,14 @@ class BrainRotGuardBot:
                 return
         except (ValueError, IndexError):
             await query.answer("Invalid callback.")
+            return
+
+        # Starter channel import
+        if parts[0] == "starter_import" and len(parts) == 2:
+            try:
+                await self._cb_starter_import(query, int(parts[1]))
+            except (ValueError, IndexError):
+                await query.answer("Invalid callback.")
             return
 
         # Channel management callbacks (unallow:name or unblock:name)
@@ -376,6 +416,27 @@ class BrainRotGuardBot:
         except Exception:
             await query.edit_message_text(text=result_text, reply_markup=reply_markup, parse_mode=MD2)
 
+    async def _cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Welcome message on first /start contact."""
+        if not self._check_admin(update):
+            await update.message.reply_text("Unauthorized.")
+            return
+        from version import __version__
+        await update.message.reply_text(_md(
+            f"**BrainRotGuard v{__version__}**\n\n"
+            "YouTube approval system for kids. Your child searches and "
+            "requests videos through the web UI — you approve or deny "
+            "them right here in Telegram.\n\n"
+            "Use `/help` to see all available commands."
+        ), parse_mode=MD2)
+        # Follow up with starter channels if available
+        if self._starter_channels:
+            text, markup = self._render_starter_message()
+            await update.message.reply_text(
+                text, parse_mode=MD2, reply_markup=markup,
+                disable_web_page_preview=True,
+            )
+
     async def _cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not self._check_admin(update):
             await update.message.reply_text("Unauthorized.")
@@ -392,6 +453,7 @@ class BrainRotGuardBot:
             "`/logs [days|today]` - Activity report\n\n"
             "**Channel:**\n"
             "`/channel` - List all channels\n"
+            "`/channel starter` - Kid-friendly starter list\n"
             "`/channel allow @handle [edu|fun]`\n"
             "`/channel cat <name> edu|fun`\n"
             "`/channel unallow|block|unblock <name>`\n\n"
@@ -783,10 +845,77 @@ class BrainRotGuardBot:
             await self._channel_unblock(update, rest)
         elif sub == "cat":
             await self._channel_set_cat(update, rest)
+        elif sub == "starter":
+            await self._channel_starter(update)
         else:
             await update.message.reply_text(
-                "Usage: /channel allow|unallow|block|unblock|cat <name>"
+                "Usage: /channel allow|unallow|block|unblock|cat|starter <name>"
             )
+
+    async def _channel_starter(self, update: Update) -> None:
+        """Handle /channel starter — show importable starter channels."""
+        if not self._starter_channels:
+            await update.message.reply_text("No starter channels configured.")
+            return
+        text, markup = self._render_starter_message()
+        await update.message.reply_text(
+            text, parse_mode=MD2, reply_markup=markup, disable_web_page_preview=True,
+        )
+
+    def _render_starter_message(self) -> tuple[str, InlineKeyboardMarkup | None]:
+        """Build starter channels message with per-channel Import buttons."""
+        existing = self.video_store.get_channel_handles_set()
+        lines = ["**Starter Channels**\n"]
+        buttons = []
+        for idx, ch in enumerate(self._starter_channels):
+            handle = ch["handle"]
+            name = ch["name"]
+            cat = ch.get("category") or ""
+            desc = ch.get("description") or ""
+            url = f"https://www.youtube.com/{handle}"
+            cat_badge = f" [{cat}]" if cat else ""
+            lines.append(f"[{name}]({url}){cat_badge}")
+            if desc:
+                lines.append(f"_{desc}_")
+            if handle.lower() in existing:
+                lines.append("\u2705 _imported_\n")
+            else:
+                lines.append("")
+                buttons.append([InlineKeyboardButton(
+                    f"Import: {name}", callback_data=f"starter_import:{idx}",
+                )])
+        markup = InlineKeyboardMarkup(buttons) if buttons else None
+        return _md("\n".join(lines)), markup
+
+    async def _cb_starter_import(self, query, idx: int) -> None:
+        """Handle Import button press from starter channels message."""
+        if idx < 0 or idx >= len(self._starter_channels):
+            await query.answer("Invalid channel.")
+            return
+        ch = self._starter_channels[idx]
+        handle = ch["handle"]
+        name = ch["name"]
+        cat = ch.get("category")
+
+        # Idempotency: already imported?
+        existing = self.video_store.get_channel_handles_set()
+        if handle.lower() in existing:
+            await query.answer(f"Already imported: {name}")
+        else:
+            self.video_store.add_channel(name, "allowed", channel_id=None, handle=handle, category=cat)
+            if self.on_channel_change:
+                self.on_channel_change()
+            await query.answer(f"Imported: {name}")
+
+        # Re-render the message with updated check marks
+        text, markup = self._render_starter_message()
+        try:
+            await query.edit_message_text(
+                text=text, reply_markup=markup, parse_mode=MD2,
+                disable_web_page_preview=True,
+            )
+        except Exception:
+            pass  # Message unchanged (all already imported)
 
     async def _channel_allow(self, update: Update, args: list[str]) -> None:
         if not args:

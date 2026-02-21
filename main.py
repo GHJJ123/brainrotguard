@@ -6,6 +6,7 @@ import asyncio
 import logging
 import signal
 import os
+from pathlib import Path
 
 import uvicorn
 
@@ -43,6 +44,7 @@ class BrainRotGuard:
                 admin_chat_id=self.config.telegram.admin_chat_id,
                 video_store=self.video_store,
                 config=self.config,
+                starter_channels_path=Path(__file__).parent / "starter-channels.yaml",
             )
             self.bot.on_channel_change = invalidate_channel_cache
             from web.app import _invalidate_catalog_cache
