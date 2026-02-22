@@ -2099,7 +2099,7 @@ class BrainRotGuardBot:
             end_disp = format_time_12h(end) if end else "not set"
             header = f"Default: {start_disp} \u2013 {end_disp}\n\n"
         else:
-            header = ""
+            header = "Days without a schedule are open (no restrictions).\n\n"
         text = _md(
             f"{header}"
             f"Tap a day to set its schedule, or Done to finish."
