@@ -2,10 +2,15 @@
 ## v1.17.0 - 2026-02-22
 
 **Added**
-- `/time setup` now shows top-level [Limits] [Schedule] menu instead of going straight to limit mode
-- Schedule wizard: guided flow for setting default start/stop times with preset buttons + custom input
-- Schedule wizard day grid: tap any day to set a different schedule, days with overrides marked with bullet
-- Schedule wizard done summary: shows default schedule and per-day overrides
+- `/time setup` now shows top-level [Limits] [Schedule] menu
+- Schedule wizard with two paths:
+  - "Same for all days": start presets → stop presets → done summary
+  - "Customize by day": 7-day grid → per-day start/stop pickers → back to grid (configured days marked)
+- Custom time input in wizard via text reply with `parse_time_input()` validation
+
+**Fixed**
+- `parse_time_input()` now accepts hour-only formats (8am, 12pm, 9pm) — previously required minutes
+- Schedule wizard Custom buttons now work (wrapped prompts in `_md()` for MarkdownV2 escaping)
 
 ## v1.16.0 - 2026-02-22
 
