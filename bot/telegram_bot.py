@@ -2052,60 +2052,57 @@ class BrainRotGuardBot:
             ]])
             await _edit_msg(query, text, keyboard)
         elif choice == "schedule":
-            await self._setup_sched_start_menu(query)
+            text = _md(
+                "Same schedule every day, or different times for specific days?"
+            )
+            keyboard = InlineKeyboardMarkup([[
+                InlineKeyboardButton("Same for all days", callback_data="setup_sched_apply:all"),
+                InlineKeyboardButton("Customize by day", callback_data="setup_sched_apply:custom"),
+            ]])
+            await _edit_msg(query, text, keyboard)
 
     # --- Schedule wizard helpers ---
 
-    async def _setup_sched_start_menu(self, query) -> None:
-        """Step 1: show default start-time presets."""
+    async def _setup_sched_start_menu(self, query, prefix: str = "setup_sched_start") -> None:
+        """Show start-time presets."""
         text = _md("Set when watching is allowed to begin:")
         keyboard = InlineKeyboardMarkup([[
-            InlineKeyboardButton("7 AM", callback_data="setup_sched_start:07:00"),
-            InlineKeyboardButton("8 AM", callback_data="setup_sched_start:08:00"),
-            InlineKeyboardButton("9 AM", callback_data="setup_sched_start:09:00"),
-            InlineKeyboardButton("Custom", callback_data="setup_sched_start:custom"),
+            InlineKeyboardButton("7 AM", callback_data=f"{prefix}:07:00"),
+            InlineKeyboardButton("8 AM", callback_data=f"{prefix}:08:00"),
+            InlineKeyboardButton("9 AM", callback_data=f"{prefix}:09:00"),
+            InlineKeyboardButton("Custom", callback_data=f"{prefix}:custom"),
         ]])
         await _edit_msg(query, text, keyboard)
 
-    async def _setup_sched_stop_menu(self, query, start_display: str) -> None:
-        """Step 2: show default stop-time presets."""
+    async def _setup_sched_stop_menu(self, query, start_display: str,
+                                     prefix: str = "setup_sched_stop") -> None:
+        """Show stop-time presets."""
         text = _md(
             f"Start: {start_display} \u2713\n"
             f"Now set when watching must stop:"
         )
         keyboard = InlineKeyboardMarkup([[
-            InlineKeyboardButton("7 PM", callback_data="setup_sched_stop:19:00"),
-            InlineKeyboardButton("8 PM", callback_data="setup_sched_stop:20:00"),
-            InlineKeyboardButton("9 PM", callback_data="setup_sched_stop:21:00"),
-            InlineKeyboardButton("Custom", callback_data="setup_sched_stop:custom"),
+            InlineKeyboardButton("7 PM", callback_data=f"{prefix}:19:00"),
+            InlineKeyboardButton("8 PM", callback_data=f"{prefix}:20:00"),
+            InlineKeyboardButton("9 PM", callback_data=f"{prefix}:21:00"),
+            InlineKeyboardButton("Custom", callback_data=f"{prefix}:custom"),
         ]])
         await _edit_msg(query, text, keyboard)
 
-    def _setup_sched_apply_menu(self) -> tuple[str, InlineKeyboardMarkup]:
-        """Build same-for-all vs customize-by-day choice."""
-        start = self.video_store.get_setting("schedule_start", "")
-        end = self.video_store.get_setting("schedule_end", "")
-        start_disp = format_time_12h(start) if start else "not set"
-        end_disp = format_time_12h(end) if end else "not set"
-        text = _md(
-            f"\u2713 Schedule: {start_disp} \u2013 {end_disp}\n\n"
-            f"Apply to all days, or customize specific days?"
-        )
-        keyboard = InlineKeyboardMarkup([[
-            InlineKeyboardButton("Same for all days", callback_data="setup_sched_apply:all"),
-            InlineKeyboardButton("Customize by day", callback_data="setup_sched_apply:custom"),
-        ]])
-        return text, keyboard
-
     def _setup_sched_day_grid(self) -> tuple[str, InlineKeyboardMarkup]:
-        """Build Step 3 day-grid text and keyboard."""
+        """Build day-grid text and keyboard."""
+        # Show default schedule if set
         start = self.video_store.get_setting("schedule_start", "")
         end = self.video_store.get_setting("schedule_end", "")
-        start_disp = format_time_12h(start) if start else "not set"
-        end_disp = format_time_12h(end) if end else "not set"
+        if start or end:
+            start_disp = format_time_12h(start) if start else "not set"
+            end_disp = format_time_12h(end) if end else "not set"
+            header = f"Default: {start_disp} \u2013 {end_disp}\n\n"
+        else:
+            header = ""
         text = _md(
-            f"\u2713 Schedule set: {start_disp} \u2013 {end_disp}\n\n"
-            f"Tap a day to set a different schedule, or Done to finish."
+            f"{header}"
+            f"Tap a day to set its schedule, or Done to finish."
         )
         # Build day buttons, mark overrides with bullet
         row1, row2 = [], []
@@ -2137,20 +2134,19 @@ class BrainRotGuardBot:
         await self._setup_sched_stop_menu(query, format_time_12h(value))
 
     async def _cb_setup_sched_stop(self, query, value: str) -> None:
-        """Handle default stop-time selection."""
+        """Handle default stop-time selection — goes to done summary."""
         if value == "custom":
             await _edit_msg(query, _md("Reply with the stop time (e.g. 8pm, 20:00):"))
             chat_id = query.message.chat_id
             self._pending_wizard[chat_id] = {"step": "setup_sched_stop"}
             return
         self.video_store.set_setting("schedule_end", value)
-        text, keyboard = self._setup_sched_apply_menu()
-        await _edit_msg(query, text, keyboard)
+        await self._cb_setup_sched_done(query)
 
     async def _cb_setup_sched_apply(self, query, choice: str) -> None:
-        """Route same-for-all vs customize-by-day."""
+        """Route same-for-all (start picker) vs customize-by-day (day grid)."""
         if choice == "all":
-            await self._cb_setup_sched_done(query)
+            await self._setup_sched_start_menu(query)
         elif choice == "custom":
             text, keyboard = self._setup_sched_day_grid()
             await _edit_msg(query, text, keyboard)
@@ -2402,8 +2398,15 @@ class BrainRotGuardBot:
                 await update.message.reply_text(stop_text, parse_mode=MD2, reply_markup=keyboard)
             elif step == "setup_sched_stop":
                 self.video_store.set_setting("schedule_end", parsed)
-                apply_text, keyboard = self._setup_sched_apply_menu()
-                await update.message.reply_text(apply_text, parse_mode=MD2, reply_markup=keyboard)
+                start = self.video_store.get_setting("schedule_start", "")
+                start_disp = format_time_12h(start) if start else "not set"
+                end_disp = format_time_12h(parsed)
+                lines = [
+                    f"\u2713 **Schedule configured**\n",
+                    f"Default: {start_disp} \u2013 {end_disp}",
+                    f"\nUse `/time <day> start|stop` to adjust later.",
+                ]
+                await update.message.reply_text(_md("\n".join(lines)), parse_mode=MD2)
             elif step.startswith("setup_daystart:"):
                 day = step.split(":", 1)[1]
                 self.video_store.set_setting(f"{day}_schedule_start", parsed)
