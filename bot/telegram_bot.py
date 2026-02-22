@@ -345,6 +345,10 @@ class BrainRotGuardBot:
             _answer_bg(query)
             await self._cb_setup_sched_day(query, parts[1])
             return
+        if parts[0] == "setup_sched_apply" and len(parts) == 2:
+            _answer_bg(query)
+            await self._cb_setup_sched_apply(query, parts[1])
+            return
         if parts[0] == "setup_sched_done":
             _answer_bg(query)
             await self._cb_setup_sched_done(query)
@@ -2077,6 +2081,22 @@ class BrainRotGuardBot:
         ]])
         await _edit_msg(query, text, keyboard)
 
+    def _setup_sched_apply_menu(self) -> tuple[str, InlineKeyboardMarkup]:
+        """Build same-for-all vs customize-by-day choice."""
+        start = self.video_store.get_setting("schedule_start", "")
+        end = self.video_store.get_setting("schedule_end", "")
+        start_disp = format_time_12h(start) if start else "not set"
+        end_disp = format_time_12h(end) if end else "not set"
+        text = _md(
+            f"\u2713 Schedule: {start_disp} \u2013 {end_disp}\n\n"
+            f"Apply to all days, or customize specific days?"
+        )
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("Same for all days", callback_data="setup_sched_apply:all"),
+            InlineKeyboardButton("Customize by day", callback_data="setup_sched_apply:custom"),
+        ]])
+        return text, keyboard
+
     def _setup_sched_day_grid(self) -> tuple[str, InlineKeyboardMarkup]:
         """Build Step 3 day-grid text and keyboard."""
         start = self.video_store.get_setting("schedule_start", "")
@@ -2124,8 +2144,16 @@ class BrainRotGuardBot:
             self._pending_wizard[chat_id] = {"step": "setup_sched_stop"}
             return
         self.video_store.set_setting("schedule_end", value)
-        text, keyboard = self._setup_sched_day_grid()
+        text, keyboard = self._setup_sched_apply_menu()
         await _edit_msg(query, text, keyboard)
+
+    async def _cb_setup_sched_apply(self, query, choice: str) -> None:
+        """Route same-for-all vs customize-by-day."""
+        if choice == "all":
+            await self._cb_setup_sched_done(query)
+        elif choice == "custom":
+            text, keyboard = self._setup_sched_day_grid()
+            await _edit_msg(query, text, keyboard)
 
     async def _cb_setup_sched_day(self, query, day: str) -> None:
         """Show per-day start-time picker."""
@@ -2374,8 +2402,8 @@ class BrainRotGuardBot:
                 await update.message.reply_text(stop_text, parse_mode=MD2, reply_markup=keyboard)
             elif step == "setup_sched_stop":
                 self.video_store.set_setting("schedule_end", parsed)
-                grid_text, keyboard = self._setup_sched_day_grid()
-                await update.message.reply_text(grid_text, parse_mode=MD2, reply_markup=keyboard)
+                apply_text, keyboard = self._setup_sched_apply_menu()
+                await update.message.reply_text(apply_text, parse_mode=MD2, reply_markup=keyboard)
             elif step.startswith("setup_daystart:"):
                 day = step.split(":", 1)[1]
                 self.video_store.set_setting(f"{day}_schedule_start", parsed)
