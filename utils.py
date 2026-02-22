@@ -29,6 +29,11 @@ _TIME_RE = re.compile(
     r'^(\d{1,2}):?(\d{2})\s*(am|pm)?$',
     re.IGNORECASE,
 )
+# Matches hour-only with am/pm: 8am, 12pm, 9PM
+_TIME_HOUR_RE = re.compile(
+    r'^(\d{1,2})\s*(am|pm)$',
+    re.IGNORECASE,
+)
 
 
 def get_today_str(tz_name: str = "") -> str:
@@ -78,11 +83,17 @@ def parse_time_input(raw: str) -> str | None:
     """
     raw = raw.strip()
     m = _TIME_RE.match(raw)
-    if not m:
-        return None
-    hour = int(m.group(1))
-    minute = int(m.group(2))
-    meridiem = (m.group(3) or "").lower()
+    if m:
+        hour = int(m.group(1))
+        minute = int(m.group(2))
+        meridiem = (m.group(3) or "").lower()
+    else:
+        m = _TIME_HOUR_RE.match(raw)
+        if not m:
+            return None
+        hour = int(m.group(1))
+        minute = 0
+        meridiem = m.group(2).lower()
 
     if meridiem == "am":
         if hour == 12:
