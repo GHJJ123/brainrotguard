@@ -2109,7 +2109,7 @@ class BrainRotGuardBot:
     async def _cb_setup_sched_start(self, query, value: str) -> None:
         """Handle default start-time selection."""
         if value == "custom":
-            await _edit_msg(query, "Reply with the start time (e.g. 8am, 08:00):")
+            await _edit_msg(query, _md("Reply with the start time (e.g. 8am, 08:00):"))
             chat_id = query.message.chat_id
             self._pending_wizard[chat_id] = {"step": "setup_sched_start"}
             return
@@ -2119,7 +2119,7 @@ class BrainRotGuardBot:
     async def _cb_setup_sched_stop(self, query, value: str) -> None:
         """Handle default stop-time selection."""
         if value == "custom":
-            await _edit_msg(query, "Reply with the stop time (e.g. 8pm, 20:00):")
+            await _edit_msg(query, _md("Reply with the stop time (e.g. 8pm, 20:00):"))
             chat_id = query.message.chat_id
             self._pending_wizard[chat_id] = {"step": "setup_sched_stop"}
             return
@@ -2161,7 +2161,7 @@ class BrainRotGuardBot:
             return
         if value == "custom":
             label = self._DAY_LABELS[day]
-            await _edit_msg(query, f"Reply with start time for {label} (e.g. 9am, 09:00):")
+            await _edit_msg(query, _md(f"Reply with start time for {label} (e.g. 9am, 09:00):"))
             chat_id = query.message.chat_id
             self._pending_wizard[chat_id] = {"step": f"setup_daystart:{day}"}
             return
@@ -2185,7 +2185,7 @@ class BrainRotGuardBot:
             return
         if value == "custom":
             label = self._DAY_LABELS[day]
-            await _edit_msg(query, f"Reply with stop time for {label} (e.g. 9pm, 21:00):")
+            await _edit_msg(query, _md(f"Reply with stop time for {label} (e.g. 9pm, 21:00):"))
             chat_id = query.message.chat_id
             self._pending_wizard[chat_id] = {"step": f"setup_daystop:{day}"}
             return
