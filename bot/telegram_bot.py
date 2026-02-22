@@ -570,21 +570,13 @@ class BrainRotGuardBot:
             ]])
         return _md(msg), markup
 
-    def _help_url(self) -> str:
-        """Build LAN URL for the /help web page."""
-        import socket
-        host = self.config.web.host if self.config else "localhost"
-        if host in ("0.0.0.0", ""):
-            host = socket.gethostname()
-        port = self.config.web.port if self.config else 8080
-        return f"http://{host}:{port}/help"
-
     async def _cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not self._check_admin(update):
             await update.message.reply_text("Unauthorized.")
             return
         from version import __version__
-        help_url = self._help_url()
+        base_url = self.config.web.base_url if self.config else ""
+        help_link = f"📖 [Full command reference]({base_url}/help)\n" if base_url else ""
         await update.message.reply_text(_md(
             f"**BrainRotGuard v{__version__}**\n\n"
             "**Commands:**\n"
@@ -613,7 +605,7 @@ class BrainRotGuardBot:
             "`/time <day> [start|stop|edu|fun|limit|off]`\n"
             "`/time <day> copy <days|weekdays|weekend|all>`\n"
             "`/changelog` - Latest changes\n\n"
-            f"📖 [Full command reference]({help_url})\n"
+            f"{help_link}"
             "☕ [Buy me a coffee](https://ko-fi.com/coffee4jj)"
         ), parse_mode=MD2, disable_web_page_preview=True)
 

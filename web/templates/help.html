@@ -72,28 +72,35 @@
     <p class="subtitle">Quick reference for the BrainRotGuard parent bot.</p>
 
     <h2>Approvals</h2>
+    <p class="note">When a child requests a video from a non-allowlisted channel, you get a Telegram notification with Approve/Deny buttons. These commands let you review the queue.</p>
     <div class="cmd"><code>/pending</code> <span>List videos waiting for approval</span></div>
     <div class="cmd"><code>/approved</code> <span>List approved videos (with channel links)</span></div>
     <div class="cmd"><code>/denied</code> <span>List denied videos</span></div>
 
     <h2>Channels</h2>
+    <p class="note">Allowed channels auto-approve all future videos from that channel. Blocked channels auto-deny. Each allowed channel has a category (edu or fun) that determines which time budget it counts against.</p>
     <div class="cmd"><code>/channel</code> <span>Show allowed/blocked channel counts with filter buttons</span></div>
-    <div class="cmd"><code>/channel allow @handle [edu|fun]</code> <span>Allow a channel (optional category)</span></div>
-    <div class="cmd"><code>/channel block @handle</code> <span>Block a channel</span></div>
+    <div class="cmd"><code>/channel allow @handle [edu|fun]</code> <span>Allow a channel (optional category, defaults to fun)</span></div>
+    <div class="cmd"><code>/channel block @handle</code> <span>Block a channel — all future requests auto-denied</span></div>
     <div class="cmd"><code>/channel cat &lt;name&gt; edu|fun</code> <span>Recategorize an allowed channel</span></div>
     <div class="cmd"><code>/channel starter</code> <span>Browse and import kid-friendly starter channels</span></div>
 
-    <h2>Schedule Setup</h2>
-    <div class="cmd"><code>/time setup</code> <span>Guided wizard — choose simple or category-based limits</span></div>
+    <h2>Getting Started</h2>
+    <p class="note">The easiest way to configure schedules and time limits is the setup wizard. It walks you through everything with inline buttons — no need to remember command syntax.</p>
+    <div class="cmd"><code>/time setup</code> <span>Guided wizard — covers schedule, limits, and categories step by step</span></div>
+    <p class="note">The commands below are for quick manual adjustments. Everything they do can also be done through <code>/time setup</code>.</p>
+
+    <h2>Schedule</h2>
     <div class="cmd"><code>/time start &lt;time&gt;</code> <span>Set daily start time (e.g. <code>8am</code>, <code>9:30am</code>)</span></div>
     <div class="cmd"><code>/time stop &lt;time&gt;</code> <span>Set daily stop time (e.g. <code>7pm</code>, <code>8:30pm</code>)</span></div>
-    <p class="note">Playback is blocked outside the start/stop window. Browsing and search are unaffected.</p>
+    <p class="note">Playback is blocked outside the start/stop window. The child can still browse and search, just not watch.</p>
 
     <h2>Time Limits</h2>
+    <p class="note">You can either set separate limits per category (edu vs fun) or a single combined limit — not both.</p>
     <div class="cmd"><code>/time edu &lt;min|off&gt;</code> <span>Set daily educational limit (e.g. <code>120</code>, <code>off</code>)</span></div>
     <div class="cmd"><code>/time fun &lt;min|off&gt;</code> <span>Set daily entertainment limit (e.g. <code>60</code>, <code>off</code>)</span></div>
     <div class="cmd"><code>/time limit &lt;min&gt;</code> <span>Set a single daily limit (no category split)</span></div>
-    <p class="note">Category limits (edu/fun) and the global limit are mutually exclusive — set one or the other.</p>
+    <p class="note">Setting a category limit auto-clears the global limit, and vice versa.</p>
 
     <h2>Bonus &amp; Activity</h2>
     <div class="cmd"><code>/time add &lt;min&gt;</code> <span>Grant bonus minutes for today (stacks, auto-expires tomorrow)</span></div>
@@ -103,11 +110,12 @@
     <div class="cmd"><code>/watch &lt;N&gt;</code> <span>Activity from N days ago</span></div>
 
     <h2>Day Overrides</h2>
+    <p class="note">Override schedule or limits for specific days of the week (e.g. longer screen time on weekends). You can also set these up through <code>/time setup</code>.</p>
     <div class="cmd"><code>/time &lt;day&gt; start|stop &lt;time&gt;</code> <span>Per-day schedule (e.g. <code>/time mon start 8am</code>)</span></div>
     <div class="cmd"><code>/time &lt;day&gt; edu|fun &lt;min|off&gt;</code> <span>Per-day category limit</span></div>
     <div class="cmd"><code>/time &lt;day&gt; limit &lt;min|off&gt;</code> <span>Per-day global limit</span></div>
-    <div class="cmd"><code>/time &lt;day&gt; off</code> <span>Clear all overrides for a day</span></div>
-    <div class="cmd"><code>/time &lt;day&gt; copy &lt;targets&gt;</code> <span>Copy overrides (e.g. <code>/time mon copy weekdays</code>)</span></div>
-    <p class="note">Day names: mon, tue, wed, thu, fri, sat, sun. Targets: day names, weekdays, weekend, all.</p>
+    <div class="cmd"><code>/time &lt;day&gt; off</code> <span>Clear all overrides for a day (falls back to default)</span></div>
+    <div class="cmd"><code>/time &lt;day&gt; copy &lt;targets&gt;</code> <span>Copy one day's overrides to others (e.g. <code>/time mon copy weekdays</code>)</span></div>
+    <p class="note">Day names: mon, tue, wed, thu, fri, sat, sun. Copy targets: day names, weekdays, weekend, all.</p>
 </body>
 </html>
