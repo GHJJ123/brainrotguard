@@ -329,6 +329,38 @@ class BrainRotGuardBot:
             return
 
         # Time limit wizard callbacks
+        if parts[0] == "setup_top" and len(parts) == 2:
+            _answer_bg(query)
+            await self._cb_setup_top(query, parts[1])
+            return
+        if parts[0] == "setup_sched_start" and len(parts) >= 2:
+            _answer_bg(query)
+            await self._cb_setup_sched_start(query, ":".join(parts[1:]))
+            return
+        if parts[0] == "setup_sched_stop" and len(parts) >= 2:
+            _answer_bg(query)
+            await self._cb_setup_sched_stop(query, ":".join(parts[1:]))
+            return
+        if parts[0] == "setup_sched_day" and len(parts) == 2:
+            _answer_bg(query)
+            await self._cb_setup_sched_day(query, parts[1])
+            return
+        if parts[0] == "setup_sched_done":
+            _answer_bg(query)
+            await self._cb_setup_sched_done(query)
+            return
+        if parts[0] == "setup_daystart" and len(parts) >= 3:
+            _answer_bg(query)
+            day = parts[1]
+            value = ":".join(parts[2:])
+            await self._cb_setup_daystart(query, day, value)
+            return
+        if parts[0] == "setup_daystop" and len(parts) >= 3:
+            _answer_bg(query)
+            day = parts[1]
+            value = ":".join(parts[2:])
+            await self._cb_setup_daystop(query, day, value)
+            return
         if parts[0] == "setup_mode" and len(parts) == 2:
             _answer_bg(query)
             await self._cb_setup_mode(query, parts[1])
@@ -1990,18 +2022,198 @@ class BrainRotGuardBot:
     # --- Guided limit setup wizard ---
 
     async def _time_setup_start(self, update: Update) -> None:
-        """Send mode selection message with inline buttons."""
+        """Send top-level setup menu with Limits / Schedule choices."""
         text = _md(
-            "\u23f0 **Time Limit Setup**\n\n"
-            "How would you like to manage screen time?\n\n"
-            "**Simple** \u2014 one daily cap for all videos.\n"
-            "**Category** \u2014 separate edu + fun budgets (total = edu + fun)."
+            "\u23f0 **Time Setup**\n\n"
+            "What would you like to configure?"
         )
         keyboard = InlineKeyboardMarkup([[
-            InlineKeyboardButton("Simple Limit", callback_data="setup_mode:simple"),
-            InlineKeyboardButton("Category Limits", callback_data="setup_mode:category"),
+            InlineKeyboardButton("Limits", callback_data="setup_top:limits"),
+            InlineKeyboardButton("Schedule", callback_data="setup_top:schedule"),
         ]])
         await update.message.reply_text(text, parse_mode=MD2, reply_markup=keyboard)
+
+    async def _cb_setup_top(self, query, choice: str) -> None:
+        """Route top-level setup choice to limits or schedule wizard."""
+        if choice == "limits":
+            text = _md(
+                "\u23f0 **Time Limit Setup**\n\n"
+                "How would you like to manage screen time?\n\n"
+                "**Simple** \u2014 one daily cap for all videos.\n"
+                "**Category** \u2014 separate edu + fun budgets (total = edu + fun)."
+            )
+            keyboard = InlineKeyboardMarkup([[
+                InlineKeyboardButton("Simple Limit", callback_data="setup_mode:simple"),
+                InlineKeyboardButton("Category Limits", callback_data="setup_mode:category"),
+            ]])
+            await _edit_msg(query, text, keyboard)
+        elif choice == "schedule":
+            await self._setup_sched_start_menu(query)
+
+    # --- Schedule wizard helpers ---
+
+    async def _setup_sched_start_menu(self, query) -> None:
+        """Step 1: show default start-time presets."""
+        text = _md("Set when watching is allowed to begin:")
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("7 AM", callback_data="setup_sched_start:07:00"),
+            InlineKeyboardButton("8 AM", callback_data="setup_sched_start:08:00"),
+            InlineKeyboardButton("9 AM", callback_data="setup_sched_start:09:00"),
+            InlineKeyboardButton("Custom", callback_data="setup_sched_start:custom"),
+        ]])
+        await _edit_msg(query, text, keyboard)
+
+    async def _setup_sched_stop_menu(self, query, start_display: str) -> None:
+        """Step 2: show default stop-time presets."""
+        text = _md(
+            f"Start: {start_display} \u2713\n"
+            f"Now set when watching must stop:"
+        )
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("7 PM", callback_data="setup_sched_stop:19:00"),
+            InlineKeyboardButton("8 PM", callback_data="setup_sched_stop:20:00"),
+            InlineKeyboardButton("9 PM", callback_data="setup_sched_stop:21:00"),
+            InlineKeyboardButton("Custom", callback_data="setup_sched_stop:custom"),
+        ]])
+        await _edit_msg(query, text, keyboard)
+
+    def _setup_sched_day_grid(self) -> tuple[str, InlineKeyboardMarkup]:
+        """Build Step 3 day-grid text and keyboard."""
+        start = self.video_store.get_setting("schedule_start", "")
+        end = self.video_store.get_setting("schedule_end", "")
+        start_disp = format_time_12h(start) if start else "not set"
+        end_disp = format_time_12h(end) if end else "not set"
+        text = _md(
+            f"\u2713 Schedule set: {start_disp} \u2013 {end_disp}\n\n"
+            f"Tap a day to set a different schedule, or Done to finish."
+        )
+        # Build day buttons, mark overrides with bullet
+        row1, row2 = [], []
+        for day in DAY_NAMES:
+            has_override = (
+                self.video_store.get_setting(f"{day}_schedule_start", "") or
+                self.video_store.get_setting(f"{day}_schedule_end", "")
+            )
+            label = self._DAY_LABELS[day][:3]
+            if has_override:
+                label += " \u2022"
+            btn = InlineKeyboardButton(label, callback_data=f"setup_sched_day:{day}")
+            if day in ("mon", "tue", "wed", "thu"):
+                row1.append(btn)
+            else:
+                row2.append(btn)
+        done_row = [InlineKeyboardButton("Done \u2713", callback_data="setup_sched_done")]
+        keyboard = InlineKeyboardMarkup([row1, row2, done_row])
+        return text, keyboard
+
+    async def _cb_setup_sched_start(self, query, value: str) -> None:
+        """Handle default start-time selection."""
+        if value == "custom":
+            await _edit_msg(query, "Reply with the start time (e.g. 8am, 08:00):")
+            chat_id = query.message.chat_id
+            self._pending_wizard[chat_id] = {"step": "setup_sched_start"}
+            return
+        self.video_store.set_setting("schedule_start", value)
+        await self._setup_sched_stop_menu(query, format_time_12h(value))
+
+    async def _cb_setup_sched_stop(self, query, value: str) -> None:
+        """Handle default stop-time selection."""
+        if value == "custom":
+            await _edit_msg(query, "Reply with the stop time (e.g. 8pm, 20:00):")
+            chat_id = query.message.chat_id
+            self._pending_wizard[chat_id] = {"step": "setup_sched_stop"}
+            return
+        self.video_store.set_setting("schedule_end", value)
+        text, keyboard = self._setup_sched_day_grid()
+        await _edit_msg(query, text, keyboard)
+
+    async def _cb_setup_sched_day(self, query, day: str) -> None:
+        """Show per-day start-time picker."""
+        if day not in DAY_NAMES:
+            return
+        label = self._DAY_LABELS[day]
+        start = self._effective_setting(day, "schedule_start")
+        end = self._effective_setting(day, "schedule_end")
+        start_disp = format_time_12h(start) if start else "not set"
+        end_disp = format_time_12h(end) if end else "not set"
+        # Check if this day has its own overrides
+        has_own = (
+            self.video_store.get_setting(f"{day}_schedule_start", "") or
+            self.video_store.get_setting(f"{day}_schedule_end", "")
+        )
+        source = "" if has_own else " (default)"
+        text = _md(
+            f"**{label}** \u2014 currently {start_disp} \u2013 {end_disp}{source}\n\n"
+            f"Set start time for {label}:"
+        )
+        # Offer presets near the current default
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("8 AM", callback_data=f"setup_daystart:{day}:08:00"),
+            InlineKeyboardButton("9 AM", callback_data=f"setup_daystart:{day}:09:00"),
+            InlineKeyboardButton("10 AM", callback_data=f"setup_daystart:{day}:10:00"),
+            InlineKeyboardButton("Custom", callback_data=f"setup_daystart:{day}:custom"),
+        ]])
+        await _edit_msg(query, text, keyboard)
+
+    async def _cb_setup_daystart(self, query, day: str, value: str) -> None:
+        """Handle per-day start-time selection."""
+        if day not in DAY_NAMES:
+            return
+        if value == "custom":
+            label = self._DAY_LABELS[day]
+            await _edit_msg(query, f"Reply with start time for {label} (e.g. 9am, 09:00):")
+            chat_id = query.message.chat_id
+            self._pending_wizard[chat_id] = {"step": f"setup_daystart:{day}"}
+            return
+        self.video_store.set_setting(f"{day}_schedule_start", value)
+        label = self._DAY_LABELS[day]
+        text = _md(
+            f"{label} start: {format_time_12h(value)} \u2713\n"
+            f"Set stop time for {label}:"
+        )
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("8 PM", callback_data=f"setup_daystop:{day}:20:00"),
+            InlineKeyboardButton("9 PM", callback_data=f"setup_daystop:{day}:21:00"),
+            InlineKeyboardButton("10 PM", callback_data=f"setup_daystop:{day}:22:00"),
+            InlineKeyboardButton("Custom", callback_data=f"setup_daystop:{day}:custom"),
+        ]])
+        await _edit_msg(query, text, keyboard)
+
+    async def _cb_setup_daystop(self, query, day: str, value: str) -> None:
+        """Handle per-day stop-time selection."""
+        if day not in DAY_NAMES:
+            return
+        if value == "custom":
+            label = self._DAY_LABELS[day]
+            await _edit_msg(query, f"Reply with stop time for {label} (e.g. 9pm, 21:00):")
+            chat_id = query.message.chat_id
+            self._pending_wizard[chat_id] = {"step": f"setup_daystop:{day}"}
+            return
+        self.video_store.set_setting(f"{day}_schedule_end", value)
+        text, keyboard = self._setup_sched_day_grid()
+        await _edit_msg(query, text, keyboard)
+
+    async def _cb_setup_sched_done(self, query) -> None:
+        """Final summary when schedule wizard completes."""
+        start = self.video_store.get_setting("schedule_start", "")
+        end = self.video_store.get_setting("schedule_end", "")
+        start_disp = format_time_12h(start) if start else "not set"
+        end_disp = format_time_12h(end) if end else "not set"
+        lines = [
+            f"\u2713 **Schedule configured**\n",
+            f"Default: {start_disp} \u2013 {end_disp}",
+        ]
+        # List per-day overrides
+        for day in DAY_NAMES:
+            ds = self.video_store.get_setting(f"{day}_schedule_start", "")
+            de = self.video_store.get_setting(f"{day}_schedule_end", "")
+            if ds or de:
+                label = self._DAY_LABELS[day][:3]
+                ds_disp = format_time_12h(ds) if ds else start_disp
+                de_disp = format_time_12h(de) if de else end_disp
+                lines.append(f"{label}: {ds_disp} \u2013 {de_disp}")
+        lines.append(f"\nUse `/time <day> start|stop` to adjust later.")
+        await _edit_msg(query, _md("\n".join(lines)))
 
     async def _cb_setup_mode(self, query, mode: str) -> None:
         """Handle mode choice from wizard."""
@@ -2134,12 +2346,64 @@ class BrainRotGuardBot:
         if not state:
             return  # No wizard active
         text = update.message.text.strip()
+        step = state["step"]
+
+        # Schedule wizard steps expect time input, not minutes
+        if step.startswith("setup_sched_") or step.startswith("setup_daystart:") or step.startswith("setup_daystop:"):
+            parsed = parse_time_input(text)
+            if not parsed:
+                await update.message.reply_text(
+                    "Invalid time. Examples: 8am, 08:00, 2000, 8:00PM"
+                )
+                return
+            del self._pending_wizard[chat_id]
+
+            if step == "setup_sched_start":
+                self.video_store.set_setting("schedule_start", parsed)
+                # Show stop-time picker (as new message since we can't edit)
+                stop_text = _md(
+                    f"Start: {format_time_12h(parsed)} \u2713\n"
+                    f"Now set when watching must stop:"
+                )
+                keyboard = InlineKeyboardMarkup([[
+                    InlineKeyboardButton("7 PM", callback_data="setup_sched_stop:19:00"),
+                    InlineKeyboardButton("8 PM", callback_data="setup_sched_stop:20:00"),
+                    InlineKeyboardButton("9 PM", callback_data="setup_sched_stop:21:00"),
+                    InlineKeyboardButton("Custom", callback_data="setup_sched_stop:custom"),
+                ]])
+                await update.message.reply_text(stop_text, parse_mode=MD2, reply_markup=keyboard)
+            elif step == "setup_sched_stop":
+                self.video_store.set_setting("schedule_end", parsed)
+                grid_text, keyboard = self._setup_sched_day_grid()
+                await update.message.reply_text(grid_text, parse_mode=MD2, reply_markup=keyboard)
+            elif step.startswith("setup_daystart:"):
+                day = step.split(":", 1)[1]
+                self.video_store.set_setting(f"{day}_schedule_start", parsed)
+                label = self._DAY_LABELS[day]
+                stop_text = _md(
+                    f"{label} start: {format_time_12h(parsed)} \u2713\n"
+                    f"Set stop time for {label}:"
+                )
+                keyboard = InlineKeyboardMarkup([[
+                    InlineKeyboardButton("8 PM", callback_data=f"setup_daystop:{day}:20:00"),
+                    InlineKeyboardButton("9 PM", callback_data=f"setup_daystop:{day}:21:00"),
+                    InlineKeyboardButton("10 PM", callback_data=f"setup_daystop:{day}:22:00"),
+                    InlineKeyboardButton("Custom", callback_data=f"setup_daystop:{day}:custom"),
+                ]])
+                await update.message.reply_text(stop_text, parse_mode=MD2, reply_markup=keyboard)
+            elif step.startswith("setup_daystop:"):
+                day = step.split(":", 1)[1]
+                self.video_store.set_setting(f"{day}_schedule_end", parsed)
+                grid_text, keyboard = self._setup_sched_day_grid()
+                await update.message.reply_text(grid_text, parse_mode=MD2, reply_markup=keyboard)
+            return
+
+        # Limit wizard steps expect positive integer minutes
         if not text.isdigit() or int(text) <= 0:
             await update.message.reply_text("Please reply with a positive number of minutes.")
             return
         minutes = int(text)
         del self._pending_wizard[chat_id]
-        step = state["step"]
 
         if step == "setup_simple":
             self.video_store.set_setting("daily_limit_minutes", str(minutes))
