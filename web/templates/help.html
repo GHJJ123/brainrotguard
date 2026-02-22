@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BrainRotGuard — Bot Commands</title>
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #0f0f23;
+            color: #c9c9e0;
+            line-height: 1.6;
+            padding: 2rem 1rem;
+            max-width: 720px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #e0e0ff;
+            font-size: 1.5rem;
+            margin-bottom: 0.25rem;
+        }
+        .subtitle {
+            color: #7a7a9e;
+            font-size: 0.9rem;
+            margin-bottom: 2rem;
+        }
+        h2 {
+            color: #b0b0d0;
+            font-size: 1.1rem;
+            margin: 2rem 0 0.75rem;
+            padding-bottom: 0.35rem;
+            border-bottom: 1px solid #2a2a4a;
+        }
+        .cmd {
+            margin-bottom: 0.6rem;
+            display: flex;
+            gap: 0.75rem;
+        }
+        .cmd code {
+            flex-shrink: 0;
+            font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+            font-size: 0.85rem;
+            color: #7ec8e3;
+            background: #1a1a35;
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+            white-space: nowrap;
+            align-self: baseline;
+        }
+        .cmd span {
+            color: #9e9eb8;
+            font-size: 0.9rem;
+        }
+        .note {
+            color: #6e6e8a;
+            font-size: 0.8rem;
+            font-style: italic;
+            margin-top: 0.3rem;
+        }
+        a { color: #7ec8e3; }
+        @media (max-width: 480px) {
+            body { padding: 1.25rem 0.75rem; }
+            .cmd { flex-direction: column; gap: 0.15rem; }
+            .cmd code { align-self: flex-start; }
+        }
+    </style>
+</head>
+<body>
+    <h1>Telegram Bot Commands</h1>
+    <p class="subtitle">Quick reference for the BrainRotGuard parent bot.</p>
+
+    <h2>Approvals</h2>
+    <div class="cmd"><code>/pending</code> <span>List videos waiting for approval</span></div>
+    <div class="cmd"><code>/approved</code> <span>List approved videos (with channel links)</span></div>
+    <div class="cmd"><code>/denied</code> <span>List denied videos</span></div>
+
+    <h2>Channels</h2>
+    <div class="cmd"><code>/channel</code> <span>Show allowed/blocked channel counts with filter buttons</span></div>
+    <div class="cmd"><code>/channel allow @handle [edu|fun]</code> <span>Allow a channel (optional category)</span></div>
+    <div class="cmd"><code>/channel block @handle</code> <span>Block a channel</span></div>
+    <div class="cmd"><code>/channel cat &lt;name&gt; edu|fun</code> <span>Recategorize an allowed channel</span></div>
+    <div class="cmd"><code>/channel starter</code> <span>Browse and import kid-friendly starter channels</span></div>
+
+    <h2>Schedule Setup</h2>
+    <div class="cmd"><code>/time setup</code> <span>Guided wizard — choose simple or category-based limits</span></div>
+    <div class="cmd"><code>/time start &lt;time&gt;</code> <span>Set daily start time (e.g. <code>8am</code>, <code>9:30am</code>)</span></div>
+    <div class="cmd"><code>/time stop &lt;time&gt;</code> <span>Set daily stop time (e.g. <code>7pm</code>, <code>8:30pm</code>)</span></div>
+    <p class="note">Playback is blocked outside the start/stop window. Browsing and search are unaffected.</p>
+
+    <h2>Time Limits</h2>
+    <div class="cmd"><code>/time edu &lt;min|off&gt;</code> <span>Set daily educational limit (e.g. <code>120</code>, <code>off</code>)</span></div>
+    <div class="cmd"><code>/time fun &lt;min|off&gt;</code> <span>Set daily entertainment limit (e.g. <code>60</code>, <code>off</code>)</span></div>
+    <div class="cmd"><code>/time limit &lt;min&gt;</code> <span>Set a single daily limit (no category split)</span></div>
+    <p class="note">Category limits (edu/fun) and the global limit are mutually exclusive — set one or the other.</p>
+
+    <h2>Bonus &amp; Activity</h2>
+    <div class="cmd"><code>/time add &lt;min&gt;</code> <span>Grant bonus minutes for today (stacks, auto-expires tomorrow)</span></div>
+    <div class="cmd"><code>/time</code> <span>Today's status + 7-day weekly overview with progress bars</span></div>
+    <div class="cmd"><code>/watch</code> <span>Today's watch activity — per-category and per-video breakdown</span></div>
+    <div class="cmd"><code>/watch yesterday</code> <span>Yesterday's activity</span></div>
+    <div class="cmd"><code>/watch &lt;N&gt;</code> <span>Activity from N days ago</span></div>
+
+    <h2>Day Overrides</h2>
+    <div class="cmd"><code>/time &lt;day&gt; start|stop &lt;time&gt;</code> <span>Per-day schedule (e.g. <code>/time mon start 8am</code>)</span></div>
+    <div class="cmd"><code>/time &lt;day&gt; edu|fun &lt;min|off&gt;</code> <span>Per-day category limit</span></div>
+    <div class="cmd"><code>/time &lt;day&gt; limit &lt;min|off&gt;</code> <span>Per-day global limit</span></div>
+    <div class="cmd"><code>/time &lt;day&gt; off</code> <span>Clear all overrides for a day</span></div>
+    <div class="cmd"><code>/time &lt;day&gt; copy &lt;targets&gt;</code> <span>Copy overrides (e.g. <code>/time mon copy weekdays</code>)</span></div>
+    <p class="note">Day names: mon, tue, wed, thu, fri, sat, sun. Targets: day names, weekdays, weekend, all.</p>
+</body>
+</html>

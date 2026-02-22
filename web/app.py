@@ -92,7 +92,7 @@ class PinAuthMiddleware(BaseHTTPMiddleware):
         if not self.pin:
             return await call_next(request)
         # Allow unauthenticated access to login, static assets, and specific read-only APIs
-        if request.url.path.startswith(("/login", "/static")):
+        if request.url.path.startswith(("/login", "/static", "/help")):
             return await call_next(request)
         if request.url.path.startswith(_API_AUTH_EXEMPT):
             return await call_next(request)
@@ -608,6 +608,12 @@ async def login_submit(
         "csrf_token": new_csrf,
         "error": True,
     })
+
+
+@app.get("/help", response_class=HTMLResponse)
+async def help_page(request: Request):
+    """Telegram bot commands reference (no auth required)."""
+    return templates.TemplateResponse("help.html", {"request": request})
 
 
 _ERROR_MESSAGES = {
