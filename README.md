@@ -14,6 +14,7 @@
 - [Features](#features)
 - [What You'll Need](#what-youll-need)
 - [Setup Guide](#setup-guide)
+- [Using the Pre-Built Docker Image](#using-the-pre-built-docker-image)
 - [Running Without Docker](#running-without-docker)
 - [Documentation](#documentation)
 - [Project Structure](#project-structure)
@@ -233,6 +234,37 @@ Add the block domains to your blocklist and the allow domains to your allowlist.
 #### Other Options
 
 Any DNS filtering tool that lets you block/allow specific domains will work — pfBlockerNG, NextDNS, router-level parental controls, etc.
+
+## Using the Pre-Built Docker Image
+
+If you don't want to build from source, you can pull the pre-built image from GitHub Container Registry. It supports both `amd64` and `arm64` (Raspberry Pi, Unraid, etc.).
+
+```bash
+docker pull ghcr.io/ghjj123/brainrotguard:latest
+```
+
+Then use the example compose file instead of building locally:
+
+```bash
+# Download config and env templates
+curl -O https://raw.githubusercontent.com/GHJJ123/brainrotguard/main/config.example.yaml
+curl -O https://raw.githubusercontent.com/GHJJ123/brainrotguard/main/.env.example
+curl -O https://raw.githubusercontent.com/GHJJ123/brainrotguard/main/docker-compose.example.yml
+
+# Set up your config
+cp config.example.yaml config.yaml
+cp .env.example .env
+# Edit .env with your bot token and chat ID
+
+# Start it
+docker compose -f docker-compose.example.yml up -d
+```
+
+To update to a new version:
+```bash
+docker compose -f docker-compose.example.yml pull
+docker compose -f docker-compose.example.yml up -d
+```
 
 ## Running Without Docker
 

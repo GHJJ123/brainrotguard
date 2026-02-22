@@ -1,0 +1,17 @@
+.git
+.github
+.claude
+.env
+.env.example
+*.md
+!requirements.txt
+docs/
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.mypy_cache
+deploy.sh
+docker-compose*.yml
+starter-channels.yaml
+LICENSE
