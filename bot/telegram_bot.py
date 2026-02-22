@@ -1558,13 +1558,13 @@ class BrainRotGuardBot:
         sched_start = self._effective_setting(day, "schedule_start")
         sched_end = self._effective_setting(day, "schedule_end")
 
-        # Schedule part
+        # Schedule part — use ASCII hyphen for consistent monospace width
         if sched_start or sched_end:
-            s = format_time_12h(sched_start).replace(" AM", "a").replace(" PM", "p").replace(":00", "") if sched_start else "\u2013"
-            e = format_time_12h(sched_end).replace(" AM", "a").replace(" PM", "p").replace(":00", "") if sched_end else "\u2013"
-            sched = f"{s}\u2013{e}"
+            s = format_time_12h(sched_start).replace(" AM", "a").replace(" PM", "p").replace(":00", "") if sched_start else "-"
+            e = format_time_12h(sched_end).replace(" AM", "a").replace(" PM", "p").replace(":00", "") if sched_end else "-"
+            sched = f"{s}-{e}"
         else:
-            sched = "all day"
+            sched = "open"
 
         # Limits part
         edu_str = self._effective_setting(day, "edu_limit_minutes")
@@ -1577,21 +1577,19 @@ class BrainRotGuardBot:
         if edu > 0 or fun > 0:
             parts = []
             if edu > 0:
-                parts.append(f"edu:{edu}")
+                parts.append(f"e{edu}")
             if fun > 0:
-                parts.append(f"fun:{fun}")
-            total = edu + fun
-            joined = " ".join(parts)
-            limits = f"{joined}  ({total}m)"
+                parts.append(f"f{fun}")
+            limits = "/".join(parts) + "m"
         elif flat > 0:
             limits = f"{flat}m"
         else:
-            limits = "\u2013"
+            limits = "-"
 
-        marker = "  \u25c0" if is_today else ""
+        marker = " \u25c0" if is_today else ""
         has_override = bool(self._get_day_overrides(day))
-        override_mark = "\u2022" if has_override else " "
-        return f"`{override_mark}{label}  {sched:<12s} {limits}`{marker}"
+        override_mark = "*" if has_override else " "
+        return f"`{override_mark}{label} {sched}|{limits}`{marker}"
 
     async def _time_show_status(self, update: Update) -> None:
         """Show current time settings with today's status and 7-day view."""
