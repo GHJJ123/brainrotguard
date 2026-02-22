@@ -21,7 +21,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
-from utils import get_today_str, get_day_utc_bounds, is_within_schedule, format_time_12h
+from utils import get_today_str, get_day_utc_bounds, get_weekday, is_within_schedule, format_time_12h
 from youtube.extractor import extract_video_id, extract_metadata, search, fetch_channel_videos, format_duration, configure_timeout
 
 VIDEO_ID_RE = re.compile(r'^[a-zA-Z0-9_-]{11}$')
@@ -449,11 +449,26 @@ async def api_catalog(
     })
 
 
+def _resolve_setting(base_key: str, default: str = "") -> str:
+    """Resolve a setting with per-day override support.
+
+    Checks {day}_{base_key} first; falls back to {base_key}.
+    """
+    if not video_store:
+        return default
+    tz = wl_config.timezone if wl_config else ""
+    day = get_weekday(tz)
+    day_val = video_store.get_setting(f"{day}_{base_key}", "")
+    if day_val:
+        return day_val
+    return video_store.get_setting(base_key, default)
+
+
 def _get_time_limit_info() -> dict | None:
     """Get time limit info. Returns None if limits disabled."""
     if not video_store:
         return None
-    limit_str = video_store.get_setting("daily_limit_minutes", "")
+    limit_str = _resolve_setting("daily_limit_minutes", "")
     if not limit_str and wl_config:
         limit_min = wl_config.daily_limit_minutes
     else:
@@ -496,8 +511,8 @@ def _get_category_time_info() -> dict | None:
     """Get per-category time budget info. Returns None if no category limits configured."""
     if not video_store:
         return None
-    edu_limit_str = video_store.get_setting("edu_limit_minutes", "")
-    fun_limit_str = video_store.get_setting("fun_limit_minutes", "")
+    edu_limit_str = _resolve_setting("edu_limit_minutes", "")
+    fun_limit_str = _resolve_setting("fun_limit_minutes", "")
     edu_limit = int(edu_limit_str) if edu_limit_str else 0
     fun_limit = int(fun_limit_str) if fun_limit_str else 0
     # If neither category limit is set, fall back to legacy global limit
@@ -540,8 +555,8 @@ def _get_schedule_info() -> dict | None:
     """Get schedule window info. Returns None if no schedule configured."""
     if not video_store:
         return None
-    start = video_store.get_setting("schedule_start", "")
-    end = video_store.get_setting("schedule_end", "")
+    start = _resolve_setting("schedule_start", "")
+    end = _resolve_setting("schedule_end", "")
     if not start and not end:
         return None
     tz = wl_config.timezone if wl_config else ""

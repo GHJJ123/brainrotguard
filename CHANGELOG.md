@@ -1,4 +1,20 @@
 # Changelog
+## v1.16.0 - 2026-02-22
+
+**Added**
+- Per-day schedule overrides: set different time windows and limits for each day of the week (e.g. `/time mon start 8am`, `/time sat edu 120`)
+- Day override copy command: `/time mon copy weekdays` copies Monday's settings to Tue-Fri
+- `/time setup` guided wizard with inline buttons for choosing between simple (one daily cap) and category (edu + fun) limit modes
+- Mode switch warnings: switching from category to simple (or vice versa) prompts with inline confirmation buttons before changing
+- `/time` now shows today's status with progress bars plus a 7-day weekly overview
+- `/time <day>` shows effective settings for that specific day
+
+**Behavioral**
+- Setting a flat limit now auto-clears category limits (and vice versa) to prevent conflicts
+- Per-day override "off" clears the override (falls back to default), unlike default "off" which disables the limit
+- Web enforcement (`_get_time_limit_info`, `_get_category_time_info`, `_get_schedule_info`) now resolves per-day overrides automatically
+- `/watch` command uses per-day resolved limits for progress display
+
 ## v1.15.0 - 2026-02-21
 
 **Added**

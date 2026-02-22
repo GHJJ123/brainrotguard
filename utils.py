@@ -6,6 +6,24 @@ from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
+DAY_NAMES = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+DAY_GROUPS = {"weekdays": DAY_NAMES[:5], "weekend": DAY_NAMES[5:]}
+
+
+def get_weekday(tz_name: str = "") -> str:
+    """Get today's short day name (mon-sun) in the given timezone.
+
+    Falls back to UTC if tz_name is empty or invalid.
+    """
+    if tz_name:
+        try:
+            from zoneinfo import ZoneInfo
+            tz = ZoneInfo(tz_name)
+            return DAY_NAMES[datetime.now(tz).weekday()]
+        except Exception:
+            logger.warning("Invalid timezone %r, falling back to UTC", tz_name)
+    return DAY_NAMES[datetime.now(timezone.utc).weekday()]
+
 # Matches: 800, 0800, 8:00, 800am, 8:00am, 800pm, 8:00PM, 2000, 20:00
 _TIME_RE = re.compile(
     r'^(\d{1,2}):?(\d{2})\s*(am|pm)?$',
