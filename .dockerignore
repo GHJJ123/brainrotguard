@@ -5,6 +5,7 @@
 .env.example
 *.md
 !requirements.txt
+!CHANGELOG.md
 docs/
 __pycache__
 *.pyc
