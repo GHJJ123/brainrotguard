@@ -21,7 +21,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
-from utils import get_today_str, get_day_utc_bounds, get_weekday, is_within_schedule, format_time_12h
+from utils import get_today_str, get_day_utc_bounds, get_weekday, is_within_schedule, format_time_12h, DAY_NAMES
 from youtube.extractor import extract_video_id, extract_metadata, search, fetch_channel_videos, fetch_channel_shorts, format_duration, configure_timeout
 
 VIDEO_ID_RE = re.compile(r'^[a-zA-Z0-9_-]{11}$')
@@ -656,6 +656,19 @@ def _get_schedule_info() -> dict | None:
     }
 
 
+def _get_next_start_time() -> str | None:
+    """Get the next day's schedule start time formatted for display."""
+    if not video_store:
+        return None
+    tz_name = wl_config.timezone if wl_config else ""
+    today = get_weekday(tz_name)
+    tomorrow = DAY_NAMES[(DAY_NAMES.index(today) + 1) % 7]
+    next_start = video_store.get_setting(f"{tomorrow}_schedule_start", "")
+    if not next_start:
+        next_start = video_store.get_setting("schedule_start", "")
+    return format_time_12h(next_start) if next_start else None
+
+
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
     """PIN entry page."""
@@ -704,8 +717,8 @@ async def help_page(request: Request):
 
 
 _ERROR_MESSAGES = {
-    "invalid_video": "That doesn't look like a valid YouTube link.",
-    "fetch_failed": "Couldn't load video info — it may be unavailable or region-restricted.",
+    "invalid_video": "That doesn't look like a valid YouTube link or video ID.",
+    "fetch_failed": "Couldn't load video info — it may be private, age-restricted, or region-locked.",
 }
 
 
@@ -994,6 +1007,7 @@ async def watch_video(request: Request, video_id: str):
                 "time_info": cat_budget,
                 "category": cat_label,
                 "available_categories": available,
+                "next_start": _get_next_start_time(),
             })
         if cat_budget.get("limit_min", 0) > 0:
             time_info = cat_budget
@@ -1003,6 +1017,7 @@ async def watch_video(request: Request, video_id: str):
             return templates.TemplateResponse("timesup.html", {
                 "request": request,
                 "time_info": time_info,
+                "next_start": _get_next_start_time(),
             })
 
     # Check schedule window before allowing playback
