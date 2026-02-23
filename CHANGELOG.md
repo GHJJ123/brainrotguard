@@ -3,7 +3,12 @@
 
 **Added**
 - `/help` web page at `http://<host>:8080/help` — standalone dark-mode command reference for all Telegram bot commands (no PIN required)
-- `/help` bot command now includes a "Full command reference" link to the web help page (resolves hostname automatically on LAN)
+- `/help` bot command includes a clickable "Full command reference" link when `BRG_BASE_URL` is set
+- `BRG_BASE_URL` env var for LAN links in Telegram messages; `deploy.sh` auto-detects host IP
+
+**Fixed**
+- Callback handler: added video_id regex validation in catch-all branch (defense-in-depth)
+- `_cb_switch_confirm`: guarded `int()` calls with `.isdigit()` checks to prevent unhandled ValueError
 
 ## v1.17.0 - 2026-02-22
 

@@ -10,6 +10,7 @@ services:
       - BRG_BOT_TOKEN=${BRG_BOT_TOKEN}
       - BRG_ADMIN_CHAT_ID=${BRG_ADMIN_CHAT_ID}
       - BRG_PIN=${BRG_PIN:-}
+      - BRG_BASE_URL=${BRG_BASE_URL:-}
     volumes:
       - ./config.yaml:/app/config.yaml:ro
       - brg_db:/app/db

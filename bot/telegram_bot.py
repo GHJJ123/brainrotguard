@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import re
 from io import BytesIO
 from pathlib import Path
 from typing import Optional
@@ -414,6 +415,9 @@ class BrainRotGuardBot:
             return
 
         action, video_id = parts
+        if not re.fullmatch(r'[a-zA-Z0-9_-]{11}', video_id):
+            await query.answer("Invalid callback.")
+            return
         video = self.video_store.get_video(video_id)
         if not video:
             await query.answer("Video not found.")
@@ -2337,14 +2341,14 @@ class BrainRotGuardBot:
             return
 
         parts = choice.split(":")
-        if parts[0] == "simple" and len(parts) == 2:
+        if parts[0] == "simple" and len(parts) == 2 and parts[1].isdigit():
             # Switch to simple mode with given value
             minutes = int(parts[1])
             self.video_store.set_setting("daily_limit_minutes", str(minutes))
             self._auto_clear_mode("simple")
             text = _md(f"\u2713 Switched to simple limit: {minutes} min/day")
             await _edit_msg(query, text)
-        elif parts[0] == "category" and len(parts) == 3:
+        elif parts[0] == "category" and len(parts) == 3 and parts[2].isdigit():
             # Switch to category: set the requested category, clear flat
             category = parts[1]
             minutes = int(parts[2])

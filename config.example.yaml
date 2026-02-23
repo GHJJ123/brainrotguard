@@ -4,7 +4,7 @@ web:
   poll_interval: 3000  # ms between status checks on pending page
   pin: ${BRG_PIN}  # optional, empty = no auth
   # session_secret: auto-generated if not set
-  # base_url: http://10.0.0.1:8080  # LAN IP — used for clickable links in Telegram (hostnames without TLDs won't link)
+  # base_url: http://10.0.0.1:8080  # LAN IP for Telegram links (auto-detected by deploy.sh, or set BRG_BASE_URL env var)
 
 telegram:
   bot_token: ${BRG_BOT_TOKEN}

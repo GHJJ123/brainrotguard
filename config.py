@@ -41,7 +41,11 @@ class WebConfig:
     poll_interval: int = 3000  # ms between status checks on pending page
     pin: str = ""  # empty = no auth required
     session_secret: str = ""  # auto-generated if not set
-    base_url: str = ""  # e.g. http://kid-hub:8080 — used for links in Telegram messages
+    base_url: str = ""  # e.g. http://10.0.0.1:8080 — used for links in Telegram messages
+
+    def __post_init__(self):
+        if not self.base_url:
+            self.base_url = os.environ.get("BRG_BASE_URL", "")
 
 
 @dataclass

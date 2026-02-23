@@ -47,6 +47,12 @@ cd $REMOTE_PATH
 tar -xf /tmp/brainrotguard.tar
 rm /tmp/brainrotguard.tar
 [ ! -f config.yaml ] && cp config.example.yaml config.yaml && echo 'Created config.yaml - edit with your tokens!'
+# Auto-detect host LAN IP for base_url (container can't see it)
+HOST_IP=\$(hostname -I | awk '{print \$1}')
+PORT=\$(grep -oP '"\K[0-9]+(?=:)' docker-compose.yml | head -1)
+PORT=\${PORT:-8080}
+grep -q '^BRG_BASE_URL=' .env 2>/dev/null && sed -i "s|^BRG_BASE_URL=.*|BRG_BASE_URL=http://\${HOST_IP}:\${PORT}|" .env || echo "BRG_BASE_URL=http://\${HOST_IP}:\${PORT}" >> .env
+echo "Auto-detected base_url: http://\${HOST_IP}:\${PORT}"
 docker compose down 2>/dev/null || true
 docker compose build
 docker compose up -d

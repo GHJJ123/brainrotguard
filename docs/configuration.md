@@ -2,11 +2,12 @@
 
 All configuration lives in two files:
 
-**`.env`** — your secrets (never share this file):
+**`.env`** — your secrets and server settings (never share this file):
 ```
 BRG_BOT_TOKEN=123456789:ABCdefGhIjKlMnOpQrStUvWxYz
 BRG_ADMIN_CHAT_ID=987654321
 BRG_PIN=1234
+BRG_BASE_URL=http://192.168.1.100:8080
 ```
 
 **`config.yaml`** — app behavior (references `.env` variables via `${VAR}` syntax):
@@ -60,4 +61,5 @@ If you skip `config.yaml` entirely, everything falls back to environment variabl
 | `BRG_PIN` | Web UI access PIN (empty = no auth) | — |
 | `BRG_POLL_INTERVAL` | Pending page poll interval (ms) | `3000` |
 | `BRG_YOUTUBE_MAX_RESULTS` | Max search results | `10` |
+| `BRG_BASE_URL` | LAN URL for Telegram links (e.g. `http://192.168.1.100:8080`) | — |
 | `BRG_DB_PATH` | SQLite database path | `db/videos.db` |
