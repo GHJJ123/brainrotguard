@@ -14,5 +14,4 @@ __pycache__
 .mypy_cache
 deploy.sh
 docker-compose*.yml
-starter-channels.yaml
 LICENSE

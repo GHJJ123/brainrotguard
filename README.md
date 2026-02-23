@@ -83,16 +83,25 @@ Now I curate his content and I can see the difference. He's not parroting gamer 
 - **Video library** — browse everything that's been approved before
 - **Category browsing** — filter by educational or entertainment content with one tap
 - **Channel browsing** — see latest videos from pre-approved channels without needing to request each one
+- **YouTube Shorts** — dedicated Shorts row with portrait thumbnails and a 9:16 player
+- **Thumbnail previews** — hover or scroll to cycle through multiple thumbnails before requesting
+- **View counts** — see how popular a video is before requesting
+- **Built-in help page** — accessible without PIN at `<host>:8080/help`
 - **Dark theme** — easy on the eyes, designed for tablets
 
 ### For Parents
 - **Telegram approval** — approve/deny from anywhere with one tap
 - **Channel allow/block lists** — trust a channel once, and new videos from it are auto-approved
+- **Starter channels** — curated list of ~15 kid-friendly channels (edu + fun) to import on first boot or anytime via `/channel starter`
 - **Edu/Fun categories** — label channels and videos as educational or entertainment, each with its own daily time limit
 - **Daily screen time limits** — set separate limits for educational and entertainment content, or a single global limit
 - **Scheduled hours** — define when watching is allowed (e.g., 8am–7pm, not during school)
+- **Per-day schedules** — different time windows and limits for each day of the week (e.g., relaxed weekends, tighter school days)
+- **Guided setup wizard** — `/time setup` walks through limit mode and schedule configuration with inline buttons
 - **Bonus time** — grant extra minutes for today only (`/time add 30`)
+- **Shorts control** — `/shorts on|off` to toggle YouTube Shorts visibility across the entire app
 - **Watch activity log** — see what was watched, for how long, grouped by category
+- **Update notifications** — automatic Telegram alert when a new version is available on GitHub
 - **Word filters** — block videos whose titles contain specific words
 - **Search history** — see everything your child has searched for
 - **PIN lock** — optional PIN gate so only your kid can access the web UI on the right device
@@ -305,16 +314,18 @@ To keep it running in the background, use `screen`, `tmux`, or set up a systemd 
 ## Project Structure
 
 ```
-main.py                # Orchestrator: runs FastAPI + Telegram bot together
-config.py              # Loads config from YAML with ${ENV_VAR} expansion
-version.py             # Version string
-web/app.py             # FastAPI web routes and API endpoints
-web/templates/         # HTML templates (Jinja2)
-web/static/            # CSS, logos, favicon
-bot/telegram_bot.py    # Telegram bot: notifications, commands, inline callbacks
-data/video_store.py    # SQLite database operations
-youtube/extractor.py   # yt-dlp wrapper: search + metadata extraction
-deploy.sh              # Deployment script for remote servers
+main.py                    # Orchestrator: runs FastAPI + Telegram bot together
+config.py                  # Loads config from YAML with ${ENV_VAR} expansion
+version.py                 # Version string
+utils.py                   # Shared utilities (time parsing, etc.)
+starter-channels.yaml      # Curated kid-friendly starter channels (edu + fun)
+web/app.py                 # FastAPI web routes and API endpoints
+web/templates/             # HTML templates (Jinja2)
+web/static/                # CSS, logos, favicon
+bot/telegram_bot.py        # Telegram bot: notifications, commands, inline callbacks
+data/video_store.py        # SQLite database operations
+youtube/extractor.py       # yt-dlp wrapper: search + metadata extraction
+deploy.sh                  # Deployment script for remote servers
 ```
 
 ## Support
