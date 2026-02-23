@@ -27,6 +27,9 @@ logger = logging.getLogger(__name__)
 
 MD2 = "MarkdownV2"
 
+_GITHUB_REPO = "GHJJ123/brainrotguard"
+_UPDATE_CHECK_INTERVAL = 43200  # 12 hours
+
 
 def _md(text: str) -> str:
     """Convert markdown to Telegram MarkdownV2 format."""
@@ -96,6 +99,7 @@ class BrainRotGuardBot:
         self._pending_wizard: dict[int, dict] = {}  # chat_id -> wizard state for custom input
         self.on_channel_change = None  # callback when channel lists change
         self.on_video_change = None  # callback when video status changes
+        self._update_check_task = None  # background version check loop
         # Load starter channels
         from data.starter_channels import load_starter_channels
         self._starter_channels = load_starter_channels(starter_channels_path)
@@ -187,14 +191,93 @@ class BrainRotGuardBot:
             except Exception as e:
                 logger.error(f"Failed to send first-run message: {e}")
 
+        self._update_check_task = asyncio.create_task(self._version_check_loop())
+
     async def stop(self) -> None:
         """Stop the bot."""
+        if self._update_check_task:
+            self._update_check_task.cancel()
         if self._app:
             logger.info("Stopping BrainRotGuard bot...")
             await self._app.updater.stop()
             await self._app.stop()
             await self._app.shutdown()
             logger.info("BrainRotGuard bot stopped")
+
+    async def _version_check_loop(self) -> None:
+        """Periodically check GitHub for new releases. Stops after notifying."""
+        await asyncio.sleep(60)  # initial delay
+        while True:
+            try:
+                if await self._check_for_updates():
+                    return  # notified — stop checking
+            except asyncio.CancelledError:
+                return
+            except Exception as e:
+                logger.debug(f"Version check failed: {e}")
+            await asyncio.sleep(_UPDATE_CHECK_INTERVAL)
+
+    async def _check_for_updates(self) -> bool:
+        """Fetch latest GitHub release and notify admin if newer. Returns True if notified."""
+        from version import __version__
+
+        # Already notified once — don't notify again
+        if self.video_store.get_setting("last_notified_version"):
+            return True
+
+        url = f"https://api.github.com/repos/{_GITHUB_REPO}/releases/latest"
+        timeout = aiohttp.ClientTimeout(total=10)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(url) as resp:
+                if resp.status != 200:
+                    return False
+                # Cap response size to prevent memory abuse
+                raw = await resp.read()
+                if len(raw) > 100_000:
+                    return False
+                import json as _json
+                data = _json.loads(raw)
+
+        tag = data.get("tag_name", "")
+        latest = tag.lstrip("v")
+        if not latest:
+            return False
+
+        def _ver(v: str) -> tuple:
+            return tuple(int(x) for x in v.split("."))
+
+        try:
+            if _ver(latest) <= _ver(__version__):
+                return False
+        except (ValueError, TypeError):
+            return False
+
+        body = data.get("body", "") or ""
+        if len(body) > 500:
+            body = body[:500] + "..."
+        html_url = data.get("html_url", "")
+        if not html_url or urlparse(html_url).netloc != "github.com":
+            return False
+
+        text = (
+            f"**BrainRotGuard v{latest} available** (you have v{__version__})\n\n"
+            f"{body}\n\n"
+            f"[View release]({html_url})"
+        )
+        try:
+            await self._app.bot.send_message(
+                chat_id=self.admin_chat_id,
+                text=_md(text),
+                parse_mode=MD2,
+                disable_web_page_preview=True,
+            )
+            logger.info(f"Notified admin about v{latest}")
+        except Exception as e:
+            logger.error(f"Failed to send update notification: {e}")
+            return False
+
+        self.video_store.set_setting("last_notified_version", latest)
+        return True
 
     async def notify_new_request(self, video: dict) -> None:
         """Send parent a notification about a new video request with Approve/Deny buttons.
