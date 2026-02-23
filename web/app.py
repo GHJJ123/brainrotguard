@@ -22,7 +22,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
 from utils import get_today_str, get_day_utc_bounds, get_weekday, is_within_schedule, format_time_12h
-from youtube.extractor import extract_video_id, extract_metadata, search, fetch_channel_videos, format_duration, configure_timeout
+from youtube.extractor import extract_video_id, extract_metadata, search, fetch_channel_videos, fetch_channel_shorts, format_duration, configure_timeout
 
 VIDEO_ID_RE = re.compile(r'^[a-zA-Z0-9_-]{11}$')
 
@@ -265,6 +265,17 @@ def format_views(count) -> str:
 templates.env.filters["format_views"] = format_views
 
 
+def _shorts_enabled() -> bool:
+    """Check if Shorts are enabled (DB override > config default)."""
+    if video_store:
+        db_val = video_store.get_setting("shorts_enabled", "")
+        if db_val:
+            return db_val.lower() == "true"
+    if youtube_config:
+        return youtube_config.shorts_enabled
+    return False
+
+
 # Heartbeat dedup: video_id -> monotonic timestamp of last heartbeat
 _last_heartbeat: dict[str, float] = {}
 _HEARTBEAT_MIN_INTERVAL = 10  # seconds (must be < client heartbeat interval)
@@ -278,13 +289,14 @@ _CHANNEL_CACHE_TTL = 1800  # default; overridden by youtube_config.channel_cache
 
 
 async def _refresh_channel_cache():
-    """Fetch latest videos for each allowlisted channel and update cache."""
+    """Fetch latest videos and Shorts for each allowlisted channel and update cache."""
     import asyncio
     if not video_store:
         return
     allowed = video_store.get_channels_with_ids("allowed")
     if not allowed:
         _channel_cache["channels"] = {}
+        _channel_cache["shorts"] = {}
         _channel_cache["updated_at"] = time.monotonic()
         return
     max_vids = youtube_config.channel_cache_results if youtube_config else 200
@@ -297,9 +309,27 @@ async def _refresh_channel_cache():
             channels[ch_name] = []
         else:
             channels[ch_name] = result
+
+    # Fetch Shorts from each channel's /shorts tab (skip when disabled)
+    if _shorts_enabled():
+        shorts_max = max(max_vids // 4, 20)
+        shorts_tasks = [fetch_channel_shorts(name, max_results=shorts_max, channel_id=cid) for name, cid, _handle, _cat in allowed]
+        shorts_results = await asyncio.gather(*shorts_tasks, return_exceptions=True)
+        shorts = {}
+        for (ch_name, _, _h, _c), result in zip(allowed, shorts_results):
+            if isinstance(result, Exception):
+                logger.debug("Channel shorts fetch failed for '%s': %s", ch_name, result)
+                shorts[ch_name] = []
+            else:
+                shorts[ch_name] = result
+    else:
+        shorts = {}
+
     _channel_cache["channels"] = channels
+    _channel_cache["shorts"] = shorts
     _channel_cache["updated_at"] = time.monotonic()
-    logger.info("Refreshed channel cache: %d channels", len(channels))
+    logger.info("Refreshed channel cache: %d channels, %d with shorts",
+                len(channels), sum(1 for v in shorts.values() if v))
 
 
 def invalidate_channel_cache():
@@ -346,6 +376,53 @@ def _invalidate_catalog_cache():
     _catalog_cache_time = 0.0
 
 
+def _build_shorts_catalog() -> list[dict]:
+    """Build Shorts catalog from channel cache + DB approved shorts."""
+    if not _shorts_enabled():
+        return []
+    denied_ids = video_store.get_denied_video_ids() if video_store else set()
+    seen_ids = set(denied_ids)
+    shorts = []
+
+    # Round-robin interleave Shorts across channels (same as main catalog)
+    shorts_channels = _channel_cache.get("shorts", {})
+    if shorts_channels:
+        chan_lists = [list(vids) for vids in shorts_channels.values() if vids]
+        indices = [0] * len(chan_lists)
+        while True:
+            added = False
+            for i, vids in enumerate(chan_lists):
+                if indices[i] < len(vids):
+                    v = vids[indices[i]]
+                    vid = v.get("video_id", "")
+                    indices[i] += 1
+                    if vid and vid not in seen_ids:
+                        seen_ids.add(vid)
+                        shorts.append(dict(v))
+                    added = True
+            if not added:
+                break
+
+    # DB approved shorts
+    if video_store:
+        for v in video_store.get_approved_shorts():
+            vid = v.get("video_id", "")
+            if vid and vid not in seen_ids:
+                seen_ids.add(vid)
+                shorts.append(dict(v))
+
+    # Attach category from channel settings
+    if video_store:
+        _chan_cats = {}
+        for ch_name, _cid, _h, cat in video_store.get_channels_with_ids("allowed"):
+            if cat:
+                _chan_cats[ch_name] = cat
+        for v in shorts:
+            v["category"] = _chan_cats.get(v.get("channel_name", ""), v.get("category") or "fun")
+
+    return shorts
+
+
 def _build_catalog(channel_filter: str = "") -> list[dict]:
     """Build unified catalog: interleaved channel-cache videos + DB approved videos."""
     global _catalog_cache, _catalog_cache_time
@@ -360,13 +437,13 @@ def _build_catalog(channel_filter: str = "") -> list[dict]:
         filtered = []
         for v in channels.get(channel_filter, []):
             vid = v.get("video_id", "")
-            if vid and vid not in seen_ids:
+            if vid and vid not in seen_ids and not v.get("is_short"):
                 seen_ids.add(vid)
                 filtered.append(dict(v))
         if video_store:
             for v in video_store.get_by_status("approved", channel_name=channel_filter):
                 vid = v.get("video_id", "")
-                if vid and vid not in seen_ids:
+                if vid and vid not in seen_ids and not v.get("is_short"):
                     seen_ids.add(vid)
                     filtered.append(v)
         filtered.sort(key=lambda v: v.get("timestamp") or 0, reverse=True)
@@ -398,10 +475,16 @@ def _build_catalog(channel_filter: str = "") -> list[dict]:
                 if indices[i] < len(vids):
                     v = vids[indices[i]]
                     vid = v.get("video_id", "")
+                    indices[i] += 1
+                    # Always skip Shorts from main grid — they either
+                    # appear in the dedicated Shorts row (enabled) or
+                    # are hidden everywhere (disabled)
+                    if v.get("is_short"):
+                        added = True
+                        continue
                     if vid and vid not in seen_ids:
                         seen_ids.add(vid)
                         catalog.append(dict(v))
-                    indices[i] += 1
                     added = True
             if not added:
                 break
@@ -410,7 +493,7 @@ def _build_catalog(channel_filter: str = "") -> list[dict]:
     if video_store:
         for v in video_store.get_by_status("approved"):
             vid = v.get("video_id", "")
-            if vid and vid not in seen_ids:
+            if vid and vid not in seen_ids and not v.get("is_short"):
                 seen_ids.add(vid)
                 catalog.append(v)
 
@@ -436,9 +519,13 @@ async def api_catalog(
     limit: int = Query(24, ge=1, le=100),
     channel: str = Query("", max_length=200),
     category: str = Query("", max_length=10),
+    shorts: bool = Query(False),
 ):
     """Paginated catalog of all watchable videos."""
-    full = _build_catalog(channel_filter=channel)
+    if shorts:
+        full = _build_shorts_catalog()
+    else:
+        full = _build_catalog(channel_filter=channel)
     if category:
         full = [v for v in full if v.get("category", "fun") == category]
     page = full[offset:offset + limit]
@@ -628,6 +715,7 @@ async def index(request: Request, error: str = Query("", max_length=50)):
     page_size = 24
     full_catalog = _build_catalog()
     catalog = full_catalog[:page_size]
+    shorts_catalog = _build_shorts_catalog()[:20]
     time_info = _get_time_limit_info()
     schedule_info = _get_schedule_info()
     cat_info = _get_category_time_info()
@@ -644,6 +732,8 @@ async def index(request: Request, error: str = Query("", max_length=50)):
         "catalog": catalog,
         "has_more": len(full_catalog) > page_size,
         "total_catalog": len(full_catalog),
+        "shorts_catalog": shorts_catalog,
+        "shorts_enabled": _shorts_enabled(),
         "time_info": time_info,
         "schedule_info": schedule_info,
         "cat_info": cat_info,
@@ -730,6 +820,10 @@ async def search_videos(request: Request, q: str = Query("", max_length=200)):
             if not any(p.search(r.get('title', '')) for p in word_patterns)
         ]
 
+    # Hide Shorts from search when disabled
+    if not _shorts_enabled():
+        results = [r for r in results if not r.get('is_short')]
+
     # Log search query
     video_store.record_search(q, len(results))
 
@@ -774,6 +868,7 @@ async def request_video(
 
     channel_name = metadata['channel_name']
     channel_id = metadata.get('channel_id')
+    is_short = metadata.get('is_short', False)
 
     # Check if channel is blocked → auto-deny
     if video_store.is_channel_blocked(channel_name):
@@ -784,6 +879,7 @@ async def request_video(
             thumbnail_url=metadata.get('thumbnail_url'),
             duration=metadata.get('duration'),
             channel_id=channel_id,
+            is_short=is_short,
         )
         video_store.update_status(video_id, "denied")
         _invalidate_catalog_cache()
@@ -801,6 +897,7 @@ async def request_video(
             thumbnail_url=metadata.get('thumbnail_url'),
             duration=metadata.get('duration'),
             channel_id=channel_id,
+            is_short=is_short,
         )
         video_store.update_status(video_id, "approved")
         _invalidate_catalog_cache()
@@ -813,6 +910,7 @@ async def request_video(
         thumbnail_url=metadata.get('thumbnail_url'),
         duration=metadata.get('duration'),
         channel_id=channel_id,
+        is_short=is_short,
     )
 
     if notify_callback:
@@ -868,6 +966,7 @@ async def watch_video(request: Request, video_id: str):
             thumbnail_url=metadata.get('thumbnail_url'),
             duration=metadata.get('duration'),
             channel_id=metadata.get('channel_id'),
+            is_short=metadata.get('is_short', False),
         )
         video_store.update_status(video_id, "approved")
         _invalidate_catalog_cache()
@@ -927,6 +1026,7 @@ async def watch_video(request: Request, video_id: str):
         "schedule_info": schedule_info,
         "video_cat": video_cat,
         "cat_label": cat_label,
+        "is_short": bool(video.get("is_short")),
     })
 
 

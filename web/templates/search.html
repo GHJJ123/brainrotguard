@@ -18,6 +18,7 @@
             <div class="thumbnail-wrap result-thumb-wrap">
                 <img src="{{ result.thumbnail_url }}" alt="{{ result.title }}" class="result-thumbnail" loading="lazy">
                 <span class="duration-badge">{{ format_duration(result.duration) }}</span>
+                {% if result.is_short %}<span class="shorts-badge">Short</span>{% endif %}
             </div>
             <div class="result-info">
                 <h3 class="result-title">{{ result.title }}</h3>

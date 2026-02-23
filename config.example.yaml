@@ -15,6 +15,7 @@ youtube:
   channel_cache_results: 200  # max videos per allowlisted channel in cache
   channel_cache_ttl: 1800     # seconds between channel cache refreshes (default 30min)
   ydl_timeout: 30             # seconds — max wall-clock time per yt-dlp operation
+  shorts_enabled: false       # show Shorts in dedicated row (toggle via /shorts command)
 
 database:
   path: db/videos.db

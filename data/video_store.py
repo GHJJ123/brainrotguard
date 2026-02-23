@@ -86,6 +86,7 @@ class VideoStore:
         self._add_column_if_missing("videos", "channel_id", "TEXT")
         self._add_column_if_missing("channels", "category", "TEXT")
         self._add_column_if_missing("videos", "category", "TEXT")
+        self._add_column_if_missing("videos", "is_short", "INTEGER DEFAULT 0")
         self.conn.execute("""
             CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
@@ -120,7 +121,7 @@ class VideoStore:
         self.conn.commit()
 
     _ALLOWED_TABLES = {"channels", "videos", "watch_log", "settings", "search_log", "word_filters"}
-    _ALLOWED_COLUMNS = {"channel_id", "handle", "category"}
+    _ALLOWED_COLUMNS = {"channel_id", "handle", "category", "is_short"}
 
     def _add_column_if_missing(self, table: str, column: str, col_type: str) -> None:
         """Add a column to a table if it doesn't already exist (migration helper)."""
@@ -140,6 +141,7 @@ class VideoStore:
         thumbnail_url: Optional[str] = None,
         duration: Optional[int] = None,
         channel_id: Optional[str] = None,
+        is_short: bool = False,
     ) -> dict:
         """
         Add a new video request. If already exists, return existing.
@@ -150,10 +152,10 @@ class VideoStore:
             self.conn.execute(
                 """
                 INSERT OR IGNORE INTO videos
-                (video_id, title, channel_name, thumbnail_url, duration, channel_id)
-                VALUES (?, ?, ?, ?, ?, ?)
+                (video_id, title, channel_name, thumbnail_url, duration, channel_id, is_short)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
-                (video_id, title, channel_name, thumbnail_url, duration, channel_id)
+                (video_id, title, channel_name, thumbnail_url, duration, channel_id, int(is_short))
             )
             self.conn.commit()
             return self._get_video_unlocked(video_id)
@@ -230,6 +232,16 @@ class VideoStore:
                 (page_size, page * page_size),
             )
             return [dict(row) for row in cursor.fetchall()], total
+
+    def get_approved_shorts(self, limit: int = 50) -> list[dict]:
+        """Get approved Shorts (is_short=1), newest first."""
+        with self._lock:
+            cursor = self.conn.execute(
+                "SELECT * FROM videos WHERE status = 'approved' AND is_short = 1 "
+                "ORDER BY requested_at DESC LIMIT ?",
+                (limit,),
+            )
+            return [dict(row) for row in cursor.fetchall()]
 
     def update_status(self, video_id: str, status: str) -> bool:
         """Update video status and set decided_at timestamp. Returns True if updated."""

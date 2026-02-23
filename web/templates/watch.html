@@ -15,7 +15,7 @@
 </div>
 {% endif %}
 
-<div class="watch-container">
+<div class="watch-container{% if is_short %} watch-container-short{% endif %}">
     <div class="video-player">
         <div class="video-wrapper">
             <div id="ytplayer"></div>
@@ -27,7 +27,7 @@
         <p class="watch-channel">{{ video.channel_name }}</p>
         {% if time_info %}
         <p class="time-remaining" id="time-remaining">
-            {{ cat_label }} time: <span id="time-counter">{{ time_info.remaining_min | int }}</span> min
+            {{ cat_label }} time left: <span id="time-counter">{{ time_info.remaining_min | int }} min</span>
         </p>
         {% endif %}
         <a href="/" class="back-link">Back to Library</a>

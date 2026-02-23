@@ -10,7 +10,7 @@
     {% if available_categories %}
     <p class="timesup-subtext">You can still watch:</p>
     {% for cat in available_categories %}
-    <a href="/?category={{ cat.name }}" class="btn-primary" style="display:inline-block;margin:8px 4px;text-decoration:none;">
+    <a href="/?category={{ cat.name }}" class="back-link">
         {{ cat.label }}{% if cat.remaining_min > 0 %} ({{ cat.remaining_min | int }} min left){% endif %}
     </a>
     {% endfor %}

@@ -148,6 +148,7 @@ class BrainRotGuardBot:
         self._app.add_handler(CommandHandler("watch", self._cmd_watch))
         self._app.add_handler(CommandHandler("time", self._cmd_timelimit))
         self._app.add_handler(CommandHandler("changelog", self._cmd_changelog))
+        self._app.add_handler(CommandHandler("shorts", self._cmd_shorts))
         self._app.add_handler(MessageHandler(
             filters.Regex(r'^/revoke_[a-zA-Z0-9_]{11}$'), self._cmd_revoke,
         ))
@@ -198,10 +199,15 @@ class BrainRotGuardBot:
         title = video['title']
         channel_link = _channel_md_link(video['channel_name'], video.get('channel_id'))
         duration = format_duration(video.get('duration'))
-        yt_link = f"https://www.youtube.com/watch?v={video_id}"
+        is_short = video.get('is_short')
+        if is_short:
+            yt_link = f"https://www.youtube.com/shorts/{video_id}"
+        else:
+            yt_link = f"https://www.youtube.com/watch?v={video_id}"
 
+        short_label = " [SHORT]" if is_short else ""
         caption = _md(
-            f"**New Video Request**\n\n"
+            f"**New Video Request{short_label}**\n\n"
             f"**Title:** {title}\n"
             f"**Channel:** {channel_link}\n"
             f"**Duration:** {duration}\n"
@@ -608,10 +614,62 @@ class BrainRotGuardBot:
             "`/time add <min>` - Bonus for today\n"
             "`/time <day> [start|stop|edu|fun|limit|off]`\n"
             "`/time <day> copy <days|weekdays|weekend|all>`\n"
+            "`/shorts [on|off]` - Toggle Shorts row\n"
             "`/changelog` - Latest changes\n\n"
             f"{help_link}"
             "☕ [Buy me a coffee](https://ko-fi.com/coffee4jj)"
         ), parse_mode=MD2, disable_web_page_preview=True)
+
+    async def _cmd_shorts(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Toggle Shorts display on/off or show status."""
+        if not self._check_admin(update):
+            await update.message.reply_text("Unauthorized.")
+            return
+        args = context.args
+        if args and args[0].lower() in ("on", "off"):
+            enabled = args[0].lower() == "on"
+            self.video_store.set_setting("shorts_enabled", str(enabled).lower())
+            if self.on_channel_change:
+                self.on_channel_change()
+            if enabled:
+                await update.message.reply_text(_md(
+                    "**Shorts enabled**\n\n"
+                    "- Shorts row appears on the homepage below videos\n"
+                    "- Shorts from allowlisted channels are fetched on next cache refresh\n"
+                    "- Shorts still count toward category time budgets (edu/fun)\n"
+                    "- Shorts hidden from search results remain hidden"
+                ), parse_mode=MD2)
+            else:
+                await update.message.reply_text(_md(
+                    "**Shorts disabled**\n\n"
+                    "- Shorts row removed from homepage\n"
+                    "- Shorts hidden from catalog, search results, and channel filters\n"
+                    "- Existing approved Shorts stay in the database\n"
+                    "- Use `/shorts on` to re-enable anytime"
+                ), parse_mode=MD2)
+        else:
+            db_val = self.video_store.get_setting("shorts_enabled", "")
+            if db_val:
+                current = db_val.lower() == "true"
+            elif self.config and hasattr(self.config.youtube, 'shorts_enabled'):
+                current = self.config.youtube.shorts_enabled
+            else:
+                current = False
+            if current:
+                await update.message.reply_text(_md(
+                    "**Shorts: enabled**\n\n"
+                    "Shorts appear in a dedicated row on the homepage and are "
+                    "fetched from allowlisted channels. They count toward "
+                    "edu/fun time budgets like regular videos.\n\n"
+                    "`/shorts off` — hide Shorts everywhere"
+                ), parse_mode=MD2)
+            else:
+                await update.message.reply_text(_md(
+                    "**Shorts: disabled**\n\n"
+                    "Shorts are hidden from the homepage, catalog, and search results. "
+                    "No Shorts are fetched from channels.\n\n"
+                    "`/shorts on` — show Shorts in a dedicated row"
+                ), parse_mode=MD2)
 
     _PENDING_PAGE_SIZE = 5
 

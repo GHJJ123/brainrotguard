@@ -19,6 +19,14 @@ YOUTUBE_URL_PATTERN = re.compile(
 
 _VIDEO_ID_RE = re.compile(r'^[a-zA-Z0-9_-]{11}$')
 
+_SHORTS_PATH_RE = re.compile(r'/shorts/')
+
+
+def _is_short_url(url: Optional[str]) -> bool:
+    """Check if a YouTube URL indicates a Short (contains /shorts/ in path)."""
+    return bool(url and _SHORTS_PATH_RE.search(url))
+
+
 def _safe_thumbnail(url: Optional[str], video_id: str) -> str:
     """Return the thumbnail URL if it's from an allowlisted host, else use ytimg fallback."""
     if url:
@@ -80,6 +88,7 @@ async def extract_metadata(video_id: str) -> Optional[dict]:
                     'channel_id': info.get('channel_id'),
                     'thumbnail_url': _safe_thumbnail(info.get('thumbnail'), video_id),
                     'duration': info.get('duration'),
+                    'is_short': _is_short_url(info.get('webpage_url')),
                 }
         except Exception as e:
             logger.error(f"Failed to extract metadata for {video_id}: {e}")
@@ -115,6 +124,7 @@ async def search(query: str, max_results: int = 10) -> list[dict]:
                         'thumbnail_url': _safe_thumbnail(entry.get('thumbnail'), vid_id),
                         'duration': entry.get('duration'),
                         'view_count': entry.get('view_count'),
+                        'is_short': _is_short_url(entry.get('url')),
                     })
                 return videos
         except Exception as e:
@@ -234,6 +244,7 @@ def _fetch_from_channel_page(channel_id: str, channel_name: str, max_results: in
                     'duration': entry.get('duration'),
                     'timestamp': entry.get('timestamp'),
                     'view_count': entry.get('view_count'),
+                    'is_short': _is_short_url(entry.get('url')),
                 })
             return videos
     except Exception as e:
@@ -293,6 +304,55 @@ async def fetch_channel_videos(channel_name: str, max_results: int = 10, channel
         return await asyncio.wait_for(asyncio.to_thread(_fetch), timeout=_YDL_TIMEOUT * 2)
     except asyncio.TimeoutError:
         logger.error(f"Channel fetch timed out for '{channel_name}'")
+        return []
+
+
+def _fetch_from_channel_shorts(channel_id: str, channel_name: str, max_results: int) -> list[dict]:
+    """Fetch Shorts directly from a channel's /shorts tab."""
+    try:
+        opts = _ydl_opts()
+        opts['extract_flat'] = True
+        opts['playlistend'] = max_results
+        url = f"https://www.youtube.com/channel/{channel_id}/shorts"
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            results = ydl.extract_info(url, download=False)
+            if not results or 'entries' not in results:
+                return []
+            resolved_name = results.get('channel', results.get('uploader', channel_name))
+            videos = []
+            for entry in results['entries']:
+                if not entry:
+                    continue
+                vid_id = entry.get('id')
+                if not vid_id:
+                    continue
+                videos.append({
+                    'video_id': vid_id,
+                    'title': entry.get('title', 'Unknown'),
+                    'channel_name': resolved_name,
+                    'thumbnail_url': _safe_thumbnail(entry.get('thumbnail'), vid_id),
+                    'duration': entry.get('duration'),
+                    'timestamp': entry.get('timestamp'),
+                    'view_count': entry.get('view_count'),
+                    'is_short': True,
+                })
+            return videos
+    except Exception as e:
+        logger.debug(f"Channel shorts fetch failed for '{channel_id}': {e}")
+        return []
+
+
+async def fetch_channel_shorts(channel_name: str, max_results: int = 50, channel_id: Optional[str] = None) -> list[dict]:
+    """Fetch recent Shorts from a YouTube channel's /shorts tab."""
+    import asyncio
+    if not channel_id:
+        return []
+    def _fetch():
+        return _fetch_from_channel_shorts(channel_id, channel_name, max_results)
+    try:
+        return await asyncio.wait_for(asyncio.to_thread(_fetch), timeout=_YDL_TIMEOUT * 2)
+    except asyncio.TimeoutError:
+        logger.error(f"Channel shorts fetch timed out for '{channel_name}'")
         return []
 
 

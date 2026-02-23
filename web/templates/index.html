@@ -130,6 +130,32 @@
 </section>
 {% endif %}
 
+{% if shorts_catalog %}
+<section class="shorts-section">
+    <h2 class="section-title">Shorts</h2>
+    <div class="shorts-row">
+        {% for video in shorts_catalog %}
+        <a href="/watch/{{ video.video_id }}" class="shorts-card" data-channel="{{ video.channel_name }}" data-category="{{ video.category or 'fun' }}">
+            <div class="shorts-thumb-wrap">
+                <img src="{{ video.thumbnail_url }}" alt="{{ video.title }}" class="shorts-thumbnail" loading="lazy">
+                {% if video.duration %}
+                <span class="duration-badge">{{ format_duration(video.duration) }}</span>
+                {% endif %}
+                <span class="category-badge category-{{ video.category or 'fun' }}">{{ "Edu" if video.category == "edu" else "Fun" }}</span>
+            </div>
+            <div class="shorts-info">
+                <div class="shorts-title">{{ video.title }}</div>
+                <div class="shorts-channel">{{ video.channel_name }}</div>
+            </div>
+        </a>
+        {% endfor %}
+        <button class="shorts-card shorts-show-more" id="shorts-show-more">
+            <span class="shorts-more-label">Show<br>More</span>
+        </button>
+    </div>
+</section>
+{% endif %}
+
 <script>
 (function() {
     // Hero carousel: auto-advance with crossfade + Ken Burns
@@ -363,6 +389,7 @@
             }
 
             activeCatFilter = category;
+            filterShorts(category);
             activeFilter = '';  // clear channel filter
             // Also reset channel pills
             document.querySelectorAll('.channel-pill').forEach(function(p) { p.classList.remove('active'); });
@@ -387,9 +414,25 @@
         });
     });
 
+    function filterShorts(category) {
+        document.querySelectorAll('.shorts-card:not(.shorts-show-more)').forEach(function(card) {
+            if (!category || card.dataset.category === category) {
+                card.style.display = '';
+            } else {
+                card.style.display = 'none';
+            }
+        });
+        var section = document.querySelector('.shorts-section');
+        if (section) {
+            var visible = section.querySelectorAll('.shorts-card:not(.shorts-show-more):not([style*="display:none"])');
+            section.style.display = visible.length ? '' : 'none';
+        }
+    }
+
     function restoreAll() {
         activeFilter = '';
         activeCatFilter = '';
+        filterShorts('');
         catalogGrid.innerHTML = initialGridHTML;
         catalogOffset = initialOffset;
         if (showMoreWrap) showMoreWrap.style.display = initialHasMore ? '' : 'none';
@@ -428,6 +471,50 @@
                 .catch(function() {
                     showMoreBtn.disabled = false;
                     showMoreBtn.textContent = 'Show More';
+                });
+        });
+    }
+
+    // Shorts "Show More" button
+    var shortsBtn = document.getElementById('shorts-show-more');
+    if (shortsBtn) {
+        var shortsOffset = {{ shorts_catalog | length }};
+        var SHORTS_PAGE = 20;
+        shortsBtn.addEventListener('click', function() {
+            shortsBtn.querySelector('.shorts-more-label').textContent = '...';
+            fetch('/api/catalog?shorts=true&offset=' + shortsOffset + '&limit=' + SHORTS_PAGE)
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var row = shortsBtn.parentNode;
+                    data.videos.forEach(function(v) {
+                        var a = document.createElement('a');
+                        a.href = '/watch/' + encodeURIComponent(v.video_id);
+                        a.className = 'shorts-card';
+                        var cat = v.category || 'fun';
+                        var catLabel = cat === 'edu' ? 'Edu' : 'Fun';
+                        var dur = v.duration ? '<span class="duration-badge">' + escapeHtml(formatDuration(v.duration)) + '</span>' : '';
+                        // eslint-disable-next-line no-unsanitized/property -- values are escaped via escapeHtml()
+                        a.innerHTML =
+                            '<div class="shorts-thumb-wrap">' +
+                                '<img src="' + escapeHtml(v.thumbnail_url || '') + '" alt="' + escapeHtml(v.title || '') + '" class="shorts-thumbnail" loading="lazy">' +
+                                dur +
+                                '<span class="category-badge category-' + escapeHtml(cat) + '">' + catLabel + '</span>' +
+                            '</div>' +
+                            '<div class="shorts-info">' +
+                                '<div class="shorts-title">' + escapeHtml(v.title || '') + '</div>' +
+                                '<div class="shorts-channel">' + escapeHtml(v.channel_name || '') + '</div>' +
+                            '</div>';
+                        row.insertBefore(a, shortsBtn);
+                    });
+                    shortsOffset += data.videos.length;
+                    if (!data.has_more) {
+                        shortsBtn.remove();
+                    } else {
+                        shortsBtn.querySelector('.shorts-more-label').textContent = 'Show\nMore';
+                    }
+                })
+                .catch(function() {
+                    shortsBtn.querySelector('.shorts-more-label').textContent = 'Show\nMore';
                 });
         });
     }

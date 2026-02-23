@@ -1,4 +1,23 @@
 # Changelog
+## v1.19.0 - 2026-02-22
+
+**Added**
+- YouTube Shorts support: detect Shorts via `/shorts/` URL pattern in yt-dlp results
+- Dedicated Shorts row on homepage — horizontal scroll with portrait 9:16 thumbnail cards
+- Channel cache now fetches `/shorts` tab alongside `/videos` tab for allowlisted channels
+- Portrait 9:16 player on watch page for Shorts (centered, max-width 480px)
+- "Short" badge on search results and homepage Shorts cards
+- `/shorts [on|off]` Telegram command to toggle Shorts row visibility (persisted in DB)
+- `shorts_enabled` config key under `youtube:` (default: true)
+- `/api/catalog?shorts=true` endpoint for Shorts catalog
+- `[SHORT]` label in Telegram approval notifications with `youtube.com/shorts/` link
+- `is_short` column in videos table (auto-migrated, existing videos default to 0)
+- `get_approved_shorts()` DB method for querying approved Shorts
+
+**Behavioral**
+- Shorts never appear in the main video grid — they only appear in the dedicated Shorts row when enabled
+- When Shorts are disabled (`/shorts off`), Shorts are hidden everywhere: catalog, search results, and channel filters
+
 ## v1.18.0 - 2026-02-22
 
 **Added**
