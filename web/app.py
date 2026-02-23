@@ -648,6 +648,23 @@ def _get_schedule_info() -> dict | None:
         return None
     tz = wl_config.timezone if wl_config else ""
     allowed, unlock_time = is_within_schedule(start, end, tz)
+    if not allowed and end:
+        # Check if we're past today's end time → unlock is tomorrow's start
+        from datetime import datetime as _dt
+        if tz:
+            from zoneinfo import ZoneInfo
+            now = _dt.now(ZoneInfo(tz))
+        else:
+            from datetime import timezone as _tz
+            now = _dt.now(_tz.utc)
+        try:
+            eh, em = map(int, end.split(":"))
+            if now.hour * 60 + now.minute >= eh * 60 + em:
+                next_start = _get_next_start_time()
+                if next_start:
+                    unlock_time = f"tomorrow at {next_start}"
+        except (ValueError, AttributeError):
+            pass
     return {
         "allowed": allowed,
         "unlock_time": unlock_time,
