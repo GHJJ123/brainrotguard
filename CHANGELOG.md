@@ -1,4 +1,13 @@
 # Changelog
+## v1.19.1 - 2026-02-22
+
+**Improved**
+- Polished feedback messages across bot and web UI for clearer, more actionable communication
+- Bot: "Unauthorized" → "This bot is for the parent/admin only." via new `_require_admin()` helper
+- Bot: Empty states (pending, approved), revoke flow, channel resolution, category management, search filters, time limits, and setup wizard now include context and next steps
+- Web: Warmer child-facing copy on denied, outside-hours, time's-up, and pending pages
+- Web: More specific error messages for invalid video links and fetch failures
+
 ## v1.19.0 - 2026-02-22
 
 **Added**
