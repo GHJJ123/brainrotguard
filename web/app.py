@@ -745,7 +745,10 @@ async def index(request: Request, error: str = Query("", max_length=50)):
     page_size = 24
     full_catalog = _build_catalog()
     catalog = full_catalog[:page_size]
-    shorts_catalog = _build_shorts_catalog()[:20]
+    shorts_page = 9
+    full_shorts = _build_shorts_catalog()
+    shorts_catalog = full_shorts[:shorts_page]
+    has_more_shorts = len(full_shorts) > shorts_page
     time_info = _get_time_limit_info()
     schedule_info = _get_schedule_info()
     cat_info = _get_category_time_info()
@@ -763,6 +766,7 @@ async def index(request: Request, error: str = Query("", max_length=50)):
         "has_more": len(full_catalog) > page_size,
         "total_catalog": len(full_catalog),
         "shorts_catalog": shorts_catalog,
+        "has_more_shorts": has_more_shorts,
         "shorts_enabled": _shorts_enabled(),
         "time_info": time_info,
         "schedule_info": schedule_info,

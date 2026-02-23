@@ -149,9 +149,11 @@
             </div>
         </a>
         {% endfor %}
+        {% if has_more_shorts %}
         <button class="shorts-card shorts-show-more" id="shorts-show-more">
             <span class="shorts-more-label">Show<br>More</span>
         </button>
+        {% endif %}
     </div>
 </section>
 {% endif %}
