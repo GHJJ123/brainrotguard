@@ -1,4 +1,13 @@
 # Changelog
+## v1.20.1 - 2026-02-23
+
+**Fixed**
+- Include `starter-channels.yaml` in Docker image — `/channel starter` was showing "No starter channels configured" because the file was excluded by `.dockerignore`
+
+**Docs**
+- Refreshed README Features section to cover all features through v1.20 (Shorts, thumbnail previews, starter channels, per-day schedules, setup wizard, update notifications, help page)
+- Added `utils.py` and `starter-channels.yaml` to README Project Structure
+
 ## v1.20.0 - 2026-02-22
 
 **Added**
