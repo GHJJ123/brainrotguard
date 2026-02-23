@@ -1,4 +1,13 @@
 # Changelog
+## v1.20.0 - 2026-02-22
+
+**Added**
+- GitHub release check: background task checks for new releases every 12 hours and sends a one-time Telegram notification to the admin with release notes and upgrade link
+- Notification is sent once per installation — loop stops permanently after notifying
+
+**Fixed**
+- Outside-hours unlock time now shows tomorrow's actual start time instead of incorrect value
+
 ## v1.19.1 - 2026-02-22
 
 **Improved**
