@@ -45,7 +45,7 @@ header {
     align-items: center;
     gap: 16px;
     background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-base) 100%);
-    padding: 10px 24px;
+    padding: 10px max(24px, calc((100% - 1200px) / 2 + 24px));
     border-bottom: 1px solid var(--border-subtle);
     position: sticky;
     top: 0;
