@@ -424,18 +424,29 @@ def _build_shorts_catalog() -> list[dict]:
 
 
 def _build_requests_row(limit: int = 50) -> list[dict]:
-    """Build 'Your Requests' row from DB-approved non-Short videos."""
+    """Build 'Your Requests' row from DB-approved non-Short videos.
+
+    Excludes videos from currently-allowlisted channels (those are auto-approved
+    and already appear in the main Channel Videos grid).
+    """
     if not video_store:
         return []
     requests = video_store.get_recent_requests(limit=limit)
-    # Attach category from channel settings
+    # Build allowlist set + category map
+    allowed_channels = set()
     _chan_cats = {}
     for ch_name, _cid, _h, cat in video_store.get_channels_with_ids("allowed"):
+        allowed_channels.add(ch_name.lower())
         if cat:
             _chan_cats[ch_name] = cat
+    # Filter out videos from allowlisted channels
+    filtered = []
     for v in requests:
+        if v.get("channel_name", "").lower() in allowed_channels:
+            continue
         v["category"] = _chan_cats.get(v.get("channel_name", ""), v.get("category") or "fun")
-    return requests
+        filtered.append(v)
+    return filtered
 
 
 def _build_catalog(channel_filter: str = "") -> list[dict]:
