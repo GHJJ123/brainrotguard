@@ -2,13 +2,15 @@
 ## v1.21.0 - 2026-02-23
 
 **Added**
-- "Your Requests" horizontal scroll row on homepage — shows recently-approved videos the kid explicitly searched for, newest first (limited to 9 with "Show More" pagination)
-- `get_recent_requests()` DB method for querying approved non-Short videos ordered by decision time
-- `/api/catalog?requests=true` endpoint for paginated requests catalog
+- "Your Requests" grid section on homepage — shows recently-approved videos the kid explicitly searched for (excludes auto-approved channel videos), limited to 5 with "Show More" pagination
+- `/approved <search>` — fuzzy search approved videos by title or channel name; without args lists all approved videos as before
+- `/channel unallow` now deletes all DB videos from that channel (cleanup on removal)
 
 **Changed**
 - Renamed "Your Videos" → "Channel Videos" in the main grid section to distinguish passive channel feed from explicit requests
-- Category filter pills now show/hide cards in the requests row (channel pill filtering intentionally does not affect it)
+- Channel Videos initial load reduced from 24 to 12 (with Show More for pagination)
+- Category filter pills show/hide cards in both Your Requests and Channel Videos sections
+- Schedule banner phrasing: "Videos available tomorrow at 9:00 AM" (was doubling "at at")
 
 ## v1.20.1 - 2026-02-23
 
