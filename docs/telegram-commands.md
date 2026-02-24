@@ -29,14 +29,15 @@ Once BrainRotGuard is running, these commands are available in your Telegram cha
 | `/channel block @handle` | Auto-deny all videos from a channel |
 | `/channel unblock <name>` | Remove a channel from the blocklist |
 
-## Search & Filters
+## Filters & Search
 
 | Command | What It Does |
 |---------|-------------|
-| `/search` | List active word filters |
-| `/search filter add <word>` | Block searches containing a word |
-| `/search filter remove <word>` | Remove a search filter |
-| `/search history [days\|today\|all]` | See everything your child has searched for |
+| `/filter` | List active word filters |
+| `/filter add <word>` | Hide videos with this word in the title (everywhere: catalog, Shorts, requests, search) |
+| `/filter remove <word>` | Remove a word filter |
+| `/search` | Search history (last 7 days) |
+| `/search [days\|today\|all]` | See everything your child has searched for |
 
 ## Time Limits & Schedule
 

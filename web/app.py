@@ -372,6 +372,21 @@ async def _start_channel_cache():
     _channel_cache_task = asyncio.create_task(_channel_cache_loop())
 
 
+def _get_word_filter_patterns() -> list[re.Pattern]:
+    """Compile word filter patterns for title matching (word-boundary, case-insensitive)."""
+    if not video_store:
+        return []
+    words = video_store.get_word_filters_set()
+    if not words:
+        return []
+    return [re.compile(r'\b' + re.escape(w) + r'\b', re.IGNORECASE) for w in words]
+
+
+def _title_matches_filter(title: str, patterns: list[re.Pattern]) -> bool:
+    """Check if a video title matches any word filter pattern."""
+    return any(p.search(title) for p in patterns)
+
+
 # Cached full catalog (invalidated on channel cache refresh or video status change)
 _catalog_cache: list[dict] = []
 _catalog_cache_time: float = 0.0
@@ -434,6 +449,11 @@ def _build_shorts_catalog() -> list[dict]:
                 cat = _cat_by_name.get(v.get("channel_name", ""))
             v["category"] = cat or v.get("category") or "fun"
 
+    # Filter out titles matching word filters
+    wf = _get_word_filter_patterns()
+    if wf:
+        shorts = [v for v in shorts if not _title_matches_filter(v.get("title", ""), wf)]
+
     return shorts
 
 
@@ -476,6 +496,12 @@ def _build_requests_row(limit: int = 50) -> list[dict]:
             cat = _cat_by_name.get(v.get("channel_name", ""))
         v["category"] = cat or v.get("category") or "fun"
         filtered.append(v)
+
+    # Filter out titles matching word filters
+    wf = _get_word_filter_patterns()
+    if wf:
+        filtered = [v for v in filtered if not _title_matches_filter(v.get("title", ""), wf)]
+
     return filtered
 
 
@@ -528,6 +554,10 @@ def _build_catalog(channel_filter: str = "") -> list[dict]:
                 if not cat:
                     cat = _cat_by_name.get(v.get("channel_name", ""))
                 v["category"] = cat or v.get("category") or "fun"
+        # Filter out titles matching word filters
+        wf = _get_word_filter_patterns()
+        if wf:
+            filtered = [v for v in filtered if not _title_matches_filter(v.get("title", ""), wf)]
         return filtered
 
     # Return cached full catalog if fresh
@@ -585,6 +615,11 @@ def _build_catalog(channel_filter: str = "") -> list[dict]:
             if not cat:
                 cat = _cat_by_name.get(v.get("channel_name", ""))
             v["category"] = cat or v.get("category") or "fun"
+
+    # Filter out titles matching word filters BEFORE caching
+    wf = _get_word_filter_patterns()
+    if wf:
+        catalog = [v for v in catalog if not _title_matches_filter(v.get("title", ""), wf)]
 
     _catalog_cache = catalog
     _catalog_cache_time = time.monotonic()

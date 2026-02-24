@@ -187,6 +187,7 @@ class BrainRotGuardBot:
         self._app.add_handler(CommandHandler("logs", self._cmd_logs))
         self._app.add_handler(CommandHandler("channel", self._cmd_channel))
         self._app.add_handler(CommandHandler("search", self._cmd_search))
+        self._app.add_handler(CommandHandler("filter", self._cmd_filter))
         self._app.add_handler(CommandHandler("watch", self._cmd_watch))
         self._app.add_handler(CommandHandler("time", self._cmd_timelimit))
         self._app.add_handler(CommandHandler("changelog", self._cmd_changelog))
@@ -727,10 +728,10 @@ class BrainRotGuardBot:
             "`/channel allow @handle [edu|fun]`\n"
             "`/channel cat <name> edu|fun`\n"
             "`/channel unallow|block|unblock <name>`\n\n"
-            "**Search:**\n"
-            "`/search` - List word filters\n"
-            "`/search history [days|today|all]`\n"
-            "`/search filter add|remove <word>`\n\n"
+            "**Filters & Search:**\n"
+            "`/filter` - List word filters\n"
+            "`/filter add|remove <word>`\n"
+            "`/search [days|today|all]` - Search history\n\n"
             "`/time` - Show status & weekly view\n"
             "`/time setup` - Guided limit wizard\n"
             "`/time [min|off]` - Simple watch limit\n"
@@ -1543,22 +1544,10 @@ class BrainRotGuardBot:
     # --- /search subcommands ---
 
     async def _cmd_search(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Show search history. /search [days|today|all]."""
         if not self._check_admin(update):
             return
-        if not context.args:
-            await self._search_filter_list(update)
-            return
-        sub = context.args[0].lower()
-        rest = context.args[1:]
-
-        if sub == "history":
-            await self._search_history(update, rest)
-        elif sub == "filter":
-            await self._search_filter(update, rest)
-        else:
-            await update.message.reply_text(
-                "Usage: /search history|filter"
-            )
+        await self._search_history(update, context.args or [])
 
     _SEARCH_PAGE_SIZE = 20
 
@@ -1568,6 +1557,8 @@ class BrainRotGuardBot:
             arg = args[0].lower()
             if arg == "today":
                 days = 1
+            elif arg == "all":
+                days = 365
             elif arg.isdigit():
                 days = min(int(arg), 365)
         searches = self.video_store.get_recent_searches(days)
@@ -1615,37 +1606,48 @@ class BrainRotGuardBot:
         text, keyboard = self._render_search_page(searches, days, page)
         await _edit_msg(query, text, keyboard, disable_preview=True)
 
-    async def _search_filter(self, update: Update, args: list[str]) -> None:
+    async def _cmd_filter(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Manage word filters. /filter [add|remove <word>]."""
+        if not await self._require_admin(update):
+            return
+        args = context.args or []
         if not args:
-            await self._search_filter_list(update)
+            await self._filter_list(update)
             return
         action = args[0].lower()
         if action == "list":
-            await self._search_filter_list(update)
+            await self._filter_list(update)
             return
         if len(args) < 2:
-            await update.message.reply_text("Usage: /search filter add|remove <word>")
+            await update.message.reply_text("Usage: /filter add|remove <word>")
             return
         word = " ".join(args[1:])
         if action == "add":
             if self.video_store.add_word_filter(word):
-                await update.message.reply_text(f"Filter added: \"{word}\"\nSearches matching this word will return no results.")
+                if self.on_channel_change:
+                    self.on_channel_change()
+                await update.message.reply_text(
+                    f"Filter added: \"{word}\"\n"
+                    "Videos with this word in the title are hidden everywhere."
+                )
             else:
                 await update.message.reply_text(f"Already filtered: \"{word}\"")
         elif action in ("remove", "rm", "del"):
             if self.video_store.remove_word_filter(word):
+                if self.on_channel_change:
+                    self.on_channel_change()
                 await update.message.reply_text(f"Filter removed: \"{word}\"")
             else:
                 await update.message.reply_text(f"\"{word}\" isn't in the filter list.")
         else:
-            await update.message.reply_text("Usage: /search filter add|remove <word>")
+            await update.message.reply_text("Usage: /filter add|remove <word>")
 
-    async def _search_filter_list(self, update: Update) -> None:
+    async def _filter_list(self, update: Update) -> None:
         words = self.video_store.get_word_filters()
         if not words:
-            await update.message.reply_text("No search filters set. All searches are unrestricted.")
+            await update.message.reply_text("No word filters set. Use /filter add <word> to hide videos by title.")
             return
-        lines = ["**Filtered Words:**\n"]
+        lines = ["**Word Filters** (hidden everywhere):\n"]
         for w in words:
             lines.append(f"- `{w}`")
         await update.message.reply_text(_md("\n".join(lines)), parse_mode=MD2)
