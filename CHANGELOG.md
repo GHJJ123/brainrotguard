@@ -1,4 +1,14 @@
 # Changelog
+## v1.21.2 - 2026-02-24
+
+**Fixed**
+- Channel matching throughout backend now uses `channel_id` (YouTube's stable unique identifier) instead of `channel_name` (mutable display name) — fixes "Your Requests" showing videos from allowlisted channels when YouTube changes the channel's display name
+- SQL JOINs for watch-time-by-category and watch breakdown use `channel_id`
+- `is_channel_allowed` / `is_channel_blocked` prefer `channel_id` lookup with name fallback
+- Bulk operations (`set_channel_videos_category`, `delete_channel_videos`) match on `channel_id` with name fallback for legacy rows
+- Channel cache and catalog builder keyed by `channel_id`
+- Backfill loop periodically resolves missing `channel_id` and `@handle` on channels and videos
+
 ## v1.21.1 - 2026-02-23
 
 **Changed**
