@@ -819,7 +819,7 @@ class BrainRotGuardBot:
     async def _cmd_approved(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not self._check_admin(update):
             return
-        query = " ".join(context.args) if context.args else ""
+        query = " ".join(context.args)[:200] if context.args else ""
         if query:
             results = self.video_store.search_approved(query)
             if not results:
