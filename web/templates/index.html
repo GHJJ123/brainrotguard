@@ -53,12 +53,12 @@
 </div>
 {% endif %}
 
-{% if channel_videos %}
-{# Channel pills: filter catalog by allowlisted channel #}
+{% if channel_pills %}
+{# Channel pills: filter catalog by allowlisted channel (keyed by channel_id) #}
 <div class="channel-pills">
     <button class="channel-pill active" data-channel="__all__">All</button>
-    {% for ch_name in channel_videos %}
-    <button class="channel-pill" data-channel="{{ ch_name }}">{{ ch_name }}</button>
+    {% for ch_id, ch_name in channel_pills.items() %}
+    <button class="channel-pill" data-channel="{{ ch_id }}">{{ ch_name }}</button>
     {% endfor %}
 </div>
 {% endif %}
@@ -98,7 +98,7 @@
     <h2 class="section-title">Your Requests</h2>
     <div class="video-grid" id="requests-grid">
         {% for video in requests_row %}
-        <a href="/watch/{{ video.video_id }}" class="video-card requests-card" data-channel="{{ video.channel_name }}" data-category="{{ video.category or 'fun' }}" data-video-id="{{ video.video_id }}">
+        <a href="/watch/{{ video.video_id }}" class="video-card requests-card" data-channel="{{ video.channel_id or video.channel_name }}" data-category="{{ video.category or 'fun' }}" data-video-id="{{ video.video_id }}">
             <div class="thumbnail-wrap">
                 <img src="{{ video.thumbnail_url }}" alt="{{ video.title }}" class="video-thumbnail" loading="lazy">
                 {% if video.duration %}
@@ -126,7 +126,7 @@
     <h2 class="section-title">Channel Videos</h2>
     <div class="video-grid" id="catalog-grid">
         {% for video in catalog %}
-        <a href="/watch/{{ video.video_id }}" class="video-card" data-channel="{{ video.channel_name }}" data-category="{{ video.category or 'fun' }}" data-video-id="{{ video.video_id }}">
+        <a href="/watch/{{ video.video_id }}" class="video-card" data-channel="{{ video.channel_id or video.channel_name }}" data-category="{{ video.category or 'fun' }}" data-video-id="{{ video.video_id }}">
             <div class="thumbnail-wrap">
                 <img src="{{ video.thumbnail_url }}" alt="{{ video.title }}" class="video-thumbnail" loading="lazy">
                 {% if video.duration %}
@@ -163,7 +163,7 @@
     <h2 class="section-title">Shorts</h2>
     <div class="shorts-row">
         {% for video in shorts_catalog %}
-        <a href="/watch/{{ video.video_id }}" class="shorts-card" data-channel="{{ video.channel_name }}" data-category="{{ video.category or 'fun' }}">
+        <a href="/watch/{{ video.video_id }}" class="shorts-card" data-channel="{{ video.channel_id or video.channel_name }}" data-category="{{ video.category or 'fun' }}">
             <div class="shorts-thumb-wrap">
                 <img src="{{ video.thumbnail_url }}" alt="{{ video.title }}" class="shorts-thumbnail" loading="lazy">
                 {% if video.duration %}
@@ -296,7 +296,7 @@
         var a = document.createElement('a');
         a.href = '/watch/' + encodeURIComponent(v.video_id);
         a.className = 'video-card';
-        a.dataset.channel = v.channel_name || '';
+        a.dataset.channel = v.channel_id || v.channel_name || '';
         a.dataset.category = v.category || 'fun';
         a.dataset.videoId = v.video_id || '';
         var dur = v.duration ? '<span class="duration-badge">' + escapeHtml(formatDuration(v.duration)) + '</span>' : '';

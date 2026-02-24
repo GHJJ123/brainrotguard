@@ -303,12 +303,17 @@ async def _refresh_channel_cache():
     tasks = [fetch_channel_videos(name, max_results=max_vids, channel_id=cid) for name, cid, _handle, _cat in allowed]
     results = await asyncio.gather(*tasks, return_exceptions=True)
     channels = {}
-    for (ch_name, _, _h, _c), result in zip(allowed, results):
+    channel_id_to_name = {}
+    for (ch_name, cid, _h, _c), result in zip(allowed, results):
+        # Key by channel_id (stable); fall back to name for channels without ID
+        cache_key = cid or ch_name
+        if cid:
+            channel_id_to_name[cid] = ch_name
         if isinstance(result, Exception):
             logger.error("Channel cache fetch failed for '%s': %s", ch_name, result)
-            channels[ch_name] = []
+            channels[cache_key] = []
         else:
-            channels[ch_name] = result
+            channels[cache_key] = result
 
     # Fetch Shorts from each channel's /shorts tab (skip when disabled)
     if _shorts_enabled():
@@ -316,17 +321,19 @@ async def _refresh_channel_cache():
         shorts_tasks = [fetch_channel_shorts(name, max_results=shorts_max, channel_id=cid) for name, cid, _handle, _cat in allowed]
         shorts_results = await asyncio.gather(*shorts_tasks, return_exceptions=True)
         shorts = {}
-        for (ch_name, _, _h, _c), result in zip(allowed, shorts_results):
+        for (ch_name, cid, _h, _c), result in zip(allowed, shorts_results):
+            cache_key = cid or ch_name
             if isinstance(result, Exception):
                 logger.debug("Channel shorts fetch failed for '%s': %s", ch_name, result)
-                shorts[ch_name] = []
+                shorts[cache_key] = []
             else:
-                shorts[ch_name] = result
+                shorts[cache_key] = result
     else:
         shorts = {}
 
     _channel_cache["channels"] = channels
     _channel_cache["shorts"] = shorts
+    _channel_cache["id_to_name"] = channel_id_to_name
     _channel_cache["updated_at"] = time.monotonic()
     logger.info("Refreshed channel cache: %d channels, %d with shorts",
                 len(channels), sum(1 for v in shorts.values() if v))
@@ -411,14 +418,21 @@ def _build_shorts_catalog() -> list[dict]:
                 seen_ids.add(vid)
                 shorts.append(dict(v))
 
-    # Attach category from channel settings
+    # Attach category from channel settings (keyed by channel_id, name fallback)
     if video_store:
-        _chan_cats = {}
-        for ch_name, _cid, _h, cat in video_store.get_channels_with_ids("allowed"):
+        _cat_by_cid = {}
+        _cat_by_name = {}
+        for ch_name, cid, _h, cat in video_store.get_channels_with_ids("allowed"):
             if cat:
-                _chan_cats[ch_name] = cat
+                if cid:
+                    _cat_by_cid[cid] = cat
+                _cat_by_name[ch_name] = cat
         for v in shorts:
-            v["category"] = _chan_cats.get(v.get("channel_name", ""), v.get("category") or "fun")
+            vid_cid = v.get("channel_id", "")
+            cat = _cat_by_cid.get(vid_cid) if vid_cid else None
+            if not cat:
+                cat = _cat_by_name.get(v.get("channel_name", ""))
+            v["category"] = cat or v.get("category") or "fun"
 
     return shorts
 
@@ -432,25 +446,44 @@ def _build_requests_row(limit: int = 50) -> list[dict]:
     if not video_store:
         return []
     requests = video_store.get_recent_requests(limit=limit)
-    # Build allowlist set + category map
-    allowed_channels = set()
-    _chan_cats = {}
-    for ch_name, _cid, _h, cat in video_store.get_channels_with_ids("allowed"):
-        allowed_channels.add(ch_name.lower())
+    # Build allowlist sets by channel_id (stable) with name fallback
+    allowed_channel_ids = set()
+    allowed_names = set()  # fallback for legacy rows without channel_id
+    _cat_by_cid = {}
+    _cat_by_name = {}
+    for ch_name, cid, _h, cat in video_store.get_channels_with_ids("allowed"):
+        if cid:
+            allowed_channel_ids.add(cid)
+            if cat:
+                _cat_by_cid[cid] = cat
+        else:
+            allowed_names.add(ch_name.lower())
         if cat:
-            _chan_cats[ch_name] = cat
-    # Filter out videos from allowlisted channels
+            _cat_by_name[ch_name] = cat
+    # Filter out videos from allowlisted channels (match on channel_id, fallback to name)
     filtered = []
     for v in requests:
-        if v.get("channel_name", "").lower() in allowed_channels:
+        vid_cid = v.get("channel_id")
+        if vid_cid and vid_cid in allowed_channel_ids:
             continue
-        v["category"] = _chan_cats.get(v.get("channel_name", ""), v.get("category") or "fun")
+        if not vid_cid and v.get("channel_name", "").lower() in allowed_names:
+            continue
+        # Category: prefer channel_id lookup, then name, then existing value
+        cat = None
+        if vid_cid:
+            cat = _cat_by_cid.get(vid_cid)
+        if not cat:
+            cat = _cat_by_name.get(v.get("channel_name", ""))
+        v["category"] = cat or v.get("category") or "fun"
         filtered.append(v)
     return filtered
 
 
 def _build_catalog(channel_filter: str = "") -> list[dict]:
-    """Build unified catalog: interleaved channel-cache videos + DB approved videos."""
+    """Build unified catalog: interleaved channel-cache videos + DB approved videos.
+
+    channel_filter accepts a channel_id (preferred) or channel_name for cache lookup.
+    """
     global _catalog_cache, _catalog_cache_time
     channels = _channel_cache.get("channels", {})
 
@@ -466,21 +499,35 @@ def _build_catalog(channel_filter: str = "") -> list[dict]:
             if vid and vid not in seen_ids and not v.get("is_short"):
                 seen_ids.add(vid)
                 filtered.append(dict(v))
+        # Determine if filter is a channel_id or a channel_name fallback
+        id_to_name = _channel_cache.get("id_to_name", {})
+        is_channel_id = channel_filter in id_to_name
         if video_store:
-            for v in video_store.get_by_status("approved", channel_name=channel_filter):
+            if is_channel_id:
+                db_vids = video_store.get_by_status("approved", channel_id=channel_filter)
+            else:
+                db_vids = video_store.get_by_status("approved", channel_name=channel_filter)
+            for v in db_vids:
                 vid = v.get("video_id", "")
                 if vid and vid not in seen_ids and not v.get("is_short"):
                     seen_ids.add(vid)
                     filtered.append(v)
         filtered.sort(key=lambda v: v.get("timestamp") or 0, reverse=True)
-        # Attach category to each filtered video
+        # Attach category to each filtered video (keyed by channel_id, name fallback)
         if video_store:
-            _chan_cats = {}
-            for ch_name, _cid, _h, cat in video_store.get_channels_with_ids("allowed"):
+            _cat_by_cid = {}
+            _cat_by_name = {}
+            for ch_name, cid, _h, cat in video_store.get_channels_with_ids("allowed"):
                 if cat:
-                    _chan_cats[ch_name] = cat
+                    if cid:
+                        _cat_by_cid[cid] = cat
+                    _cat_by_name[ch_name] = cat
             for v in filtered:
-                v["category"] = _chan_cats.get(v.get("channel_name", ""), v.get("category") or "fun")
+                vid_cid = v.get("channel_id", "")
+                cat = _cat_by_cid.get(vid_cid) if vid_cid else None
+                if not cat:
+                    cat = _cat_by_name.get(v.get("channel_name", ""))
+                v["category"] = cat or v.get("category") or "fun"
         return filtered
 
     # Return cached full catalog if fresh
@@ -523,14 +570,21 @@ def _build_catalog(channel_filter: str = "") -> list[dict]:
                 seen_ids.add(vid)
                 catalog.append(v)
 
-    # Attach category to each catalog video (always refresh from channel setting)
+    # Attach category to each catalog video (keyed by channel_id, name fallback)
     if video_store:
-        _chan_cats = {}
-        for ch_name, _cid, _h, cat in video_store.get_channels_with_ids("allowed"):
+        _cat_by_cid = {}
+        _cat_by_name = {}
+        for ch_name, cid, _h, cat in video_store.get_channels_with_ids("allowed"):
             if cat:
-                _chan_cats[ch_name] = cat
+                if cid:
+                    _cat_by_cid[cid] = cat
+                _cat_by_name[ch_name] = cat
         for v in catalog:
-            v["category"] = _chan_cats.get(v.get("channel_name", ""), v.get("category") or "fun")
+            vid_cid = v.get("channel_id", "")
+            cat = _cat_by_cid.get(vid_cid) if vid_cid else None
+            if not cat:
+                cat = _cat_by_name.get(v.get("channel_name", ""))
+            v["category"] = cat or v.get("category") or "fun"
 
     _catalog_cache = catalog
     _catalog_cache_time = time.monotonic()
@@ -786,12 +840,18 @@ async def index(request: Request, error: str = Query("", max_length=50)):
     schedule_info = _get_schedule_info()
     cat_info = _get_category_time_info()
     channel_videos = _channel_cache.get("channels", {})
+    id_to_name = _channel_cache.get("id_to_name", {})
     # Pick a random video from each channel for the hero carousel
     hero_highlights = []
-    for ch_name, ch_vids in channel_videos.items():
+    for cache_key, ch_vids in channel_videos.items():
         if ch_vids:
             hero_highlights.append(random.choice(ch_vids))
     random.shuffle(hero_highlights)
+    # Build channel_id → display_name map for channel pills
+    channel_pills = {}
+    for cache_key in channel_videos:
+        display = id_to_name.get(cache_key, cache_key)
+        channel_pills[cache_key] = display
     error_message = _ERROR_MESSAGES.get(error, "") if error else ""
     return templates.TemplateResponse("index.html", {
         "request": request,
@@ -806,7 +866,7 @@ async def index(request: Request, error: str = Query("", max_length=50)):
         "time_info": time_info,
         "schedule_info": schedule_info,
         "cat_info": cat_info,
-        "channel_videos": channel_videos,
+        "channel_pills": channel_pills,
         "hero_highlights": hero_highlights,
         "error_message": error_message,
     })
@@ -940,7 +1000,7 @@ async def request_video(
     is_short = metadata.get('is_short', False)
 
     # Check if channel is blocked → auto-deny
-    if video_store.is_channel_blocked(channel_name):
+    if video_store.is_channel_blocked(channel_name, channel_id=channel_id or ""):
         video = video_store.add_video(
             video_id=metadata['video_id'],
             title=metadata['title'],
@@ -958,7 +1018,7 @@ async def request_video(
         })
 
     # Check if channel is allowlisted → auto-approve
-    if video_store.is_channel_allowed(channel_name):
+    if video_store.is_channel_allowed(channel_name, channel_id=channel_id or ""):
         video = video_store.add_video(
             video_id=metadata['video_id'],
             title=metadata['title'],
@@ -1026,7 +1086,8 @@ async def watch_video(request: Request, video_id: str):
         metadata = await extract_metadata(video_id)
         if not metadata:
             return RedirectResponse(url="/", status_code=303)
-        if not video_store.is_channel_allowed(metadata['channel_name']):
+        if not video_store.is_channel_allowed(metadata['channel_name'],
+                                                channel_id=metadata.get('channel_id') or ""):
             return RedirectResponse(url="/", status_code=303)
         video_store.add_video(
             video_id=metadata['video_id'],

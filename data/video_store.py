@@ -188,10 +188,16 @@ class VideoStore:
             row = cursor.fetchone()
             return dict(row) if row else None
 
-    def get_by_status(self, status: str, channel_name: str = "") -> list[dict]:
-        """Get videos with given status, optionally filtered by channel_name."""
+    def get_by_status(self, status: str, channel_name: str = "", channel_id: str = "") -> list[dict]:
+        """Get videos with given status, optionally filtered by channel_id (preferred) or channel_name."""
         with self._lock:
-            if channel_name:
+            if channel_id:
+                cursor = self.conn.execute(
+                    "SELECT * FROM videos WHERE status = ? AND channel_id = ? "
+                    "ORDER BY requested_at DESC",
+                    (status, channel_id),
+                )
+            elif channel_name:
                 cursor = self.conn.execute(
                     "SELECT * FROM videos WHERE status = ? AND channel_name = ? COLLATE NOCASE "
                     "ORDER BY requested_at DESC",
@@ -377,13 +383,27 @@ class VideoStore:
             self.conn.commit()
             return cursor.rowcount > 0
 
-    def set_channel_videos_category(self, channel_name: str, category: str) -> int:
-        """Update category on all videos belonging to a channel. Returns count updated."""
+    def set_channel_videos_category(self, channel_name: str, category: str,
+                                     channel_id: str = "") -> int:
+        """Update category on all videos belonging to a channel. Returns count updated.
+        Prefers channel_id match; falls back to channel_name for legacy rows."""
         with self._lock:
-            cursor = self.conn.execute(
-                "UPDATE videos SET category = ? WHERE channel_name = ? COLLATE NOCASE",
-                (category, channel_name),
-            )
+            if channel_id:
+                cursor = self.conn.execute(
+                    "UPDATE videos SET category = ? WHERE channel_id = ?",
+                    (category, channel_id),
+                )
+                # Also update legacy rows that only have a matching name
+                self.conn.execute(
+                    "UPDATE videos SET category = ? WHERE channel_name = ? COLLATE NOCASE "
+                    "AND (channel_id IS NULL OR channel_id = '')",
+                    (category, channel_name),
+                )
+            else:
+                cursor = self.conn.execute(
+                    "UPDATE videos SET category = ? WHERE channel_name = ? COLLATE NOCASE",
+                    (category, channel_name),
+                )
             self.conn.commit()
             return cursor.rowcount
 
@@ -407,7 +427,8 @@ class VideoStore:
                 "       COALESCE(SUM(w.duration), 0) as total_sec "
                 "FROM watch_log w "
                 "LEFT JOIN videos v ON w.video_id = v.video_id "
-                "LEFT JOIN channels c ON v.channel_name = c.channel_name COLLATE NOCASE "
+                "LEFT JOIN channels c ON v.channel_id IS NOT NULL AND v.channel_id != '' "
+                "  AND v.channel_id = c.channel_id "
                 f"WHERE w.watched_at >= ? AND w.watched_at < {end_clause} "
                 "GROUP BY cat",
                 (start, end),
@@ -475,7 +496,8 @@ class VideoStore:
                 "       v.duration, v.channel_id,"
                 "       COALESCE(v.category, c.category) as category "
                 "FROM watch_log w LEFT JOIN videos v ON w.video_id = v.video_id "
-                "LEFT JOIN channels c ON v.channel_name = c.channel_name COLLATE NOCASE "
+                "LEFT JOIN channels c ON v.channel_id IS NOT NULL AND v.channel_id != '' "
+                "  AND v.channel_id = c.channel_id "
                 f"WHERE w.watched_at >= ? AND w.watched_at < {end_clause} "
                 "GROUP BY w.video_id ORDER BY total_sec DESC",
                 (start, end),
@@ -522,15 +544,30 @@ class VideoStore:
             self.conn.commit()
             return cursor.rowcount > 0
 
-    def delete_channel_videos(self, channel_name: str) -> int:
-        """Delete all videos belonging to a channel. Returns count deleted."""
+    def delete_channel_videos(self, channel_name: str, channel_id: str = "") -> int:
+        """Delete all videos belonging to a channel. Returns count deleted.
+        Prefers channel_id match; falls back to channel_name for legacy rows."""
         with self._lock:
-            cursor = self.conn.execute(
-                "DELETE FROM videos WHERE channel_name = ? COLLATE NOCASE",
-                (channel_name,),
-            )
+            if channel_id:
+                cursor = self.conn.execute(
+                    "DELETE FROM videos WHERE channel_id = ?",
+                    (channel_id,),
+                )
+                # Also delete legacy rows that only have a matching name
+                extra = self.conn.execute(
+                    "DELETE FROM videos WHERE channel_name = ? COLLATE NOCASE "
+                    "AND (channel_id IS NULL OR channel_id = '')",
+                    (channel_name,),
+                )
+                total = cursor.rowcount + extra.rowcount
+            else:
+                cursor = self.conn.execute(
+                    "DELETE FROM videos WHERE channel_name = ? COLLATE NOCASE",
+                    (channel_name,),
+                )
+                total = cursor.rowcount
             self.conn.commit()
-            return cursor.rowcount
+            return total
 
     def resolve_channel_name(self, name_or_handle: str) -> Optional[str]:
         """Look up channel_name by name or @handle. Returns the display name or None."""
@@ -550,6 +587,46 @@ class VideoStore:
                 "WHERE channel_id IS NOT NULL AND (handle IS NULL OR handle = '')"
             )
             return [(row[0], row[1]) for row in cursor.fetchall()]
+
+    def get_channels_missing_ids(self) -> list[tuple[str, Optional[str]]]:
+        """Get (channel_name, handle) for channels missing channel_id."""
+        with self._lock:
+            cursor = self.conn.execute(
+                "SELECT channel_name, handle FROM channels "
+                "WHERE channel_id IS NULL OR channel_id = ''"
+            )
+            return [(row[0], row[1]) for row in cursor.fetchall()]
+
+    def get_videos_missing_channel_id(self, limit: int = 50) -> list[dict]:
+        """Get approved videos missing channel_id."""
+        with self._lock:
+            cursor = self.conn.execute(
+                "SELECT video_id, channel_name FROM videos "
+                "WHERE (channel_id IS NULL OR channel_id = '') "
+                "ORDER BY requested_at DESC LIMIT ?",
+                (limit,),
+            )
+            return [{"video_id": row[0], "channel_name": row[1]} for row in cursor.fetchall()]
+
+    def update_channel_id(self, channel_name: str, channel_id: str) -> bool:
+        """Set a channel's channel_id by name."""
+        with self._lock:
+            cursor = self.conn.execute(
+                "UPDATE channels SET channel_id = ? WHERE channel_name = ? COLLATE NOCASE AND (channel_id IS NULL OR channel_id = '')",
+                (channel_id, channel_name),
+            )
+            self.conn.commit()
+            return cursor.rowcount > 0
+
+    def update_video_channel_id(self, video_id: str, channel_id: str) -> bool:
+        """Set a video's channel_id."""
+        with self._lock:
+            cursor = self.conn.execute(
+                "UPDATE videos SET channel_id = ? WHERE video_id = ? AND (channel_id IS NULL OR channel_id = '')",
+                (channel_id, video_id),
+            )
+            self.conn.commit()
+            return cursor.rowcount > 0
 
     def update_channel_handle(self, channel_name: str, handle: str) -> bool:
         """Set a channel's handle by name."""
@@ -579,18 +656,32 @@ class VideoStore:
             )
             return [(row[0], row[1], row[2], row[3]) for row in cursor.fetchall()]
 
-    def is_channel_allowed(self, name: str) -> bool:
-        """Check if channel is on the allowlist."""
+    def is_channel_allowed(self, name: str, channel_id: str = "") -> bool:
+        """Check if channel is on the allowlist. Prefers channel_id match."""
         with self._lock:
+            if channel_id:
+                cursor = self.conn.execute(
+                    "SELECT 1 FROM channels WHERE channel_id = ? AND status = 'allowed'",
+                    (channel_id,),
+                )
+                if cursor.fetchone() is not None:
+                    return True
             cursor = self.conn.execute(
                 "SELECT 1 FROM channels WHERE channel_name = ? COLLATE NOCASE AND status = 'allowed'",
                 (name,),
             )
             return cursor.fetchone() is not None
 
-    def is_channel_blocked(self, name: str) -> bool:
-        """Check if channel is on the blocklist."""
+    def is_channel_blocked(self, name: str, channel_id: str = "") -> bool:
+        """Check if channel is on the blocklist. Prefers channel_id match."""
         with self._lock:
+            if channel_id:
+                cursor = self.conn.execute(
+                    "SELECT 1 FROM channels WHERE channel_id = ? AND status = 'blocked'",
+                    (channel_id,),
+                )
+                if cursor.fetchone() is not None:
+                    return True
             cursor = self.conn.execute(
                 "SELECT 1 FROM channels WHERE channel_name = ? COLLATE NOCASE AND status = 'blocked'",
                 (name,),

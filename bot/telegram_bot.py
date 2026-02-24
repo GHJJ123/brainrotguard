@@ -128,18 +128,45 @@ class BrainRotGuardBot:
             await update.message.reply_text(msg)
         return False
 
-    def _resolve_handle_bg(self, channel_name: str, channel_id: str) -> None:
-        """Fire a background task to resolve and store the @handle for a channel."""
+    def _resolve_channel_bg(self, channel_name: str, channel_id: Optional[str] = None,
+                             video_id: Optional[str] = None) -> None:
+        """Fire a background task to resolve and store missing channel identifiers.
+
+        Resolves channel_id (via video metadata or @name lookup) and @handle
+        (via channel_id) for the channel row. Also backfills channel_id on the
+        video row if provided.
+        """
         import asyncio
         async def _resolve():
             try:
-                from youtube.extractor import resolve_handle_from_channel_id
-                handle = await resolve_handle_from_channel_id(channel_id)
-                if handle:
-                    self.video_store.update_channel_handle(channel_name, handle)
-                    logger.info(f"Resolved handle: {channel_name} → {handle}")
+                cid = channel_id
+                # If no channel_id, try to resolve it
+                if not cid:
+                    if video_id:
+                        from youtube.extractor import extract_metadata
+                        metadata = await extract_metadata(video_id)
+                        if metadata and metadata.get("channel_id"):
+                            cid = metadata["channel_id"]
+                            self.video_store.update_video_channel_id(video_id, cid)
+                    if not cid:
+                        from youtube.extractor import resolve_channel_handle
+                        info = await resolve_channel_handle(f"@{channel_name}")
+                        if info and info.get("channel_id"):
+                            cid = info["channel_id"]
+                            if info.get("handle"):
+                                self.video_store.update_channel_handle(channel_name, info["handle"])
+                    if cid:
+                        self.video_store.update_channel_id(channel_name, cid)
+                        logger.info(f"Resolved channel_id: {channel_name} → {cid}")
+                # Resolve handle from channel_id
+                if cid:
+                    from youtube.extractor import resolve_handle_from_channel_id
+                    handle = await resolve_handle_from_channel_id(cid)
+                    if handle:
+                        self.video_store.update_channel_handle(channel_name, handle)
+                        logger.info(f"Resolved handle: {channel_name} → {handle}")
             except Exception as e:
-                logger.debug(f"Background handle resolve failed for {channel_name}: {e}")
+                logger.debug(f"Background channel resolve failed for {channel_name}: {e}")
         asyncio.create_task(_resolve())
 
     async def start(self) -> None:
@@ -490,9 +517,18 @@ class BrainRotGuardBot:
         # Channel names may contain colons, so rejoin everything after first ':'
         if parts[0] in ("unallow", "unblock") and len(parts) >= 2:
             ch_name = ":".join(parts[1:])
+            # Look up channel_id before removing (remove_channel deletes the row)
+            ch_id = ""
+            ch_rows = self.video_store.get_channels_with_ids(
+                "allowed" if parts[0] == "unallow" else "blocked"
+            )
+            for name, cid, _h, _c in ch_rows:
+                if name.lower() == ch_name.lower():
+                    ch_id = cid or ""
+                    break
             if self.video_store.remove_channel(ch_name):
                 if parts[0] == "unallow":
-                    self.video_store.delete_channel_videos(ch_name)
+                    self.video_store.delete_channel_videos(ch_name, channel_id=ch_id)
                 if self.on_channel_change:
                     self.on_channel_change()
                 _answer_bg(query, f"Removed: {ch_name}")
@@ -572,8 +608,7 @@ class BrainRotGuardBot:
             channel = video['channel_name']
             cid = video.get('channel_id')
             self.video_store.add_channel(channel, "allowed", channel_id=cid)
-            if cid:
-                self._resolve_handle_bg(channel, cid)
+            self._resolve_channel_bg(channel, cid, video_id=video_id)
             if video['status'] == 'pending':
                 self.video_store.update_status(video_id, "approved")
                 self.video_store.set_video_category(video_id, "fun")
@@ -588,8 +623,7 @@ class BrainRotGuardBot:
             channel = video['channel_name']
             cid = video.get('channel_id')
             self.video_store.add_channel(channel, "allowed", channel_id=cid, category=cat)
-            if cid:
-                self._resolve_handle_bg(channel, cid)
+            self._resolve_channel_bg(channel, cid, video_id=video_id)
             cat_label = "Educational" if cat == "edu" else "Entertainment"
             if video['status'] == 'pending':
                 self.video_store.update_status(video_id, "approved")
@@ -604,8 +638,7 @@ class BrainRotGuardBot:
             channel = video['channel_name']
             cid = video.get('channel_id')
             self.video_store.add_channel(channel, "blocked", channel_id=cid)
-            if cid:
-                self._resolve_handle_bg(channel, cid)
+            self._resolve_channel_bg(channel, cid, video_id=video_id)
             if video['status'] == 'pending':
                 self.video_store.update_status(video_id, "denied")
                 status_label = "DENIED + CHANNEL BLOCKED"
@@ -1213,7 +1246,19 @@ class BrainRotGuardBot:
         existing = self.video_store.get_channel_handles_set()
         already = handle.lower() in existing
         if not already:
-            self.video_store.add_channel(name, "allowed", channel_id=None, handle=handle, category=cat)
+            # Resolve channel_id from @handle before inserting
+            cid = None
+            try:
+                from youtube.extractor import resolve_channel_handle
+                info = await resolve_channel_handle(handle)
+                if info:
+                    cid = info.get("channel_id")
+                    # Use YouTube's canonical name if available
+                    if info.get("channel_name"):
+                        name = info["channel_name"]
+            except Exception:
+                pass  # proceed without channel_id; backfill loop will retry
+            self.video_store.add_channel(name, "allowed", channel_id=cid, handle=handle, category=cat)
             if self.on_channel_change:
                 self.on_channel_change()
 
@@ -1281,9 +1326,16 @@ class BrainRotGuardBot:
             await update.message.reply_text(f"Usage: /channel {verb} <channel name>")
             return
         channel = " ".join(args)
+        # Look up channel_id before removing (remove_channel deletes the row)
+        ch_id = ""
+        status = "allowed" if verb == "unallow" else "blocked"
+        for name, cid, _h, _c in self.video_store.get_channels_with_ids(status):
+            if name.lower() == channel.lower():
+                ch_id = cid or ""
+                break
         if self.video_store.remove_channel(channel):
             if verb == "unallow":
-                deleted = self.video_store.delete_channel_videos(channel)
+                deleted = self.video_store.delete_channel_videos(channel, channel_id=ch_id)
             else:
                 deleted = 0
             if self.on_channel_change:
@@ -1306,7 +1358,13 @@ class BrainRotGuardBot:
         raw = " ".join(args[:-1])
         channel = self.video_store.resolve_channel_name(raw) or raw
         if self.video_store.set_channel_category(channel, cat):
-            self.video_store.set_channel_videos_category(channel, cat)
+            # Look up channel_id for stable matching
+            ch_id = ""
+            for name, cid, _h, _c in self.video_store.get_channels_with_ids("allowed"):
+                if name.lower() == channel.lower():
+                    ch_id = cid or ""
+                    break
+            self.video_store.set_channel_videos_category(channel, cat, channel_id=ch_id)
             cat_label = "Educational" if cat == "edu" else "Entertainment"
             if self.on_channel_change:
                 self.on_channel_change()

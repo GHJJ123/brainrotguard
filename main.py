@@ -90,8 +90,8 @@ class BrainRotGuard:
         if w_pruned or s_pruned:
             logger.info(f"Pruned {w_pruned} watch_log and {s_pruned} search_log entries")
 
-        # Backfill missing @handles in background
-        asyncio.create_task(self._backfill_handles())
+        # Periodic backfill of missing channel_id / handle on channels + videos
+        asyncio.create_task(self._backfill_loop())
 
         stats = self.video_store.get_stats()
         logger.info(
@@ -104,14 +104,45 @@ class BrainRotGuard:
         except asyncio.CancelledError:
             logger.info("Server cancelled")
 
-    async def _backfill_handles(self) -> None:
-        """Resolve missing @handles for channels that have a channel_id."""
-        missing = self.video_store.get_channels_missing_handles()
-        if not missing:
-            return
-        logger.info(f"Backfilling @handles for {len(missing)} channels")
-        from youtube.extractor import resolve_handle_from_channel_id
-        for name, channel_id in missing:
+    async def _backfill_loop(self) -> None:
+        """Periodically backfill missing channel_id and handle on channels + videos."""
+        _INTERVAL = 3600  # re-check every hour
+        while self.running:
+            try:
+                await self._backfill_identifiers()
+            except Exception as e:
+                logger.error(f"Backfill error: {e}")
+            await asyncio.sleep(_INTERVAL)
+
+    async def _backfill_identifiers(self) -> None:
+        """One-shot backfill of all missing unique identifiers."""
+        from youtube.extractor import (
+            resolve_channel_handle,
+            resolve_handle_from_channel_id,
+            extract_metadata,
+        )
+
+        # 1) Channels missing channel_id — resolve via @handle or channel_name
+        missing_cid = self.video_store.get_channels_missing_ids()
+        if missing_cid:
+            logger.info(f"Backfilling channel_id for {len(missing_cid)} channels")
+        for name, handle in missing_cid:
+            try:
+                lookup = handle or f"@{name}"
+                info = await resolve_channel_handle(lookup)
+                if info and info.get("channel_id"):
+                    self.video_store.update_channel_id(name, info["channel_id"])
+                    if info.get("handle") and not handle:
+                        self.video_store.update_channel_handle(name, info["handle"])
+                    logger.info(f"Backfilled channel_id: {name} → {info['channel_id']}")
+            except Exception as e:
+                logger.debug(f"Failed to backfill channel_id for {name}: {e}")
+
+        # 2) Channels missing @handle (have channel_id)
+        missing_handles = self.video_store.get_channels_missing_handles()
+        if missing_handles:
+            logger.info(f"Backfilling @handles for {len(missing_handles)} channels")
+        for name, channel_id in missing_handles:
             try:
                 handle = await resolve_handle_from_channel_id(channel_id)
                 if handle:
@@ -119,6 +150,23 @@ class BrainRotGuard:
                     logger.info(f"Backfilled handle: {name} → {handle}")
             except Exception as e:
                 logger.debug(f"Failed to resolve handle for {name}: {e}")
+
+        # 3) Videos missing channel_id — resolve via video metadata
+        missing_vid_cid = self.video_store.get_videos_missing_channel_id()
+        if missing_vid_cid:
+            logger.info(f"Backfilling channel_id for {len(missing_vid_cid)} videos")
+        for v in missing_vid_cid:
+            try:
+                metadata = await extract_metadata(v["video_id"])
+                if metadata and metadata.get("channel_id"):
+                    self.video_store.update_video_channel_id(
+                        v["video_id"], metadata["channel_id"]
+                    )
+                    logger.info(
+                        f"Backfilled video channel_id: {v['video_id']} → {metadata['channel_id']}"
+                    )
+            except Exception as e:
+                logger.debug(f"Failed to backfill channel_id for video {v['video_id']}: {e}")
 
     async def stop(self) -> None:
         """Stop all components."""
