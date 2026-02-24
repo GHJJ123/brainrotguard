@@ -110,7 +110,7 @@
             </div>
             <div class="video-info">
                 <h3 class="video-title">{{ video.title }}</h3>
-                <p class="video-channel">{{ video.channel_name }}</p>
+                <p class="video-channel">{{ video.channel_name }}{% if video.view_count %} <span class="video-views-inline">{{ video.view_count | format_views }} views</span>{% endif %}</p>
             </div>
         </a>
         {% endfor %}
