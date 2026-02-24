@@ -1,4 +1,15 @@
 # Changelog
+## v1.21.0 - 2026-02-23
+
+**Added**
+- "Your Requests" horizontal scroll row on homepage — shows recently-approved videos the kid explicitly searched for, newest first (limited to 9 with "Show More" pagination)
+- `get_recent_requests()` DB method for querying approved non-Short videos ordered by decision time
+- `/api/catalog?requests=true` endpoint for paginated requests catalog
+
+**Changed**
+- Renamed "Your Videos" → "Channel Videos" in the main grid section to distinguish passive channel feed from explicit requests
+- Category filter pills now show/hide cards in the requests row (channel pill filtering intentionally does not affect it)
+
 ## v1.20.1 - 2026-02-23
 
 **Fixed**
