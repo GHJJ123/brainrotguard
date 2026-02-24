@@ -819,6 +819,17 @@ class BrainRotGuardBot:
     async def _cmd_approved(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not self._check_admin(update):
             return
+        query = " ".join(context.args) if context.args else ""
+        if query:
+            results = self.video_store.search_approved(query)
+            if not results:
+                await update.message.reply_text(f"No approved videos matching \"{query}\".")
+                return
+            text, keyboard = self._render_approved_page(results, len(results), 0, search=query)
+            await update.message.reply_text(
+                text, parse_mode=MD2, reply_markup=keyboard, disable_web_page_preview=True,
+            )
+            return
         page_items, total = self.video_store.get_approved_page(0, self._APPROVED_PAGE_SIZE)
         if not page_items:
             await update.message.reply_text("No approved videos yet. Approve requests or use /channel to allow channels.")
@@ -828,13 +839,16 @@ class BrainRotGuardBot:
             text, parse_mode=MD2, reply_markup=keyboard, disable_web_page_preview=True,
         )
 
-    def _render_approved_page(self, page_items: list, total: int, page: int) -> tuple[str, InlineKeyboardMarkup | None]:
+    def _render_approved_page(self, page_items: list, total: int, page: int, search: str = "") -> tuple[str, InlineKeyboardMarkup | None]:
         """Render a page of the approved list."""
         ps = self._APPROVED_PAGE_SIZE
         end = (page + 1) * ps
         total_pages = (total + ps - 1) // ps
 
-        header = f"\U0001f4cb **Approved ({total})**"
+        if search:
+            header = f"\U0001f50d **\"{search}\" ({total} result{'s' if total != 1 else ''})**"
+        else:
+            header = f"\U0001f4cb **Approved ({total})**"
         if total_pages > 1:
             header += f" \u00b7 pg {page + 1}/{total_pages}"
         lines = [header, ""]

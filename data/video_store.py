@@ -243,6 +243,18 @@ class VideoStore:
             )
             return [dict(row) for row in cursor.fetchall()]
 
+    def search_approved(self, query: str, limit: int = 50) -> list[dict]:
+        """Search approved videos by title or channel name (case-insensitive LIKE)."""
+        pattern = f"%{query}%"
+        with self._lock:
+            cursor = self.conn.execute(
+                "SELECT * FROM videos WHERE status = 'approved' "
+                "AND (title LIKE ? COLLATE NOCASE OR channel_name LIKE ? COLLATE NOCASE) "
+                "ORDER BY requested_at DESC LIMIT ?",
+                (pattern, pattern, limit),
+            )
+            return [dict(row) for row in cursor.fetchall()]
+
     def get_recent_requests(self, limit: int = 50) -> list[dict]:
         """Get recently approved non-Short videos (kid's explicit requests), newest first."""
         with self._lock:
