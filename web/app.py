@@ -774,7 +774,7 @@ async def index(request: Request, error: str = Query("", max_length=50)):
     page_size = 12
     full_catalog = _build_catalog()
     catalog = full_catalog[:page_size]
-    requests_page = 5
+    requests_page = 4
     full_requests = _build_requests_row(limit=50)
     requests_row = full_requests[:requests_page]
     has_more_requests = len(full_requests) > requests_page
