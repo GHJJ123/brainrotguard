@@ -168,7 +168,7 @@ def is_within_schedule(start_str: str, end_str: str, tz_name: str = "") -> tuple
         except (ValueError, AttributeError):
             return (True, "")
         allowed = now_minutes >= sh * 60 + sm
-        unlock_time = format_time_12h(start_str) if not allowed else ""
+        unlock_time = ("at " + format_time_12h(start_str)) if not allowed else ""
         return (allowed, unlock_time)
 
     # Only end set: allowed until end, blocked after
@@ -198,5 +198,5 @@ def is_within_schedule(start_str: str, end_str: str, tz_name: str = "") -> tuple
         # Overnight range (e.g. 22:00 - 06:00)
         allowed = now_minutes >= start_minutes or now_minutes < end_minutes
 
-    unlock_time = format_time_12h(start_str) if not allowed else ""
+    unlock_time = ("at " + format_time_12h(start_str)) if not allowed else ""
     return (allowed, unlock_time)
