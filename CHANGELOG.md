@@ -1,4 +1,14 @@
 # Changelog
+## v1.22.0 - 2026-02-24
+
+**Added**
+- `/filter` top-level command — manage word filters that hide matching video titles everywhere (catalog, Shorts, Your Requests, search results)
+- Word filters now apply globally, not just to search results
+
+**Changed**
+- `/search` simplified to show search history directly (was `/search history`); supports `/search [days|today|all]`
+- Removed `/search filter` subcommand — use `/filter add|remove <word>` instead
+
 ## v1.21.2 - 2026-02-24
 
 **Fixed**
