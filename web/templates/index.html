@@ -96,27 +96,27 @@
 {% if requests_row %}
 <section class="requests-section">
     <h2 class="section-title">Your Requests</h2>
-    <div class="requests-row" id="requests-row">
+    <div class="video-grid" id="requests-grid">
         {% for video in requests_row %}
-        <a href="/watch/{{ video.video_id }}" class="requests-card" data-channel="{{ video.channel_name }}" data-category="{{ video.category or 'fun' }}">
-            <div class="requests-thumb-wrap">
-                <img src="{{ video.thumbnail_url }}" alt="{{ video.title }}" class="requests-thumbnail" loading="lazy">
+        <a href="/watch/{{ video.video_id }}" class="video-card requests-card" data-channel="{{ video.channel_name }}" data-category="{{ video.category or 'fun' }}" data-video-id="{{ video.video_id }}">
+            <div class="thumbnail-wrap">
+                <img src="{{ video.thumbnail_url }}" alt="{{ video.title }}" class="video-thumbnail" loading="lazy">
                 {% if video.duration %}
                 <span class="duration-badge">{{ format_duration(video.duration) }}</span>
                 {% endif %}
-                <span class="category-badge category-{{ video.category or 'fun' }}">{{ "Edu" if video.category == "edu" else "Fun" }}</span>
+                {% if video.category %}
+                <span class="category-badge category-{{ video.category }}">{{ "Edu" if video.category == "edu" else "Fun" }}</span>
+                {% endif %}
             </div>
-            <div class="requests-info">
-                <div class="requests-title">{{ video.title }}</div>
-                <div class="requests-channel">{{ video.channel_name }}</div>
+            <div class="video-info">
+                <h3 class="video-title">{{ video.title }}</h3>
+                <p class="video-channel">{{ video.channel_name }}</p>
             </div>
         </a>
         {% endfor %}
-        {% if has_more_requests %}
-        <button class="requests-card requests-show-more" id="requests-show-more">
-            <span class="requests-more-label">Show<br>More</span>
-        </button>
-        {% endif %}
+    </div>
+    <div class="show-more-wrap" id="requests-show-more-wrap"{% if not has_more_requests %} style="display:none"{% endif %}>
+        <button class="btn-primary show-more-btn" id="requests-show-more-btn">Show More</button>
     </div>
 </section>
 {% endif %}
@@ -461,7 +461,7 @@
     }
 
     function filterRequests(category) {
-        document.querySelectorAll('.requests-card:not(.requests-show-more)').forEach(function(card) {
+        document.querySelectorAll('.requests-card').forEach(function(card) {
             if (!category || card.dataset.category === category) {
                 card.style.display = '';
             } else {
@@ -470,7 +470,7 @@
         });
         var section = document.querySelector('.requests-section');
         if (section) {
-            var visible = section.querySelectorAll('.requests-card:not(.requests-show-more):not([style*="display:none"])');
+            var visible = section.querySelectorAll('.requests-card:not([style*="display:none"])');
             section.style.display = visible.length ? '' : 'none';
         }
     }
@@ -567,51 +567,37 @@
     }
 
     // Requests "Show More" button
-    var requestsBtn = document.getElementById('requests-show-more');
-    if (requestsBtn) {
+    var requestsGrid = document.getElementById('requests-grid');
+    var requestsShowMoreBtn = document.getElementById('requests-show-more-btn');
+    var requestsShowMoreWrap = document.getElementById('requests-show-more-wrap');
+    if (requestsShowMoreBtn) {
         var requestsOffset = {{ requests_row | length }};
-        var REQUESTS_PAGE = 20;
-        requestsBtn.addEventListener('click', function() {
-            requestsBtn.querySelector('.requests-more-label').textContent = '...';
+        var REQUESTS_PAGE = 24;
+        requestsShowMoreBtn.addEventListener('click', function() {
+            requestsShowMoreBtn.disabled = true;
+            requestsShowMoreBtn.textContent = 'Loading...';
             fetch('/api/catalog?requests=true&offset=' + requestsOffset + '&limit=' + REQUESTS_PAGE)
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
-                    var row = requestsBtn.parentNode;
                     data.videos.forEach(function(v) {
-                        var a = document.createElement('a');
-                        a.href = '/watch/' + encodeURIComponent(v.video_id);
-                        a.className = 'requests-card';
-                        a.dataset.channel = v.channel_name || '';
-                        a.dataset.category = v.category || 'fun';
-                        var cat = v.category || 'fun';
-                        var catLabel = cat === 'edu' ? 'Edu' : 'Fun';
-                        var dur = v.duration ? '<span class="duration-badge">' + escapeHtml(formatDuration(v.duration)) + '</span>' : '';
-                        // eslint-disable-next-line no-unsanitized/property -- values are escaped via escapeHtml()
-                        a.innerHTML =
-                            '<div class="requests-thumb-wrap">' +
-                                '<img src="' + escapeHtml(v.thumbnail_url || '') + '" alt="' + escapeHtml(v.title || '') + '" class="requests-thumbnail" loading="lazy">' +
-                                dur +
-                                '<span class="category-badge category-' + escapeHtml(cat) + '">' + catLabel + '</span>' +
-                            '</div>' +
-                            '<div class="requests-info">' +
-                                '<div class="requests-title">' + escapeHtml(v.title || '') + '</div>' +
-                                '<div class="requests-channel">' + escapeHtml(v.channel_name || '') + '</div>' +
-                            '</div>';
-                        // Apply current category filter to new cards
-                        if (activeCatFilter && cat !== activeCatFilter) {
-                            a.style.display = 'none';
+                        var card = buildCard(v);
+                        card.classList.add('requests-card');
+                        if (activeCatFilter && (v.category || 'fun') !== activeCatFilter) {
+                            card.style.display = 'none';
                         }
-                        row.insertBefore(a, requestsBtn);
+                        requestsGrid.appendChild(card);
                     });
                     requestsOffset += data.videos.length;
                     if (!data.has_more) {
-                        requestsBtn.remove();
+                        requestsShowMoreWrap.style.display = 'none';
                     } else {
-                        requestsBtn.querySelector('.requests-more-label').textContent = 'Show\nMore';
+                        requestsShowMoreBtn.disabled = false;
+                        requestsShowMoreBtn.textContent = 'Show More';
                     }
                 })
                 .catch(function() {
-                    requestsBtn.querySelector('.requests-more-label').textContent = 'Show\nMore';
+                    requestsShowMoreBtn.disabled = false;
+                    requestsShowMoreBtn.textContent = 'Show More';
                 });
         });
     }
