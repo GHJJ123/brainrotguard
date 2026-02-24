@@ -243,6 +243,16 @@ class VideoStore:
             )
             return [dict(row) for row in cursor.fetchall()]
 
+    def get_recent_requests(self, limit: int = 50) -> list[dict]:
+        """Get recently approved non-Short videos (kid's explicit requests), newest first."""
+        with self._lock:
+            cursor = self.conn.execute(
+                "SELECT * FROM videos WHERE status = 'approved' AND is_short = 0 "
+                "ORDER BY decided_at DESC, requested_at DESC LIMIT ?",
+                (limit,),
+            )
+            return [dict(row) for row in cursor.fetchall()]
+
     def update_status(self, video_id: str, status: str) -> bool:
         """Update video status and set decided_at timestamp. Returns True if updated."""
         with self._lock:

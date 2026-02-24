@@ -93,9 +93,37 @@
 </div>
 {% endif %}
 
+{% if requests_row %}
+<section class="requests-section">
+    <h2 class="section-title">Your Requests</h2>
+    <div class="requests-row" id="requests-row">
+        {% for video in requests_row %}
+        <a href="/watch/{{ video.video_id }}" class="requests-card" data-channel="{{ video.channel_name }}" data-category="{{ video.category or 'fun' }}">
+            <div class="requests-thumb-wrap">
+                <img src="{{ video.thumbnail_url }}" alt="{{ video.title }}" class="requests-thumbnail" loading="lazy">
+                {% if video.duration %}
+                <span class="duration-badge">{{ format_duration(video.duration) }}</span>
+                {% endif %}
+                <span class="category-badge category-{{ video.category or 'fun' }}">{{ "Edu" if video.category == "edu" else "Fun" }}</span>
+            </div>
+            <div class="requests-info">
+                <div class="requests-title">{{ video.title }}</div>
+                <div class="requests-channel">{{ video.channel_name }}</div>
+            </div>
+        </a>
+        {% endfor %}
+        {% if has_more_requests %}
+        <button class="requests-card requests-show-more" id="requests-show-more">
+            <span class="requests-more-label">Show<br>More</span>
+        </button>
+        {% endif %}
+    </div>
+</section>
+{% endif %}
+
 {% if catalog %}
 <section class="videos-section">
-    <h2 class="section-title">Your Videos</h2>
+    <h2 class="section-title">Channel Videos</h2>
     <div class="video-grid" id="catalog-grid">
         {% for video in catalog %}
         <a href="/watch/{{ video.video_id }}" class="video-card" data-channel="{{ video.channel_name }}" data-category="{{ video.category or 'fun' }}" data-video-id="{{ video.video_id }}">
@@ -121,7 +149,7 @@
 </section>
 {% else %}
 <section class="videos-section">
-    <h2 class="section-title">Your Videos</h2>
+    <h2 class="section-title">Channel Videos</h2>
     <div class="empty-state">
         <div class="empty-icon">&#x1f50d;</div>
         <p>No videos yet</p>
@@ -392,6 +420,7 @@
 
             activeCatFilter = category;
             filterShorts(category);
+            filterRequests(category);
             activeFilter = '';  // clear channel filter
             // Also reset channel pills
             document.querySelectorAll('.channel-pill').forEach(function(p) { p.classList.remove('active'); });
@@ -431,10 +460,26 @@
         }
     }
 
+    function filterRequests(category) {
+        document.querySelectorAll('.requests-card:not(.requests-show-more)').forEach(function(card) {
+            if (!category || card.dataset.category === category) {
+                card.style.display = '';
+            } else {
+                card.style.display = 'none';
+            }
+        });
+        var section = document.querySelector('.requests-section');
+        if (section) {
+            var visible = section.querySelectorAll('.requests-card:not(.requests-show-more):not([style*="display:none"])');
+            section.style.display = visible.length ? '' : 'none';
+        }
+    }
+
     function restoreAll() {
         activeFilter = '';
         activeCatFilter = '';
         filterShorts('');
+        filterRequests('');
         catalogGrid.innerHTML = initialGridHTML;
         catalogOffset = initialOffset;
         if (showMoreWrap) showMoreWrap.style.display = initialHasMore ? '' : 'none';
@@ -517,6 +562,56 @@
                 })
                 .catch(function() {
                     shortsBtn.querySelector('.shorts-more-label').textContent = 'Show\nMore';
+                });
+        });
+    }
+
+    // Requests "Show More" button
+    var requestsBtn = document.getElementById('requests-show-more');
+    if (requestsBtn) {
+        var requestsOffset = {{ requests_row | length }};
+        var REQUESTS_PAGE = 20;
+        requestsBtn.addEventListener('click', function() {
+            requestsBtn.querySelector('.requests-more-label').textContent = '...';
+            fetch('/api/catalog?requests=true&offset=' + requestsOffset + '&limit=' + REQUESTS_PAGE)
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var row = requestsBtn.parentNode;
+                    data.videos.forEach(function(v) {
+                        var a = document.createElement('a');
+                        a.href = '/watch/' + encodeURIComponent(v.video_id);
+                        a.className = 'requests-card';
+                        a.dataset.channel = v.channel_name || '';
+                        a.dataset.category = v.category || 'fun';
+                        var cat = v.category || 'fun';
+                        var catLabel = cat === 'edu' ? 'Edu' : 'Fun';
+                        var dur = v.duration ? '<span class="duration-badge">' + escapeHtml(formatDuration(v.duration)) + '</span>' : '';
+                        // eslint-disable-next-line no-unsanitized/property -- values are escaped via escapeHtml()
+                        a.innerHTML =
+                            '<div class="requests-thumb-wrap">' +
+                                '<img src="' + escapeHtml(v.thumbnail_url || '') + '" alt="' + escapeHtml(v.title || '') + '" class="requests-thumbnail" loading="lazy">' +
+                                dur +
+                                '<span class="category-badge category-' + escapeHtml(cat) + '">' + catLabel + '</span>' +
+                            '</div>' +
+                            '<div class="requests-info">' +
+                                '<div class="requests-title">' + escapeHtml(v.title || '') + '</div>' +
+                                '<div class="requests-channel">' + escapeHtml(v.channel_name || '') + '</div>' +
+                            '</div>';
+                        // Apply current category filter to new cards
+                        if (activeCatFilter && cat !== activeCatFilter) {
+                            a.style.display = 'none';
+                        }
+                        row.insertBefore(a, requestsBtn);
+                    });
+                    requestsOffset += data.videos.length;
+                    if (!data.has_more) {
+                        requestsBtn.remove();
+                    } else {
+                        requestsBtn.querySelector('.requests-more-label').textContent = 'Show\nMore';
+                    }
+                })
+                .catch(function() {
+                    requestsBtn.querySelector('.requests-more-label').textContent = 'Show\nMore';
                 });
         });
     }
