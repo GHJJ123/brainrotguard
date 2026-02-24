@@ -243,6 +243,28 @@ class VideoStore:
             )
             return [dict(row) for row in cursor.fetchall()]
 
+    def search_approved(self, query: str, limit: int = 50) -> list[dict]:
+        """Search approved videos by title or channel name (case-insensitive LIKE)."""
+        pattern = f"%{query}%"
+        with self._lock:
+            cursor = self.conn.execute(
+                "SELECT * FROM videos WHERE status = 'approved' "
+                "AND (title LIKE ? COLLATE NOCASE OR channel_name LIKE ? COLLATE NOCASE) "
+                "ORDER BY requested_at DESC LIMIT ?",
+                (pattern, pattern, limit),
+            )
+            return [dict(row) for row in cursor.fetchall()]
+
+    def get_recent_requests(self, limit: int = 50) -> list[dict]:
+        """Get recently approved non-Short videos (kid's explicit requests), newest first."""
+        with self._lock:
+            cursor = self.conn.execute(
+                "SELECT * FROM videos WHERE status = 'approved' AND is_short = 0 "
+                "ORDER BY decided_at DESC, requested_at DESC LIMIT ?",
+                (limit,),
+            )
+            return [dict(row) for row in cursor.fetchall()]
+
     def update_status(self, video_id: str, status: str) -> bool:
         """Update video status and set decided_at timestamp. Returns True if updated."""
         with self._lock:
@@ -499,6 +521,16 @@ class VideoStore:
             )
             self.conn.commit()
             return cursor.rowcount > 0
+
+    def delete_channel_videos(self, channel_name: str) -> int:
+        """Delete all videos belonging to a channel. Returns count deleted."""
+        with self._lock:
+            cursor = self.conn.execute(
+                "DELETE FROM videos WHERE channel_name = ? COLLATE NOCASE",
+                (channel_name,),
+            )
+            self.conn.commit()
+            return cursor.rowcount
 
     def resolve_channel_name(self, name_or_handle: str) -> Optional[str]:
         """Look up channel_name by name or @handle. Returns the display name or None."""

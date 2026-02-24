@@ -423,6 +423,32 @@ def _build_shorts_catalog() -> list[dict]:
     return shorts
 
 
+def _build_requests_row(limit: int = 50) -> list[dict]:
+    """Build 'Your Requests' row from DB-approved non-Short videos.
+
+    Excludes videos from currently-allowlisted channels (those are auto-approved
+    and already appear in the main Channel Videos grid).
+    """
+    if not video_store:
+        return []
+    requests = video_store.get_recent_requests(limit=limit)
+    # Build allowlist set + category map
+    allowed_channels = set()
+    _chan_cats = {}
+    for ch_name, _cid, _h, cat in video_store.get_channels_with_ids("allowed"):
+        allowed_channels.add(ch_name.lower())
+        if cat:
+            _chan_cats[ch_name] = cat
+    # Filter out videos from allowlisted channels
+    filtered = []
+    for v in requests:
+        if v.get("channel_name", "").lower() in allowed_channels:
+            continue
+        v["category"] = _chan_cats.get(v.get("channel_name", ""), v.get("category") or "fun")
+        filtered.append(v)
+    return filtered
+
+
 def _build_catalog(channel_filter: str = "") -> list[dict]:
     """Build unified catalog: interleaved channel-cache videos + DB approved videos."""
     global _catalog_cache, _catalog_cache_time
@@ -520,9 +546,12 @@ async def api_catalog(
     channel: str = Query("", max_length=200),
     category: str = Query("", max_length=10),
     shorts: bool = Query(False),
+    requests: bool = Query(False),
 ):
     """Paginated catalog of all watchable videos."""
-    if shorts:
+    if requests:
+        full = _build_requests_row(limit=200)
+    elif shorts:
         full = _build_shorts_catalog()
     else:
         full = _build_catalog(channel_filter=channel)
@@ -742,9 +771,13 @@ _ERROR_MESSAGES = {
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request, error: str = Query("", max_length=50)):
     """Homepage: search bar + unified video catalog."""
-    page_size = 24
+    page_size = 12
     full_catalog = _build_catalog()
     catalog = full_catalog[:page_size]
+    requests_page = 4
+    full_requests = _build_requests_row(limit=50)
+    requests_row = full_requests[:requests_page]
+    has_more_requests = len(full_requests) > requests_page
     shorts_page = 9
     full_shorts = _build_shorts_catalog()
     shorts_catalog = full_shorts[:shorts_page]
@@ -765,6 +798,8 @@ async def index(request: Request, error: str = Query("", max_length=50)):
         "catalog": catalog,
         "has_more": len(full_catalog) > page_size,
         "total_catalog": len(full_catalog),
+        "requests_row": requests_row,
+        "has_more_requests": has_more_requests,
         "shorts_catalog": shorts_catalog,
         "has_more_shorts": has_more_shorts,
         "shorts_enabled": _shorts_enabled(),
