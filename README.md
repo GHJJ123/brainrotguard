@@ -279,31 +279,7 @@ docker compose -f docker-compose.example.yml pull
 docker compose -f docker-compose.example.yml up -d
 ```
 
-## Running Without Docker
-
-If you'd rather run it directly with Python (e.g., on a Raspberry Pi without Docker):
-
-**Requires:** Python 3.11 or newer
-
-```bash
-git clone https://github.com/GHJJ123/brainrotguard.git
-cd brainrotguard
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Set up secrets and config
-cp .env.example .env
-# Edit .env with your bot token and chat ID
-
-cp config.example.yaml config.yaml
-# Edit config.yaml if you want to change defaults
-
-# Run
-export $(cat .env | xargs) && python main.py -c config.yaml -v
-```
-
-To keep it running in the background, use `screen`, `tmux`, or set up a systemd service.
+Not using Docker Compose? See [Running Without Docker](docs/running-without-docker.md) for a plain Python setup.
 
 ## Documentation
 
@@ -312,6 +288,7 @@ To keep it running in the background, use `screen`, `tmux`, or set up a systemd 
 - [Troubleshooting](docs/troubleshooting.md) — common issues and fixes
 - [Architecture](docs/architecture.md) — system diagrams and request flow
 - [Design Decisions](docs/design-decisions.md) — why yt-dlp, Telegram, SQLite, etc.
+- [Running Without Docker](docs/running-without-docker.md) — plain Python setup (no containers)
 
 ## Project Structure
 
