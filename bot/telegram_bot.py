@@ -491,6 +491,8 @@ class BrainRotGuardBot:
         if parts[0] in ("unallow", "unblock") and len(parts) >= 2:
             ch_name = ":".join(parts[1:])
             if self.video_store.remove_channel(ch_name):
+                if parts[0] == "unallow":
+                    self.video_store.delete_channel_videos(ch_name)
                 if self.on_channel_change:
                     self.on_channel_change()
                 _answer_bg(query, f"Removed: {ch_name}")
@@ -1267,10 +1269,15 @@ class BrainRotGuardBot:
             return
         channel = " ".join(args)
         if self.video_store.remove_channel(channel):
+            if verb == "unallow":
+                deleted = self.video_store.delete_channel_videos(channel)
+            else:
+                deleted = 0
             if self.on_channel_change:
                 self.on_channel_change()
             label = "Removed from allowlist" if verb == "unallow" else "Unblocked"
-            await update.message.reply_text(f"{label}: {channel}. Videos already approved will remain.")
+            extra = f" Deleted {deleted} video{'s' if deleted != 1 else ''} from catalog." if deleted else ""
+            await update.message.reply_text(f"{label}: {channel}.{extra}")
         else:
             await update.message.reply_text(f"Channel not in list: {channel}. Use /channel to see all channels.")
 

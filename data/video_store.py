@@ -510,6 +510,16 @@ class VideoStore:
             self.conn.commit()
             return cursor.rowcount > 0
 
+    def delete_channel_videos(self, channel_name: str) -> int:
+        """Delete all videos belonging to a channel. Returns count deleted."""
+        with self._lock:
+            cursor = self.conn.execute(
+                "DELETE FROM videos WHERE channel_name = ? COLLATE NOCASE",
+                (channel_name,),
+            )
+            self.conn.commit()
+            return cursor.rowcount
+
     def resolve_channel_name(self, name_or_handle: str) -> Optional[str]:
         """Look up channel_name by name or @handle. Returns the display name or None."""
         with self._lock:
