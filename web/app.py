@@ -771,7 +771,7 @@ _ERROR_MESSAGES = {
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request, error: str = Query("", max_length=50)):
     """Homepage: search bar + unified video catalog."""
-    page_size = 24
+    page_size = 12
     full_catalog = _build_catalog()
     catalog = full_catalog[:page_size]
     requests_page = 5
