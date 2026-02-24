@@ -11,8 +11,8 @@
 {% endif %}
 {% if schedule_info and not schedule_info.allowed %}
 <div class="schedule-banner schedule-closed">
-    <span>Videos available {{ schedule_info.unlock_time }}</span>
-    <span class="schedule-detail">{{ schedule_info.start }} &ndash; {{ schedule_info.end }}</span>
+    <span>Available {{ schedule_info.unlock_time }}</span>
+    <span class="schedule-detail">{{ schedule_info.start }}&ndash;{{ schedule_info.end }}</span>
 </div>
 {% elif schedule_info and schedule_info.allowed %}
 <div class="schedule-banner schedule-open">

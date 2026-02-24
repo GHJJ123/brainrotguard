@@ -121,20 +121,18 @@ def parse_time_input(raw: str) -> str | None:
 def format_time_12h(hhmm: str) -> str:
     """Convert "HH:MM" to human-readable 12-hour format.
 
-    "08:00" -> "8:00 AM", "20:00" -> "8:00 PM", "00:00" -> "12:00 AM"
+    "08:00" -> "8 AM", "08:30" -> "8:30 AM", "20:00" -> "8 PM", "00:00" -> "12 AM"
+    Omits minutes when they are :00 for shorter display.
     """
     try:
         h, m = map(int, hhmm.split(":"))
     except (ValueError, AttributeError):
         return hhmm
-    if h == 0:
-        return f"12:{m:02d} AM"
-    elif h < 12:
-        return f"{h}:{m:02d} AM"
-    elif h == 12:
-        return f"12:{m:02d} PM"
-    else:
-        return f"{h - 12}:{m:02d} PM"
+    suffix = "AM" if h < 12 else "PM"
+    display_h = h % 12 or 12
+    if m == 0:
+        return f"{display_h} {suffix}"
+    return f"{display_h}:{m:02d} {suffix}"
 
 
 def is_within_schedule(start_str: str, end_str: str, tz_name: str = "") -> tuple[bool, str]:
