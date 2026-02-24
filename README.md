@@ -66,7 +66,9 @@ I'm a father of a preteen son. I didn't want to block YouTube completely — You
 
 The problem was his feed. It was overrun with gamers screaming into microphones and brainrot content. I'd tell him to change the channel every time I walked by and heard one of those obnoxious gaming videos. He'd switch, but YouTube's algorithm would pull him right back within minutes. The algorithm is designed to keep kids glued — and it's very good at its job.
 
-Every parental control I tried was either too restrictive (block YouTube entirely) or too permissive (YouTube Kids still recommends garbage). I needed the middle ground: let him explore and search freely, but give me the final say on what actually plays. So I vibe-engineered a solution.
+Every parental control I tried was either too restrictive (block YouTube entirely) or too permissive (YouTube Kids still recommends garbage). I needed the middle ground: let him explore and search freely, but give me the final say on what actually plays.
+
+I'm not a developer — just a dad who wanted to protect his kid from YouTube's brainrot algorithms. I am a homelab enthusiast though, so I'm comfortable tinkering with self-hosted tools. I built this entirely with Claude (Anthropic's AI) — I described what I wanted, Claude wrote the code. Every release went through security reviews and code reviews via Claude before I pushed it.
 
 BrainRotGuard removes the algorithm entirely. There's no autoplay, no "up next" sidebar, no recommendation engine pulling him deeper. He searches for what he wants, I approve or deny, and the video plays and stops. Done. No rabbit holes.
 

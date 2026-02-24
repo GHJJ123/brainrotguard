@@ -678,8 +678,7 @@ class BrainRotGuardBot:
         if not await self._require_admin(update):
             return
         from version import __version__
-        base_url = self.config.web.base_url if self.config else ""
-        help_link = f"📖 [Full command reference]({base_url}/help)\n" if base_url else ""
+        help_link = "📖 [Full command reference](https://github.com/GHJJ123/brainrotguard/blob/main/docs/telegram-commands.md)\n"
         await update.message.reply_text(_md(
             f"**BrainRotGuard v{__version__}**\n\n"
             "**Commands:**\n"
