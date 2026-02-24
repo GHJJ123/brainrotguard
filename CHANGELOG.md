@@ -1,4 +1,12 @@
 # Changelog
+## v1.21.1 - 2026-02-23
+
+**Changed**
+- `/help` command now links to GitHub docs instead of the self-hosted help page (always works regardless of `base_url` config)
+
+**Docs**
+- Rewrote `docs/telegram-commands.md` — organized into sections, removed `/denied` (not implemented), added all missing commands (`/approved <search>`, `/channel unallow|unblock`, `/search`, `/stats`, `/logs`, `/shorts`)
+
 ## v1.21.0 - 2026-02-23
 
 **Added**
