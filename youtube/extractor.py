@@ -115,8 +115,8 @@ async def search(query: str, max_results: int = 10) -> list[dict]:
                     if not entry:
                         continue
                     vid_id = entry.get('id')
-                    if not vid_id:
-                        continue
+                    if not vid_id or not _VIDEO_ID_RE.match(vid_id):
+                        continue  # skip channels/playlists mixed into search results
                     videos.append({
                         'video_id': vid_id,
                         'title': entry.get('title', 'Unknown'),
