@@ -1,6 +1,7 @@
 """Approval mixin: video request notifications, auto-approve, child selector, profile deletion."""
 
 import logging
+import re
 from io import BytesIO
 from urllib.parse import urlparse
 
@@ -185,6 +186,16 @@ class ApprovalMixin:
         except Exception:
             await query.edit_message_text(text=result_text, reply_markup=reply_markup, parse_mode=MD2)
 
+    async def _cb_resend(self, query, profile_id: str, video_id: str) -> None:
+        """Resend notification for a pending video from /pending list."""
+        cs = self._child_store(profile_id)
+        video = cs.get_video(video_id)
+        if not video or video['status'] != 'pending':
+            await query.answer("No longer pending.")
+            return
+        _answer_bg(query, "Resending...")
+        await self.notify_new_request(video, profile_id=profile_id)
+
     async def _cb_child_delete_confirm(self, query, profile_id: str) -> None:
         """Handle profile deletion confirmation."""
         p = self.video_store.get_profile(profile_id)
@@ -197,3 +208,133 @@ class ApprovalMixin:
             await _edit_msg(query, _md(f"Deleted profile: **{p['display_name']}** and all associated data."))
         else:
             await query.answer("Failed to delete profile.")
+
+    async def _cb_video_action(self, query, action: str, profile_id: str, video_id: str) -> None:
+        """Handle approve/deny/revoke/allowchan/blockchan/setcat actions on a video."""
+        if not re.fullmatch(r'[a-zA-Z0-9_-]{11}', video_id):
+            await query.answer("Invalid callback.")
+            return
+        cs = self._child_store(profile_id)
+        video = cs.get_video(video_id)
+        if not video:
+            await query.answer("Video not found.")
+            return
+
+        # Category toggle on approved videos (no status change)
+        if action in ("setcat_edu", "setcat_fun") and video["status"] == "approved":
+            cat = "edu" if action == "setcat_edu" else "fun"
+            cs.set_video_category(video_id, cat)
+            cat_label = CAT_LABELS.get(cat, "Entertainment")
+            _answer_bg(query, f"\u2192 {cat_label}")
+            toggle_cat = "edu" if cat == "fun" else "fun"
+            toggle_label = "\u2192 Edu" if toggle_cat == "edu" else "\u2192 Fun"
+            reply_markup = InlineKeyboardMarkup([[
+                InlineKeyboardButton("Revoke", callback_data=f"revoke:{profile_id}:{video_id}"),
+                InlineKeyboardButton(toggle_label, callback_data=f"setcat_{toggle_cat}:{profile_id}:{video_id}"),
+            ]])
+            try:
+                await query.edit_message_reply_markup(reply_markup=reply_markup)
+            except Exception:
+                pass
+            if self.on_video_change:
+                self.on_video_change()
+            return
+
+        yt_link = f"https://www.youtube.com/watch?v={video_id}"
+        duration = format_duration(video.get('duration'))
+
+        if action == "approve" and video['status'] == 'pending':
+            cs.update_status(video_id, "approved")
+            cs.set_video_category(video_id, "fun")
+            _answer_bg(query, "Approved!")
+            status_label = "APPROVED"
+        elif action in ("approve_edu", "approve_fun") and video['status'] == 'pending':
+            cat = "edu" if action == "approve_edu" else "fun"
+            cs.update_status(video_id, "approved")
+            cs.set_video_category(video_id, cat)
+            cat_label = CAT_LABELS.get(cat, "Entertainment")
+            _answer_bg(query, f"Approved ({cat_label})!")
+            status_label = f"APPROVED ({cat_label})"
+        elif action == "deny" and video['status'] == 'pending':
+            cs.update_status(video_id, "denied")
+            _answer_bg(query, "Denied.")
+            status_label = "DENIED"
+        elif action == "revoke" and video['status'] == 'approved':
+            cs.update_status(video_id, "denied")
+            _answer_bg(query, "Revoked!")
+            status_label = "REVOKED"
+        elif action == "allowchan":
+            channel = video['channel_name']
+            cid = video.get('channel_id')
+            cs.add_channel(channel, "allowed", channel_id=cid)
+            self._resolve_channel_bg(channel, cid, video_id=video_id, profile_id=profile_id)
+            if video['status'] == 'pending':
+                cs.update_status(video_id, "approved")
+                cs.set_video_category(video_id, "fun")
+                status_label = "APPROVED + CHANNEL ALLOWED"
+            else:
+                status_label = f"CHANNEL ALLOWED (video already {video['status']})"
+            _answer_bg(query, f"Allowlisted: {channel}")
+            if self.on_channel_change:
+                self.on_channel_change(profile_id)
+        elif action in ("allowchan_edu", "allowchan_fun"):
+            cat = "edu" if action == "allowchan_edu" else "fun"
+            channel = video['channel_name']
+            cid = video.get('channel_id')
+            cs.add_channel(channel, "allowed", channel_id=cid, category=cat)
+            self._resolve_channel_bg(channel, cid, video_id=video_id, profile_id=profile_id)
+            cat_label = CAT_LABELS.get(cat, "Entertainment")
+            if video['status'] == 'pending':
+                cs.update_status(video_id, "approved")
+                cs.set_video_category(video_id, cat)
+                status_label = f"APPROVED + CHANNEL ALLOWED ({cat_label})"
+            else:
+                status_label = f"CHANNEL ALLOWED ({cat_label}) (video already {video['status']})"
+            _answer_bg(query, f"Allowlisted ({cat_label}): {channel}")
+            if self.on_channel_change:
+                self.on_channel_change(profile_id)
+        elif action == "blockchan":
+            channel = video['channel_name']
+            cid = video.get('channel_id')
+            cs.add_channel(channel, "blocked", channel_id=cid)
+            self._resolve_channel_bg(channel, cid, video_id=video_id, profile_id=profile_id)
+            if video['status'] == 'pending':
+                cs.update_status(video_id, "denied")
+                status_label = "DENIED + CHANNEL BLOCKED"
+            else:
+                status_label = f"CHANNEL BLOCKED (video already {video['status']})"
+            _answer_bg(query, f"Blocked: {channel}")
+            if self.on_channel_change:
+                self.on_channel_change(profile_id)
+        else:
+            _answer_bg(query, f"Already {video['status']}.")
+            return
+
+        if self.on_video_change:
+            self.on_video_change()
+
+        channel_link = _channel_md_link(video['channel_name'], video.get('channel_id'))
+        result_text = _md(
+            f"**{status_label}**\n\n"
+            f"**Title:** {video['title']}\n"
+            f"**Channel:** {channel_link}\n"
+            f"**Duration:** {duration}\n"
+            f"[Watch on YouTube]({yt_link})"
+        )
+
+        if status_label.startswith("APPROVED"):
+            video = cs.get_video(video_id)
+            cur_cat = video.get("category", "fun") if video else "fun"
+            toggle_cat = "edu" if cur_cat == "fun" else "fun"
+            toggle_label = "\u2192 Edu" if toggle_cat == "edu" else "\u2192 Fun"
+            reply_markup = InlineKeyboardMarkup([[
+                InlineKeyboardButton("Revoke", callback_data=f"revoke:{profile_id}:{video_id}"),
+                InlineKeyboardButton(toggle_label, callback_data=f"setcat_{toggle_cat}:{profile_id}:{video_id}"),
+            ]])
+        else:
+            reply_markup = None
+
+        try:
+            await query.edit_message_caption(caption=result_text, reply_markup=reply_markup, parse_mode=MD2)
+        except Exception:
+            await query.edit_message_text(text=result_text, reply_markup=reply_markup, parse_mode=MD2)

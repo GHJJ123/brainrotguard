@@ -370,6 +370,41 @@ class ChannelMixin:
         text, markup = self._render_channel_page(status, page, store=cs, profile_id=profile_id)
         await _edit_msg(query, text, markup, disable_preview=True)
 
+    async def _cb_starter_prompt(self, query, choice: str) -> None:
+        """Handle Yes/No from first-run welcome message."""
+        _answer_bg(query, "Got it!" if choice == "no" else "")
+        if choice == "yes":
+            cs = self._child_store("default")
+            text, markup = self._render_starter_message(store=cs, profile_id="default")
+            await _edit_msg(query, text, markup, disable_preview=True)
+        else:
+            try:
+                await query.edit_message_reply_markup(reply_markup=None)
+            except Exception:
+                pass
+
+    async def _cb_channel_remove(self, query, action: str, profile_id: str, ch_name: str) -> None:
+        """Handle unallow/unblock inline button press."""
+        cs = self._child_store(profile_id)
+        # Look up channel_id before removing (remove_channel deletes the row)
+        ch_id = ""
+        ch_rows = cs.get_channels_with_ids(
+            "allowed" if action == "unallow" else "blocked"
+        )
+        for name, cid, _h, _c in ch_rows:
+            if name.lower() == ch_name.lower():
+                ch_id = cid or ""
+                break
+        if cs.remove_channel(ch_name):
+            if action == "unallow":
+                cs.delete_channel_videos(ch_name, channel_id=ch_id)
+            if self.on_channel_change:
+                self.on_channel_change(profile_id)
+            _answer_bg(query, f"Removed: {ch_name}")
+            await self._update_channel_list_message(query, profile_id=profile_id)
+        else:
+            _answer_bg(query, f"Not found: {ch_name}")
+
     async def _update_channel_list_message(self, query, profile_id: str = "default") -> None:
         """Refresh back to channel menu after unallow/unblock."""
         cs = self._child_store(profile_id)

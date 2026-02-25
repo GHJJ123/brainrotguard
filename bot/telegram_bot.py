@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-import re
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
@@ -16,17 +15,16 @@ from telegram.ext import (
 )
 
 from bot.helpers import (
-    _md, _answer_bg, _edit_msg, _channel_md_link,
+    _md, _answer_bg, _edit_msg,
     MD2, _GITHUB_REPO, _UPDATE_CHECK_INTERVAL,
 )
+from bot.callback_router import CallbackRoute, match_route
 from bot.activity import ActivityMixin
 from bot.approval import ApprovalMixin
 from bot.channels import ChannelMixin
 from bot.commands import CommandsMixin
 from bot.timelimits import TimeLimitMixin
 from data.child_store import ChildStore
-from utils import CAT_LABELS
-from youtube.extractor import format_duration
 
 logger = logging.getLogger(__name__)
 
@@ -302,8 +300,56 @@ class BrainRotGuardBot(ApprovalMixin, ChannelMixin, TimeLimitMixin, CommandsMixi
         self.video_store.set_setting("last_notified_version", latest)
         return True
 
+    # -- Callback route table ------------------------------------------------
+    # Each route maps a callback_data prefix to a handler method.
+    # See bot/callback_router.py for field semantics.
+
+    _AB = frozenset({"allowed", "blocked"})  # constraint shorthand
+
+    _CALLBACK_ROUTES: list[CallbackRoute] = [
+        # Approval / child management
+        CallbackRoute("child_sel",       "_cb_child_select",        min_parts=2, answer="", pass_update=True),
+        CallbackRoute("child_del",       "_cb_child_delete_confirm", min_parts=2, answer=""),
+        CallbackRoute("autoapprove",     "_cb_auto_approve",        min_parts=3, answer="Auto-approved!"),
+        CallbackRoute("resend",          "_cb_resend",              min_parts=3, answer=None),
+
+        # Pagination (int conversion on page/day indices)
+        CallbackRoute("approved_page",   "_cb_approved_page",       min_parts=3, answer=None, int_parts=frozenset({2})),
+        CallbackRoute("pending_page",    "_cb_pending_page",        min_parts=3, answer=None, int_parts=frozenset({2})),
+        CallbackRoute("starter_page",    "_cb_starter_page",        min_parts=3, answer=None, int_parts=frozenset({2})),
+        CallbackRoute("starter_import",  "_cb_starter_import",      min_parts=3, answer=None, int_parts=frozenset({2})),
+        CallbackRoute("logs_page",       "_cb_logs_page",           min_parts=4, answer=None, int_parts=frozenset({2, 3})),
+        CallbackRoute("search_page",     "_cb_search_page",         min_parts=4, answer=None, int_parts=frozenset({2, 3})),
+
+        # Channel management
+        CallbackRoute("chan_page",       "_cb_channel_page",        min_parts=4, answer=None,
+                       constraints={2: _AB}, int_parts=frozenset({3})),
+        CallbackRoute("chan_filter",     "_cb_channel_filter",      min_parts=3, answer=None,
+                       constraints={2: _AB}),
+        CallbackRoute("chan_menu",       "_cb_channel_menu",        min_parts=2, answer=None),
+        CallbackRoute("starter_prompt",  "_cb_starter_prompt",      min_parts=2, answer=None),
+        # unallow/unblock: channel names may contain colons → rejoin from index 2
+        CallbackRoute("unallow",         "_cb_channel_remove",      min_parts=3, answer=None, rejoin_from=2),
+        CallbackRoute("unblock",         "_cb_channel_remove",      min_parts=3, answer=None, rejoin_from=2),
+
+        # Time limit wizard
+        CallbackRoute("setup_top",          "_cb_setup_top",          min_parts=2, answer=""),
+        CallbackRoute("setup_sched_start",  "_cb_setup_sched_start",  min_parts=2, answer="", rejoin_from=1),
+        CallbackRoute("setup_sched_stop",   "_cb_setup_sched_stop",   min_parts=2, answer="", rejoin_from=1),
+        CallbackRoute("setup_sched_day",    "_cb_setup_sched_day",    min_parts=2, answer=""),
+        CallbackRoute("setup_sched_apply",  "_cb_setup_sched_apply",  min_parts=2, answer=""),
+        CallbackRoute("setup_sched_done",   "_cb_setup_sched_done",   min_parts=1, answer=""),
+        CallbackRoute("setup_daystart",     "_cb_setup_daystart",     min_parts=3, answer="", rejoin_from=2),
+        CallbackRoute("setup_daystop",      "_cb_setup_daystop",      min_parts=3, answer="", rejoin_from=2),
+        CallbackRoute("setup_mode",         "_cb_setup_mode",         min_parts=2, answer=""),
+        CallbackRoute("setup_simple",       "_cb_setup_simple",       min_parts=2, answer=""),
+        CallbackRoute("setup_edu",          "_cb_setup_edu",          min_parts=2, answer=""),
+        CallbackRoute("setup_fun",          "_cb_setup_fun",          min_parts=2, answer=""),
+        CallbackRoute("switch_confirm",     "_cb_switch_confirm",     min_parts=2, answer="", rejoin_from=1),
+    ]
+
     async def _handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Handle inline button callbacks for approve/deny/pagination."""
+        """Dispatch inline button callbacks via the route table."""
         query = update.callback_query
         if not await self._require_admin(update):
             return
@@ -314,173 +360,27 @@ class BrainRotGuardBot(ApprovalMixin, ChannelMixin, TimeLimitMixin, CommandsMixi
             return
         parts = data.split(":")
 
-        # Child selector callback
-        if parts[0] == "child_sel" and len(parts) == 2:
-            _answer_bg(query)
-            await self._cb_child_select(query, update, context, parts[1])
-            return
-
-        # Child profile deletion confirmation
-        if parts[0] == "child_del" and len(parts) == 2:
-            _answer_bg(query)
-            await self._cb_child_delete_confirm(query, parts[1])
-            return
-
-        # Cross-child auto-approve
-        if parts[0] == "autoapprove" and len(parts) == 3:
-            _answer_bg(query, "Auto-approved!")
-            await self._cb_auto_approve(query, parts[1], parts[2])
-            return
-
-        # Pagination callbacks
-        try:
-            if parts[0] == "approved_page" and len(parts) == 3:
-                await self._cb_approved_page(query, parts[1], int(parts[2]))
-                return
-            if parts[0] == "logs_page" and len(parts) == 4:
-                await self._cb_logs_page(query, parts[1], int(parts[2]), int(parts[3]))
-                return
-            if parts[0] == "search_page" and len(parts) == 4:
-                await self._cb_search_page(query, parts[1], int(parts[2]), int(parts[3]))
-                return
-            if parts[0] == "chan_page" and len(parts) == 4 and parts[2] in ("allowed", "blocked"):
-                await self._cb_channel_page(query, parts[1], parts[2], int(parts[3]))
-                return
-            if parts[0] == "chan_filter" and len(parts) == 3 and parts[2] in ("allowed", "blocked"):
-                await self._cb_channel_filter(query, parts[1], parts[2])
-                return
-            if parts[0] == "chan_menu" and len(parts) == 2:
-                await self._cb_channel_menu(query, parts[1])
-                return
-            if parts[0] == "pending_page" and len(parts) == 3:
-                await self._cb_pending_page(query, parts[1], int(parts[2]))
-                return
-            if parts[0] == "starter_page" and len(parts) == 3:
-                await self._cb_starter_page(query, parts[1], int(parts[2]))
-                return
-        except (ValueError, IndexError):
-            await query.answer("Invalid callback.")
-            return
-
-        # Starter channels prompt (Yes/No from welcome message — first-run, default profile)
-        if parts[0] == "starter_prompt" and len(parts) == 2:
-            _answer_bg(query, "Got it!" if parts[1] == "no" else "")
-            if parts[1] == "yes":
-                cs = self._child_store("default")
-                text, markup = self._render_starter_message(store=cs, profile_id="default")
-                await _edit_msg(query, text, markup, disable_preview=True)
-            else:
-                try:
-                    await query.edit_message_reply_markup(reply_markup=None)
-                except Exception:
-                    pass
-            return
-
-        # Starter channel import: starter_import:profile_id:idx
-        if parts[0] == "starter_import" and len(parts) == 3:
+        result = match_route(self._CALLBACK_ROUTES, parts)
+        if result is not None:
+            route, args = result
+            # Auto-answer the callback query
+            if route.answer is not None:
+                _answer_bg(query, route.answer)
+            handler = getattr(self, route.handler)
             try:
-                await self._cb_starter_import(query, parts[1], int(parts[2]))
+                if route.pass_update:
+                    await handler(query, update, context, *args)
+                elif route.prefix in ("unallow", "unblock"):
+                    # Channel remove needs the action prefix as first arg
+                    await handler(query, route.prefix, *args)
+                else:
+                    await handler(query, *args)
             except (ValueError, IndexError):
                 await query.answer("Invalid callback.")
             return
 
-        # Time limit wizard callbacks
-        if parts[0] == "setup_top" and len(parts) == 2:
-            _answer_bg(query)
-            await self._cb_setup_top(query, parts[1])
-            return
-        if parts[0] == "setup_sched_start" and len(parts) >= 2:
-            _answer_bg(query)
-            await self._cb_setup_sched_start(query, ":".join(parts[1:]))
-            return
-        if parts[0] == "setup_sched_stop" and len(parts) >= 2:
-            _answer_bg(query)
-            await self._cb_setup_sched_stop(query, ":".join(parts[1:]))
-            return
-        if parts[0] == "setup_sched_day" and len(parts) == 2:
-            _answer_bg(query)
-            await self._cb_setup_sched_day(query, parts[1])
-            return
-        if parts[0] == "setup_sched_apply" and len(parts) == 2:
-            _answer_bg(query)
-            await self._cb_setup_sched_apply(query, parts[1])
-            return
-        if parts[0] == "setup_sched_done":
-            _answer_bg(query)
-            await self._cb_setup_sched_done(query)
-            return
-        if parts[0] == "setup_daystart" and len(parts) >= 3:
-            _answer_bg(query)
-            day = parts[1]
-            value = ":".join(parts[2:])
-            await self._cb_setup_daystart(query, day, value)
-            return
-        if parts[0] == "setup_daystop" and len(parts) >= 3:
-            _answer_bg(query)
-            day = parts[1]
-            value = ":".join(parts[2:])
-            await self._cb_setup_daystop(query, day, value)
-            return
-        if parts[0] == "setup_mode" and len(parts) == 2:
-            _answer_bg(query)
-            await self._cb_setup_mode(query, parts[1])
-            return
-        if parts[0] == "setup_simple" and len(parts) == 2:
-            _answer_bg(query)
-            await self._cb_setup_simple(query, parts[1])
-            return
-        if parts[0] == "setup_edu" and len(parts) == 2:
-            _answer_bg(query)
-            await self._cb_setup_edu(query, parts[1])
-            return
-        if parts[0] == "setup_fun" and len(parts) == 2:
-            _answer_bg(query)
-            await self._cb_setup_fun(query, parts[1])
-            return
-        if parts[0] == "switch_confirm" and len(parts) >= 2:
-            _answer_bg(query)
-            await self._cb_switch_confirm(query, ":".join(parts[1:]))
-            return
-
-        # Channel management callbacks: unallow:profile_id:name or unblock:profile_id:name
-        # Channel names may contain colons, so rejoin everything after second ':'
-        if parts[0] in ("unallow", "unblock") and len(parts) >= 3:
-            profile_id = parts[1]
-            ch_name = ":".join(parts[2:])
-            cs = self._child_store(profile_id)
-            # Look up channel_id before removing (remove_channel deletes the row)
-            ch_id = ""
-            ch_rows = cs.get_channels_with_ids(
-                "allowed" if parts[0] == "unallow" else "blocked"
-            )
-            for name, cid, _h, _c in ch_rows:
-                if name.lower() == ch_name.lower():
-                    ch_id = cid or ""
-                    break
-            if cs.remove_channel(ch_name):
-                if parts[0] == "unallow":
-                    cs.delete_channel_videos(ch_name, channel_id=ch_id)
-                if self.on_channel_change:
-                    self.on_channel_change(profile_id)
-                _answer_bg(query, f"Removed: {ch_name}")
-                await self._update_channel_list_message(query, profile_id=profile_id)
-            else:
-                _answer_bg(query, f"Not found: {ch_name}")
-            return
-
-        # Resend notification callback from /pending: resend:profile_id:video_id
-        if parts[0] == "resend" and len(parts) == 3:
-            profile_id = parts[1]
-            cs = self._child_store(profile_id)
-            video = cs.get_video(parts[2])
-            if not video or video['status'] != 'pending':
-                await query.answer("No longer pending.")
-                return
-            _answer_bg(query, "Resending...")
-            await self.notify_new_request(video, profile_id=profile_id)
-            return
-
-        # New format: action:profile_id:video_id (3 parts) or legacy action:video_id (2 parts)
+        # Fallthrough: video action callbacks (approve/deny/revoke/allowchan/blockchan/setcat)
+        # Format: action:profile_id:video_id (3 parts) or legacy action:video_id (2 parts)
         if len(parts) == 3:
             action, profile_id, video_id = parts
         elif len(parts) == 2:
@@ -490,131 +390,5 @@ class BrainRotGuardBot(ApprovalMixin, ChannelMixin, TimeLimitMixin, CommandsMixi
             await query.answer("Invalid callback.")
             return
 
-        if not re.fullmatch(r'[a-zA-Z0-9_-]{11}', video_id):
-            await query.answer("Invalid callback.")
-            return
-        cs = self._child_store(profile_id)
-        video = cs.get_video(video_id)
-        if not video:
-            await query.answer("Video not found.")
-            return
-
-        # Category toggle on approved videos (no status change)
-        if action in ("setcat_edu", "setcat_fun") and video["status"] == "approved":
-            cat = "edu" if action == "setcat_edu" else "fun"
-            cs.set_video_category(video_id, cat)
-            cat_label = CAT_LABELS.get(cat, "Entertainment")
-            _answer_bg(query, f"→ {cat_label}")
-            toggle_cat = "edu" if cat == "fun" else "fun"
-            toggle_label = "→ Edu" if toggle_cat == "edu" else "→ Fun"
-            reply_markup = InlineKeyboardMarkup([[
-                InlineKeyboardButton("Revoke", callback_data=f"revoke:{profile_id}:{video_id}"),
-                InlineKeyboardButton(toggle_label, callback_data=f"setcat_{toggle_cat}:{profile_id}:{video_id}"),
-            ]])
-            try:
-                await query.edit_message_reply_markup(reply_markup=reply_markup)
-            except Exception:
-                pass
-            if self.on_video_change:
-                self.on_video_change()
-            return
-
-        yt_link = f"https://www.youtube.com/watch?v={video_id}"
-        duration = format_duration(video.get('duration'))
-
-        if action == "approve" and video['status'] == 'pending':
-            cs.update_status(video_id, "approved")
-            cs.set_video_category(video_id, "fun")
-            _answer_bg(query, "Approved!")
-            status_label = "APPROVED"
-        elif action in ("approve_edu", "approve_fun") and video['status'] == 'pending':
-            cat = "edu" if action == "approve_edu" else "fun"
-            cs.update_status(video_id, "approved")
-            cs.set_video_category(video_id, cat)
-            cat_label = CAT_LABELS.get(cat, "Entertainment")
-            _answer_bg(query, f"Approved ({cat_label})!")
-            status_label = f"APPROVED ({cat_label})"
-        elif action == "deny" and video['status'] == 'pending':
-            cs.update_status(video_id, "denied")
-            _answer_bg(query, "Denied.")
-            status_label = "DENIED"
-        elif action == "revoke" and video['status'] == 'approved':
-            cs.update_status(video_id, "denied")
-            _answer_bg(query, "Revoked!")
-            status_label = "REVOKED"
-        elif action == "allowchan":
-            channel = video['channel_name']
-            cid = video.get('channel_id')
-            cs.add_channel(channel, "allowed", channel_id=cid)
-            self._resolve_channel_bg(channel, cid, video_id=video_id, profile_id=profile_id)
-            if video['status'] == 'pending':
-                cs.update_status(video_id, "approved")
-                cs.set_video_category(video_id, "fun")
-                status_label = "APPROVED + CHANNEL ALLOWED"
-            else:
-                status_label = f"CHANNEL ALLOWED (video already {video['status']})"
-            _answer_bg(query, f"Allowlisted: {channel}")
-            if self.on_channel_change:
-                self.on_channel_change(profile_id)
-        elif action in ("allowchan_edu", "allowchan_fun"):
-            cat = "edu" if action == "allowchan_edu" else "fun"
-            channel = video['channel_name']
-            cid = video.get('channel_id')
-            cs.add_channel(channel, "allowed", channel_id=cid, category=cat)
-            self._resolve_channel_bg(channel, cid, video_id=video_id, profile_id=profile_id)
-            cat_label = CAT_LABELS.get(cat, "Entertainment")
-            if video['status'] == 'pending':
-                cs.update_status(video_id, "approved")
-                cs.set_video_category(video_id, cat)
-                status_label = f"APPROVED + CHANNEL ALLOWED ({cat_label})"
-            else:
-                status_label = f"CHANNEL ALLOWED ({cat_label}) (video already {video['status']})"
-            _answer_bg(query, f"Allowlisted ({cat_label}): {channel}")
-            if self.on_channel_change:
-                self.on_channel_change(profile_id)
-        elif action == "blockchan":
-            channel = video['channel_name']
-            cid = video.get('channel_id')
-            cs.add_channel(channel, "blocked", channel_id=cid)
-            self._resolve_channel_bg(channel, cid, video_id=video_id, profile_id=profile_id)
-            if video['status'] == 'pending':
-                cs.update_status(video_id, "denied")
-                status_label = "DENIED + CHANNEL BLOCKED"
-            else:
-                status_label = f"CHANNEL BLOCKED (video already {video['status']})"
-            _answer_bg(query, f"Blocked: {channel}")
-            if self.on_channel_change:
-                self.on_channel_change(profile_id)
-        else:
-            _answer_bg(query, f"Already {video['status']}.")
-            return
-
-        if self.on_video_change:
-            self.on_video_change()
-
-        channel_link = _channel_md_link(video['channel_name'], video.get('channel_id'))
-        result_text = _md(
-            f"**{status_label}**\n\n"
-            f"**Title:** {video['title']}\n"
-            f"**Channel:** {channel_link}\n"
-            f"**Duration:** {duration}\n"
-            f"[Watch on YouTube]({yt_link})"
-        )
-
-        if status_label.startswith("APPROVED"):
-            video = cs.get_video(video_id)
-            cur_cat = video.get("category", "fun") if video else "fun"
-            toggle_cat = "edu" if cur_cat == "fun" else "fun"
-            toggle_label = "→ Edu" if toggle_cat == "edu" else "→ Fun"
-            reply_markup = InlineKeyboardMarkup([[
-                InlineKeyboardButton("Revoke", callback_data=f"revoke:{profile_id}:{video_id}"),
-                InlineKeyboardButton(toggle_label, callback_data=f"setcat_{toggle_cat}:{profile_id}:{video_id}"),
-            ]])
-        else:
-            reply_markup = None
-
-        try:
-            await query.edit_message_caption(caption=result_text, reply_markup=reply_markup, parse_mode=MD2)
-        except Exception:
-            await query.edit_message_text(text=result_text, reply_markup=reply_markup, parse_mode=MD2)
+        await self._cb_video_action(query, action, profile_id, video_id)
 
