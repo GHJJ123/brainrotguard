@@ -1,4 +1,14 @@
 # Changelog
+## v1.26.2 - 2026-02-25
+
+**Fixed**
+- Replaced false-positive protocol mock test with structural method check
+- Strengthened wrong-PIN and invalid-video-ID integration tests (real assertions instead of conditionals)
+- Backfill task now properly cancelled on shutdown (faster stop)
+
+**Removed**
+- Dead `sample_config` fixture, unused config imports, dead `templates` import
+
 ## v1.26.1 - 2026-02-25
 
 **Fixed**
