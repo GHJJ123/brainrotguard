@@ -77,16 +77,24 @@
     <h2>Approvals</h2>
     <p class="note">When a child requests a video from a non-allowlisted channel, you get a Telegram notification with Approve/Deny buttons. These commands let you review the queue.</p>
     <div class="cmd"><code>/pending</code> <span>List videos waiting for approval</span></div>
-    <div class="cmd"><code>/approved</code> <span>List approved videos (with channel links)</span></div>
-    <div class="cmd"><code>/denied</code> <span>List denied videos</span></div>
+    <div class="cmd"><code>/approved</code> <span>List approved videos with view counts</span></div>
+    <div class="cmd"><code>/stats</code> <span>Summary: total approved, denied, pending, and views</span></div>
 
     <h2>Channels</h2>
     <p class="note">Allowed channels auto-approve all future videos from that channel. Blocked channels auto-deny. Each allowed channel has a category (edu or fun) that determines which time budget it counts against.</p>
     <div class="cmd"><code>/channel</code> <span>Show allowed/blocked channel counts with filter buttons</span></div>
     <div class="cmd"><code>/channel allow @handle [edu|fun]</code> <span>Allow a channel (optional category, defaults to fun)</span></div>
     <div class="cmd"><code>/channel block @handle</code> <span>Block a channel — all future requests auto-denied</span></div>
+    <div class="cmd"><code>/channel unallow &lt;name&gt;</code> <span>Remove a channel from the allowlist</span></div>
+    <div class="cmd"><code>/channel unblock &lt;name&gt;</code> <span>Remove a channel from the blocklist</span></div>
     <div class="cmd"><code>/channel cat &lt;name&gt; edu|fun</code> <span>Recategorize an allowed channel</span></div>
     <div class="cmd"><code>/channel starter</code> <span>Browse and import kid-friendly starter channels</span></div>
+
+    <h2>Filters &amp; Search</h2>
+    <div class="cmd"><code>/filter</code> <span>List active word filters</span></div>
+    <div class="cmd"><code>/filter add &lt;word&gt;</code> <span>Hide videos with this word in the title</span></div>
+    <div class="cmd"><code>/filter remove &lt;word&gt;</code> <span>Remove a word filter</span></div>
+    <div class="cmd"><code>/search [days|today|all]</code> <span>View child search history (default: last 7 days)</span></div>
 
     <h2>Getting Started</h2>
     <p class="note">The easiest way to configure schedules and time limits is the setup wizard. It walks you through everything with inline buttons — no need to remember command syntax.</p>
@@ -102,7 +110,7 @@
     <p class="note">You can either set separate limits per category (edu vs fun) or a single combined limit — not both.</p>
     <div class="cmd"><code>/time edu &lt;min|off&gt;</code> <span>Set daily educational limit (e.g. <code>120</code>, <code>off</code>)</span></div>
     <div class="cmd"><code>/time fun &lt;min|off&gt;</code> <span>Set daily entertainment limit (e.g. <code>60</code>, <code>off</code>)</span></div>
-    <div class="cmd"><code>/time limit &lt;min&gt;</code> <span>Set a single daily limit (no category split)</span></div>
+    <div class="cmd"><code>/time &lt;min|off&gt;</code> <span>Set a single daily limit (no category split)</span></div>
     <p class="note">Setting a category limit auto-clears the global limit, and vice versa.</p>
 
     <h2>Bonus &amp; Activity</h2>
@@ -111,6 +119,7 @@
     <div class="cmd"><code>/watch</code> <span>Today's watch activity — per-category and per-video breakdown</span></div>
     <div class="cmd"><code>/watch yesterday</code> <span>Yesterday's activity</span></div>
     <div class="cmd"><code>/watch &lt;N&gt;</code> <span>Activity from N days ago</span></div>
+    <div class="cmd"><code>/logs [days|today]</code> <span>Activity report for a given period</span></div>
 
     <h2>Day Overrides</h2>
     <p class="note">Override schedule or limits for specific days of the week (e.g. longer screen time on weekends). You can also set these up through <code>/time setup</code>.</p>
@@ -127,5 +136,16 @@
     <div class="cmd"><code>/shorts on</code> <span>Enable Shorts — shows dedicated row on homepage, fetches from allowlisted channels</span></div>
     <div class="cmd"><code>/shorts off</code> <span>Disable Shorts — hides from homepage, catalog, and search results</span></div>
     <p class="note">Shorts are disabled by default. Approved Shorts stay in the database when disabled — nothing is deleted.</p>
+
+    <h2>Profiles</h2>
+    <p class="note">Manage child profiles. Each profile has its own PIN, watch history, and time budgets.</p>
+    <div class="cmd"><code>/child</code> <span>List child profiles</span></div>
+    <div class="cmd"><code>/child add &lt;name&gt; [pin]</code> <span>Add a new child profile with optional PIN</span></div>
+    <div class="cmd"><code>/child remove &lt;name&gt;</code> <span>Remove a child profile</span></div>
+    <div class="cmd"><code>/child rename &lt;name&gt;</code> <span>Rename a child profile</span></div>
+    <div class="cmd"><code>/child pin &lt;name&gt;</code> <span>Change a child profile's PIN</span></div>
+
+    <h2>Other</h2>
+    <div class="cmd"><code>/changelog</code> <span>Show what's new in the latest version</span></div>
 </body>
 </html>

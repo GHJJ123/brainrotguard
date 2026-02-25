@@ -58,11 +58,22 @@ Once BrainRotGuard is running, these commands are available in your Telegram cha
 | `/time <day> off` | Clear all overrides for a day (falls back to defaults) |
 | `/time <day> copy <targets>` | Copy day overrides to other days (e.g. `weekdays`, `weekend`, `all`) |
 
+## Profiles
+
+| Command | What It Does |
+|---------|-------------|
+| `/child` | List child profiles |
+| `/child add <name> [pin]` | Add a new child profile with optional PIN |
+| `/child remove <name>` | Remove a child profile |
+| `/child rename <name>` | Rename a child profile |
+| `/child pin <name>` | Change a child profile's PIN |
+
 ## Other
 
 | Command | What It Does |
 |---------|-------------|
 | `/shorts [on\|off]` | Enable or disable YouTube Shorts playback |
+| `/changelog` | Show what's new in the latest version |
 | `/start` | Welcome message explaining bot purpose and starter channels |
 
 ## Approval Flow
