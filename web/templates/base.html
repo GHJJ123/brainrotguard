@@ -17,6 +17,7 @@
             <a href="/"><img src="/static/logo.png" alt="BrainRotGuard" class="logo-img"></a>
             <a href="https://github.com/GHJJ123/brainrotguard/blob/main/CHANGELOG.md" target="_blank" rel="noopener" class="version-tag">v{{ app_version }}</a>
         </div>
+        {% if child_name %}
         <div class="search-dropdown-wrap">
             <button type="button" class="search-toggle" onclick="var d=this.nextElementSibling;d.classList.toggle('open');if(d.classList.contains('open'))d.querySelector('input').focus();">&#x1F50D;</button>
             <div class="search-dropdown">
@@ -31,6 +32,7 @@
             <input type="text" name="q" placeholder="Search or paste a link..." class="header-search-input" {% block search_attrs %}{% endblock %}>
             <button type="submit" class="btn-primary header-search-btn">Search</button>
         </form>
+        {% endif %}
         {% if child_name %}
         <div class="avatar-dropdown-wrap">
             <button type="button" class="profile-badge avatar-toggle" onclick="document.querySelector('.avatar-dropdown').classList.toggle('open')">
