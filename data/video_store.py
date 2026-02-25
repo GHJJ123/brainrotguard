@@ -102,6 +102,8 @@ class VideoStore:
         self._add_column_if_missing("channels", "category", "TEXT")
         self._add_column_if_missing("videos", "category", "TEXT")
         self._add_column_if_missing("videos", "is_short", "INTEGER DEFAULT 0")
+        self._add_column_if_missing("profiles", "avatar_icon", "TEXT")
+        self._add_column_if_missing("profiles", "avatar_color", "TEXT")
         self.conn.execute("""
             CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
@@ -139,8 +141,8 @@ class VideoStore:
         # Run multi-child profile migrations for existing databases
         self._migrate_profile_id()
 
-    _ALLOWED_TABLES = {"channels", "videos", "watch_log", "settings", "search_log", "word_filters"}
-    _ALLOWED_COLUMNS = {"channel_id", "handle", "category", "is_short", "profile_id"}
+    _ALLOWED_TABLES = {"channels", "videos", "watch_log", "settings", "search_log", "word_filters", "profiles"}
+    _ALLOWED_COLUMNS = {"channel_id", "handle", "category", "is_short", "profile_id", "avatar_icon", "avatar_color"}
 
     def _add_column_if_missing(self, table: str, column: str, col_type: str) -> None:
         """Add a column to a table if it doesn't already exist (migration helper)."""
@@ -247,7 +249,7 @@ class VideoStore:
         """Get all profiles."""
         with self._lock:
             cursor = self.conn.execute(
-                "SELECT id, display_name, pin, created_at FROM profiles ORDER BY created_at"
+                "SELECT id, display_name, pin, created_at, avatar_icon, avatar_color FROM profiles ORDER BY created_at"
             )
             return [dict(row) for row in cursor.fetchall()]
 
@@ -255,7 +257,7 @@ class VideoStore:
         """Get a profile by ID."""
         with self._lock:
             cursor = self.conn.execute(
-                "SELECT id, display_name, pin, created_at FROM profiles WHERE id = ?",
+                "SELECT id, display_name, pin, created_at, avatar_icon, avatar_color FROM profiles WHERE id = ?",
                 (profile_id,),
             )
             row = cursor.fetchone()
@@ -267,7 +269,7 @@ class VideoStore:
             return None
         with self._lock:
             cursor = self.conn.execute(
-                "SELECT id, display_name, pin, created_at FROM profiles WHERE pin = ?",
+                "SELECT id, display_name, pin, created_at, avatar_icon, avatar_color FROM profiles WHERE pin = ?",
                 (pin,),
             )
             row = cursor.fetchone()
@@ -297,6 +299,28 @@ class VideoStore:
         if pin is not None:
             parts.append("pin = ?")
             params.append(pin)
+        if not parts:
+            return False
+        params.append(profile_id)
+        with self._lock:
+            cursor = self.conn.execute(
+                f"UPDATE profiles SET {', '.join(parts)} WHERE id = ?",
+                params,
+            )
+            self.conn.commit()
+            return cursor.rowcount > 0
+
+    def update_profile_avatar(self, profile_id: str, icon: Optional[str] = None,
+                              color: Optional[str] = None) -> bool:
+        """Update a profile's avatar icon and/or color. Returns True if updated."""
+        parts = []
+        params = []
+        if icon is not None:
+            parts.append("avatar_icon = ?")
+            params.append(icon)
+        if color is not None:
+            parts.append("avatar_color = ?")
+            params.append(color)
         if not parts:
             return False
         params.append(profile_id)

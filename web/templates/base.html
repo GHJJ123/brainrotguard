@@ -22,15 +22,29 @@
             <button type="submit" class="btn-primary header-search-btn">Search</button>
         </form>
         {% if child_name %}
-        {% if multi_profile %}
-        <a href="/switch-profile" class="profile-badge">
-            <span class="profile-avatar">{{ child_name[0] }}</span>
-        </a>
-        {% else %}
-        <span class="profile-badge">
-            <span class="profile-avatar">{{ child_name[0] }}</span>
-        </span>
-        {% endif %}
+        <div class="avatar-dropdown-wrap">
+            <button type="button" class="profile-badge avatar-toggle" onclick="document.querySelector('.avatar-dropdown').classList.toggle('open')">
+                <span class="profile-avatar" id="hdr-avatar" style="{% if avatar_color %}background:{{ avatar_color }}{% endif %}">{{ avatar_icon if avatar_icon else child_name[0] }}</span>
+            </button>
+            <div class="avatar-dropdown">
+                <div class="avatar-dd-greeting">Hi {{ child_name }}!</div>
+                <div class="avatar-dd-label">Pick your icon</div>
+                <div class="avatar-grid">
+                    {% for ic in avatar_icons %}
+                    <button type="button" class="avatar-option{% if ic == avatar_icon %} selected{% endif %}" data-icon="{{ ic }}">{{ ic }}</button>
+                    {% endfor %}
+                </div>
+                <div class="avatar-dd-label">Pick your color</div>
+                <div class="color-grid">
+                    {% for c in avatar_colors %}
+                    <button type="button" class="color-option{% if c == avatar_color %} selected{% endif %}" data-color="{{ c }}" style="background:{{ c }}"></button>
+                    {% endfor %}
+                </div>
+                {% if multi_profile %}
+                <a href="/switch-profile" class="avatar-switch-link">Switch Profile</a>
+                {% endif %}
+            </div>
+        </div>
         {% endif %}
     </header>
     <div class="search-overlay" onclick="if(event.target===this)this.classList.remove('open')">
@@ -47,5 +61,35 @@
         <a href="https://ko-fi.com/coffee4jj" target="_blank" rel="noopener">☕ Buy me a coffee</a>
     </footer>
     {% block scripts %}{% endblock %}
+    <script>
+    (function(){
+        var wrap=document.querySelector('.avatar-dropdown-wrap');
+        if(!wrap) return;
+        var dd=wrap.querySelector('.avatar-dropdown');
+        var av=document.getElementById('hdr-avatar');
+        // Close on outside click
+        document.addEventListener('click',function(e){if(!wrap.contains(e.target))dd.classList.remove('open')});
+        // Icon selection
+        dd.querySelectorAll('.avatar-option').forEach(function(btn){
+            btn.addEventListener('click',function(){
+                dd.querySelectorAll('.avatar-option').forEach(function(b){b.classList.remove('selected')});
+                btn.classList.add('selected');
+                var icon=btn.dataset.icon;
+                av.textContent=icon;
+                fetch('/api/avatar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({icon:icon})});
+            });
+        });
+        // Color selection
+        dd.querySelectorAll('.color-option').forEach(function(btn){
+            btn.addEventListener('click',function(){
+                dd.querySelectorAll('.color-option').forEach(function(b){b.classList.remove('selected')});
+                btn.classList.add('selected');
+                var color=btn.dataset.color;
+                av.style.background=color;
+                fetch('/api/avatar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({color:color})});
+            });
+        });
+    })();
+    </script>
 </body>
 </html>

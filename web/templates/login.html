@@ -9,7 +9,7 @@
         <h2>Who's Watching?</h2>
         <div class="profile-picker">
             {% for p in profiles %}
-            <a href="/login?profile={{ p.id }}" class="profile-btn">{{ p.display_name }}</a>
+            <a href="/login?profile={{ p.id }}" class="profile-btn"><span class="profile-btn-avatar" style="background:{{ p.avatar_color or '#e94560' }}">{{ p.avatar_icon or p.display_name[0] }}</span>{{ p.display_name }}</a>
             {% endfor %}
         </div>
     </div>

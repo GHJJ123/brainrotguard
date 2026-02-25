@@ -48,6 +48,9 @@ youtube_config = None
 web_config = None
 wl_config = None  # WatchLimitsConfig
 
+AVATAR_ICONS = ["🐱", "🐶", "🐻", "🦊", "🐸", "🐼", "🚀", "⭐", "🌙", "⚽", "🏀", "🎮", "🎨", "🎵", "🦖", "🌈"]
+AVATAR_COLORS = ["#e94560", "#4caf50", "#2196f3", "#ff9800", "#9c27b0", "#00bcd4", "#ff5722", "#607d8b"]
+
 
 class HeartbeatRequest(BaseModel):
     video_id: str
@@ -107,6 +110,8 @@ class PinAuthMiddleware(BaseHTTPMiddleware):
             if len(profiles) == 1 and not profiles[0]["pin"]:
                 request.session["child_id"] = profiles[0]["id"]
                 request.session["child_name"] = profiles[0]["display_name"]
+                request.session["avatar_icon"] = profiles[0].get("avatar_icon") or ""
+                request.session["avatar_color"] = profiles[0].get("avatar_color") or ""
                 return await call_next(request)
             if not profiles:
                 # No profiles at all — shouldn't happen after bootstrap, but handle gracefully
@@ -297,10 +302,26 @@ def _get_child_name(request: Request) -> str:
 def _base_ctx(request: Request) -> dict:
     """Common template context: child_name + multi_profile for base.html header."""
     profiles = video_store.get_profiles() if video_store else []
+    # Populate avatar fields from session (or DB on first load after upgrade)
+    avatar_icon = request.session.get("avatar_icon", "")
+    avatar_color = request.session.get("avatar_color", "")
+    if not avatar_icon and not avatar_color and request.session.get("child_id") and video_store:
+        p = video_store.get_profile(request.session["child_id"])
+        if p:
+            avatar_icon = p.get("avatar_icon") or ""
+            avatar_color = p.get("avatar_color") or ""
+            if avatar_icon:
+                request.session["avatar_icon"] = avatar_icon
+            if avatar_color:
+                request.session["avatar_color"] = avatar_color
     return {
         "request": request,
         "child_name": _get_child_name(request),
         "multi_profile": len(profiles) > 1,
+        "avatar_icon": avatar_icon,
+        "avatar_color": avatar_color,
+        "avatar_icons": AVATAR_ICONS,
+        "avatar_colors": AVATAR_COLORS,
     }
 
 
@@ -841,6 +862,8 @@ async def login_page(request: Request, profile: str = Query("", max_length=50)):
     if len(profiles) == 1 and not profiles[0]["pin"]:
         request.session["child_id"] = profiles[0]["id"]
         request.session["child_name"] = profiles[0]["display_name"]
+        request.session["avatar_icon"] = profiles[0].get("avatar_icon") or ""
+        request.session["avatar_color"] = profiles[0].get("avatar_color") or ""
         return RedirectResponse(url="/", status_code=303)
 
     csrf_token = _get_csrf_token(request)
@@ -852,6 +875,8 @@ async def login_page(request: Request, profile: str = Query("", max_length=50)):
             # No PIN required — log in immediately
             request.session["child_id"] = p["id"]
             request.session["child_name"] = p["display_name"]
+            request.session["avatar_icon"] = p.get("avatar_icon") or ""
+            request.session["avatar_color"] = p.get("avatar_color") or ""
             request.session["csrf_token"] = secrets.token_hex(32)
             return RedirectResponse(url="/", status_code=303)
         if p:
@@ -910,6 +935,8 @@ async def login_submit(
     if not profile["pin"]:
         request.session["child_id"] = profile["id"]
         request.session["child_name"] = profile["display_name"]
+        request.session["avatar_icon"] = profile.get("avatar_icon") or ""
+        request.session["avatar_color"] = profile.get("avatar_color") or ""
         request.session["csrf_token"] = secrets.token_hex(32)
         return RedirectResponse(url="/", status_code=303)
 
@@ -917,6 +944,8 @@ async def login_submit(
     if pin and hmac.compare_digest(pin, profile["pin"]):
         request.session["child_id"] = profile["id"]
         request.session["child_name"] = profile["display_name"]
+        request.session["avatar_icon"] = profile.get("avatar_icon") or ""
+        request.session["avatar_color"] = profile.get("avatar_color") or ""
         request.session["csrf_token"] = secrets.token_hex(32)
         return RedirectResponse(url="/", status_code=303)
 
@@ -939,7 +968,44 @@ async def switch_profile(request: Request):
     """Clear current session and return to profile picker."""
     request.session.pop("child_id", None)
     request.session.pop("child_name", None)
+    request.session.pop("avatar_icon", None)
+    request.session.pop("avatar_color", None)
     return RedirectResponse(url="/login", status_code=303)
+
+
+@app.post("/api/avatar")
+@limiter.limit("10/minute")
+async def update_avatar(request: Request):
+    """Update the current profile's avatar icon and/or color."""
+    child_id = request.session.get("child_id")
+    if not child_id or not video_store:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "invalid json"}, status_code=400)
+
+    icon = body.get("icon", "")
+    color = body.get("color", "")
+
+    if icon and icon not in AVATAR_ICONS:
+        return JSONResponse({"error": "invalid icon"}, status_code=400)
+    if color and color not in AVATAR_COLORS:
+        return JSONResponse({"error": "invalid color"}, status_code=400)
+
+    video_store.update_profile_avatar(
+        child_id,
+        icon=icon if icon else None,
+        color=color if color else None,
+    )
+
+    if icon:
+        request.session["avatar_icon"] = icon
+    if color:
+        request.session["avatar_color"] = color
+
+    return JSONResponse({"ok": True})
 
 
 @app.get("/help", response_class=HTMLResponse)
