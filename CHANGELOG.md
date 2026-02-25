@@ -1,4 +1,9 @@
 # Changelog
+## v1.26.1 - 2026-02-25
+
+**Fixed**
+- Mobile search dropdown caused horizontal overflow/resize when opened (dropdown used absolute positioning with fixed 280px width; now uses viewport-relative fixed positioning on mobile)
+
 ## v1.26.0 - 2026-02-25
 
 **Modularity refactor** — decomposed two monolithic files into 20 focused modules with dependency injection, declarative callback routing, and 241 automated tests.
