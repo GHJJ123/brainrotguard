@@ -12,7 +12,7 @@ Tracking progress across sessions. Each phase = one session.
 - [x] **Phase 3c**: Bot — Extract remaining handlers (watch, search/filter, logs/stats, profile) (178 tests)
 - [x] **Phase 4**: Callback Router — declarative dispatch registry, extract inline handlers (208 tests)
 - [x] **Phase 5**: YouTube Extractor Protocol — class wrapper + Protocol, DI via app.state (219 tests)
-- [ ] **Phase 6**: Integration Tests — end-to-end test flows
+- [x] **Phase 6**: Integration Tests — FastAPI TestClient web flows with mock extractor (239 tests)
 
 ## Notes
 
