@@ -974,7 +974,7 @@ async def switch_profile(request: Request):
 
 
 @app.post("/api/avatar")
-@limiter.limit("10/minute")
+@limiter.limit("30/minute")
 async def update_avatar(request: Request):
     """Update the current profile's avatar icon and/or color."""
     child_id = request.session.get("child_id")
