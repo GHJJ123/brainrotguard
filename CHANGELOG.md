@@ -1,4 +1,13 @@
 # Changelog
+## v1.25.0 - 2026-02-25
+
+**Added**
+- Avatar customization: tap the header avatar badge to open a dropdown with 16 emoji icons and 8 background colors
+- Selections persist per-profile in the database and update instantly without page reload
+- Login profile picker shows each child's custom avatar icon and color
+- "Switch Profile" link in avatar dropdown (multi-profile setups)
+- `POST /api/avatar` endpoint with allowlist validation (rate limited 10/min)
+
 ## v1.24.2 - 2026-02-25
 
 **Changed**
