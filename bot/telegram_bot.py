@@ -138,7 +138,7 @@ class BrainRotGuardBot:
             await handler_fn(update, context, cs, profiles[0])
             return
         if not profiles:
-            await update.message.reply_text("No profiles. Use /child add <name> to create one.")
+            await update.effective_message.reply_text("No profiles. Use /child add <name> to create one.")
             return
 
         # Store pending command for callback
@@ -158,7 +158,7 @@ class BrainRotGuardBot:
         if allow_all:
             buttons.append([InlineKeyboardButton("All Children", callback_data="child_sel:__all__")])
         keyboard = InlineKeyboardMarkup(buttons)
-        await update.message.reply_text("Which child?", reply_markup=keyboard)
+        await update.effective_message.reply_text("Which child?", reply_markup=keyboard)
 
     def _check_admin(self, update: Update) -> bool:
         """Check if interaction is from an authorized admin context.
@@ -181,7 +181,7 @@ class BrainRotGuardBot:
         if update.callback_query:
             await update.callback_query.answer(msg)
         elif update.message:
-            await update.message.reply_text(msg)
+            await update.effective_message.reply_text(msg)
         return False
 
     def _resolve_channel_bg(self, channel_name: str, channel_id: Optional[str] = None,
@@ -880,7 +880,7 @@ class BrainRotGuardBot:
         elif sub == "pin":
             await self._child_pin(update, args[1:])
         else:
-            await update.message.reply_text(
+            await update.effective_message.reply_text(
                 "Usage: /child [add|remove|rename|pin]\n\n"
                 "`/child` — list profiles\n"
                 "`/child add <name> [pin]` — create\n"
@@ -893,7 +893,7 @@ class BrainRotGuardBot:
         """List all child profiles."""
         profiles = self._get_profiles()
         if not profiles:
-            await update.message.reply_text("No profiles. Use /child add <name> to create one.")
+            await update.effective_message.reply_text("No profiles. Use /child add <name> to create one.")
             return
         lines = ["**Child Profiles**\n"]
         for p in profiles:
@@ -903,34 +903,34 @@ class BrainRotGuardBot:
             ch_count = len(cs.get_channels_with_ids("allowed"))
             lines.append(f"**{p['display_name']}** (`{p['id']}`)")
             lines.append(f"  {pin_status} · {stats['approved']} videos · {ch_count} channels")
-        await update.message.reply_text(_md("\n".join(lines)), parse_mode=MD2)
+        await update.effective_message.reply_text(_md("\n".join(lines)), parse_mode=MD2)
 
     async def _child_add(self, update: Update, args: list[str]) -> None:
         """Handle /child add <name> [pin]."""
         if not args:
-            await update.message.reply_text("Usage: /child add <name> [pin]")
+            await update.effective_message.reply_text("Usage: /child add <name> [pin]")
             return
         name = args[0]
         pin = args[1] if len(args) > 1 else ""
         # Generate URL-safe ID from name
         pid = re.sub(r'[^a-z0-9]', '', name.lower())[:20]
         if not pid:
-            await update.message.reply_text("Name must contain at least one alphanumeric character.")
+            await update.effective_message.reply_text("Name must contain at least one alphanumeric character.")
             return
         # Ensure unique ID
         if self.video_store.get_profile(pid):
-            await update.message.reply_text(f"Profile '{pid}' already exists.")
+            await update.effective_message.reply_text(f"Profile '{pid}' already exists.")
             return
         if self.video_store.create_profile(pid, name, pin=pin):
             pin_msg = " with PIN" if pin else " (no PIN)"
-            await update.message.reply_text(_md(f"Created profile: **{name}**{pin_msg}"), parse_mode=MD2)
+            await update.effective_message.reply_text(_md(f"Created profile: **{name}**{pin_msg}"), parse_mode=MD2)
         else:
-            await update.message.reply_text("Failed to create profile.")
+            await update.effective_message.reply_text("Failed to create profile.")
 
     async def _child_remove(self, update: Update, args: list[str]) -> None:
         """Handle /child remove <name>."""
         if not args:
-            await update.message.reply_text("Usage: /child remove <name>")
+            await update.effective_message.reply_text("Usage: /child remove <name>")
             return
         name = " ".join(args)
         # Find profile by name or id
@@ -941,7 +941,7 @@ class BrainRotGuardBot:
                 target = p
                 break
         if not target:
-            await update.message.reply_text(f"Profile not found: {name}")
+            await update.effective_message.reply_text(f"Profile not found: {name}")
             return
         # Confirmation button
         keyboard = InlineKeyboardMarkup([[
@@ -950,7 +950,7 @@ class BrainRotGuardBot:
                 callback_data=f"child_del:{target['id']}",
             ),
         ]])
-        await update.message.reply_text(
+        await update.effective_message.reply_text(
             _md(f"Delete **{target['display_name']}**? This removes all videos, channels, watch history, and settings."),
             parse_mode=MD2,
             reply_markup=keyboard,
@@ -959,7 +959,7 @@ class BrainRotGuardBot:
     async def _child_rename(self, update: Update, args: list[str]) -> None:
         """Handle /child rename <name> <new_name>."""
         if len(args) < 2:
-            await update.message.reply_text("Usage: /child rename <name> <new_name>")
+            await update.effective_message.reply_text("Usage: /child rename <name> <new_name>")
             return
         old_name = args[0]
         new_name = " ".join(args[1:])
@@ -970,17 +970,17 @@ class BrainRotGuardBot:
                 target = p
                 break
         if not target:
-            await update.message.reply_text(f"Profile not found: {old_name}")
+            await update.effective_message.reply_text(f"Profile not found: {old_name}")
             return
         if self.video_store.update_profile(target["id"], display_name=new_name):
-            await update.message.reply_text(_md(f"Renamed: {target['display_name']} → **{new_name}**"), parse_mode=MD2)
+            await update.effective_message.reply_text(_md(f"Renamed: {target['display_name']} → **{new_name}**"), parse_mode=MD2)
         else:
-            await update.message.reply_text("Failed to rename profile.")
+            await update.effective_message.reply_text("Failed to rename profile.")
 
     async def _child_pin(self, update: Update, args: list[str]) -> None:
         """Handle /child pin <name> [pin]."""
         if not args:
-            await update.message.reply_text("Usage: /child pin <name> [pin]\nOmit pin to remove it.")
+            await update.effective_message.reply_text("Usage: /child pin <name> [pin]\nOmit pin to remove it.")
             return
         name = args[0]
         new_pin = args[1] if len(args) > 1 else ""
@@ -991,22 +991,22 @@ class BrainRotGuardBot:
                 target = p
                 break
         if not target:
-            await update.message.reply_text(f"Profile not found: {name}")
+            await update.effective_message.reply_text(f"Profile not found: {name}")
             return
         if self.video_store.update_profile(target["id"], pin=new_pin):
             if new_pin:
-                await update.message.reply_text(_md(f"PIN set for **{target['display_name']}**."), parse_mode=MD2)
+                await update.effective_message.reply_text(_md(f"PIN set for **{target['display_name']}**."), parse_mode=MD2)
             else:
-                await update.message.reply_text(_md(f"PIN removed for **{target['display_name']}**."), parse_mode=MD2)
+                await update.effective_message.reply_text(_md(f"PIN removed for **{target['display_name']}**."), parse_mode=MD2)
         else:
-            await update.message.reply_text("Failed to update PIN.")
+            await update.effective_message.reply_text("Failed to update PIN.")
 
     async def _cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Welcome message on first /start contact."""
         if not await self._require_admin(update):
             return
         text, markup = self._build_welcome_message()
-        await update.message.reply_text(text, parse_mode=MD2, reply_markup=markup)
+        await update.effective_message.reply_text(text, parse_mode=MD2, reply_markup=markup)
 
     def _build_welcome_message(self) -> tuple[str, InlineKeyboardMarkup | None]:
         """Build the welcome message with optional starter channels prompt."""
@@ -1032,7 +1032,7 @@ class BrainRotGuardBot:
             return
         from version import __version__
         help_link = "📖 [Full command reference](https://github.com/GHJJ123/brainrotguard/blob/main/docs/telegram-commands.md)\n"
-        await update.message.reply_text(_md(
+        await update.effective_message.reply_text(_md(
             f"**BrainRotGuard v{__version__}**\n\n"
             "**Commands:**\n"
             "`/help` - Show this message\n"
@@ -1083,7 +1083,7 @@ class BrainRotGuardBot:
                 if self.on_channel_change:
                     self.on_channel_change()
                 if enabled:
-                    await update.message.reply_text(_md(
+                    await update.effective_message.reply_text(_md(
                         "**Shorts enabled**\n\n"
                         "- Shorts row appears on the homepage below videos\n"
                         "- Shorts from allowlisted channels are fetched on next cache refresh\n"
@@ -1091,7 +1091,7 @@ class BrainRotGuardBot:
                         "- Shorts hidden from search results remain hidden"
                     ), parse_mode=MD2)
                 else:
-                    await update.message.reply_text(_md(
+                    await update.effective_message.reply_text(_md(
                         "**Shorts disabled**\n\n"
                         "- Shorts row removed from homepage\n"
                         "- Shorts hidden from catalog, search results, and channel filters\n"
@@ -1107,7 +1107,7 @@ class BrainRotGuardBot:
                 else:
                     current = False
                 if current:
-                    await update.message.reply_text(_md(
+                    await update.effective_message.reply_text(_md(
                         "**Shorts: enabled**\n\n"
                         "Shorts appear in a dedicated row on the homepage and are "
                         "fetched from allowlisted channels. They count toward "
@@ -1115,7 +1115,7 @@ class BrainRotGuardBot:
                         "`/shorts off` — hide Shorts everywhere"
                     ), parse_mode=MD2)
                 else:
-                    await update.message.reply_text(_md(
+                    await update.effective_message.reply_text(_md(
                         "**Shorts: disabled**\n\n"
                         "Shorts are hidden from the homepage, catalog, and search results. "
                         "No Shorts are fetched from channels.\n\n"
@@ -1131,10 +1131,10 @@ class BrainRotGuardBot:
             return
         pending = self.video_store.get_pending()
         if not pending:
-            await update.message.reply_text("No pending requests. Videos requested from the web app will appear here.")
+            await update.effective_message.reply_text("No pending requests. Videos requested from the web app will appear here.")
             return
         text, keyboard = self._render_pending_page(pending, 0)
-        await update.message.reply_text(text, parse_mode=MD2, reply_markup=keyboard)
+        await update.effective_message.reply_text(text, parse_mode=MD2, reply_markup=keyboard)
 
     def _render_pending_page(self, pending: list, page: int) -> tuple[str, InlineKeyboardMarkup]:
         """Render a page of the pending list with resend buttons."""
@@ -1184,19 +1184,19 @@ class BrainRotGuardBot:
         if query:
             results = self.video_store.search_approved(query)
             if not results:
-                await update.message.reply_text(f"No approved videos matching \"{query}\".")
+                await update.effective_message.reply_text(f"No approved videos matching \"{query}\".")
                 return
             text, keyboard = self._render_approved_page(results, len(results), 0, search=query)
-            await update.message.reply_text(
+            await update.effective_message.reply_text(
                 text, parse_mode=MD2, reply_markup=keyboard, disable_web_page_preview=True,
             )
             return
         page_items, total = self.video_store.get_approved_page(0, self._APPROVED_PAGE_SIZE)
         if not page_items:
-            await update.message.reply_text("No approved videos yet. Approve requests or use /channel to allow channels.")
+            await update.effective_message.reply_text("No approved videos yet. Approve requests or use /channel to allow channels.")
             return
         text, keyboard = self._render_approved_page(page_items, total, 0)
-        await update.message.reply_text(
+        await update.effective_message.reply_text(
             text, parse_mode=MD2, reply_markup=keyboard, disable_web_page_preview=True,
         )
 
@@ -1259,13 +1259,13 @@ class BrainRotGuardBot:
             video = self.video_store.find_video_fuzzy(raw_id)
         video_id = video['video_id'] if video else raw_id
         if not video:
-            await update.message.reply_text("Video not found — it may have been removed from the database.")
+            await update.effective_message.reply_text("Video not found — it may have been removed from the database.")
             return
         if video['status'] != 'approved':
-            await update.message.reply_text(f"Already {video['status']} — no change needed.")
+            await update.effective_message.reply_text(f"Already {video['status']} — no change needed.")
             return
         self.video_store.update_status(video_id, "denied")
-        await update.message.reply_text(
+        await update.effective_message.reply_text(
             _md(f"**Approval removed:** {video['title']}\nThe video is no longer watchable."), parse_mode=MD2,
         )
 
@@ -1408,7 +1408,7 @@ class BrainRotGuardBot:
                                 lines.append(f"\u2022 **{title}**")
                                 lines.append(f"  {ch_link} \u00b7 {watched_min}m watched")
 
-            await update.message.reply_text(
+            await update.effective_message.reply_text(
                 _md("\n".join(lines)), parse_mode=MD2, disable_web_page_preview=True,
             )
 
@@ -1418,7 +1418,7 @@ class BrainRotGuardBot:
         if not self._check_admin(update):
             return
         stats = self.video_store.get_stats()
-        await update.message.reply_text(_md(
+        await update.effective_message.reply_text(_md(
             f"**BrainRotGuard Stats**\n\n"
             f"**Total videos:** {stats['total']}\n"
             f"**Pending:** {stats['pending']}\n"
@@ -1445,9 +1445,9 @@ class BrainRotGuardBot:
             latest = f"BrainRotGuard v{__version__}\n\n{latest}"
             if len(latest) > 3500:
                 latest = latest[:3500] + "\n..."
-            await update.message.reply_text(latest)
+            await update.effective_message.reply_text(latest)
         except FileNotFoundError:
-            await update.message.reply_text("Changelog not available.")
+            await update.effective_message.reply_text("Changelog not available.")
 
     # --- Notification methods ---
 
@@ -1514,17 +1514,17 @@ class BrainRotGuardBot:
         elif sub == "starter":
             await self._channel_starter(update)
         else:
-            await update.message.reply_text(
+            await update.effective_message.reply_text(
                 "Usage: /channel allow|unallow|block|unblock|cat|starter <name>"
             )
 
     async def _channel_starter(self, update: Update) -> None:
         """Handle /channel starter — show importable starter channels."""
         if not self._starter_channels:
-            await update.message.reply_text("No starter channels configured.")
+            await update.effective_message.reply_text("No starter channels configured.")
             return
         text, markup = self._render_starter_message()
-        await update.message.reply_text(
+        await update.effective_message.reply_text(
             text, parse_mode=MD2, reply_markup=markup, disable_web_page_preview=True,
         )
 
@@ -1628,20 +1628,20 @@ class BrainRotGuardBot:
         verb = "allow" if status == "allowed" else "block"
         example = "@LEGO" if status == "allowed" else "@Slurry"
         if not args:
-            await update.message.reply_text(f"Usage: /channel {verb} @handle\nExample: /channel {verb} {example}")
+            await update.effective_message.reply_text(f"Usage: /channel {verb} @handle\nExample: /channel {verb} {example}")
             return
         raw = args[0]
         if not raw.startswith("@"):
-            await update.message.reply_text(
+            await update.effective_message.reply_text(
                 f"Please use the channel's @handle (e.g. {example}).\n"
                 "You can find it on the channel's YouTube page."
             )
             return
-        await update.message.reply_text(f"Looking up {raw} on YouTube...")
+        await update.effective_message.reply_text(f"Looking up {raw} on YouTube...")
         from youtube.extractor import resolve_channel_handle
         info = await resolve_channel_handle(raw)
         if not info or not info.get("channel_name"):
-            await update.message.reply_text(f"Couldn't find a channel for {raw}. Check the spelling or try the full @handle from YouTube.")
+            await update.effective_message.reply_text(f"Couldn't find a channel for {raw}. Check the spelling or try the full @handle from YouTube.")
             return
         channel_name = info["channel_name"]
         channel_id = info.get("channel_id")
@@ -1654,11 +1654,11 @@ class BrainRotGuardBot:
             self.on_channel_change()
         if status == "allowed":
             cat_label = {"edu": "Educational", "fun": "Entertainment"}.get(cat, "No category")
-            await update.message.reply_text(
+            await update.effective_message.reply_text(
                 f"Added to allowlist: {channel_name} ({raw})\nCategory: {cat_label}"
             )
         else:
-            await update.message.reply_text(f"Blocked: {channel_name}\nVideos from this channel will be auto-denied.")
+            await update.effective_message.reply_text(f"Blocked: {channel_name}\nVideos from this channel will be auto-denied.")
 
     async def _channel_unblock(self, update: Update, args: list[str]) -> None:
         await self._channel_remove(update, args, "unblock")
@@ -1666,7 +1666,7 @@ class BrainRotGuardBot:
     async def _channel_remove(self, update: Update, args: list[str], verb: str) -> None:
         """Remove a channel from allow/block list."""
         if not args:
-            await update.message.reply_text(f"Usage: /channel {verb} <channel name>")
+            await update.effective_message.reply_text(f"Usage: /channel {verb} <channel name>")
             return
         channel = " ".join(args)
         # Look up channel_id before removing (remove_channel deletes the row)
@@ -1685,18 +1685,18 @@ class BrainRotGuardBot:
                 self.on_channel_change()
             label = "Removed from allowlist" if verb == "unallow" else "Unblocked"
             extra = f" Deleted {deleted} video{'s' if deleted != 1 else ''} from catalog." if deleted else ""
-            await update.message.reply_text(f"{label}: {channel}.{extra}")
+            await update.effective_message.reply_text(f"{label}: {channel}.{extra}")
         else:
-            await update.message.reply_text(f"Channel not in list: {channel}. Use /channel to see all channels.")
+            await update.effective_message.reply_text(f"Channel not in list: {channel}. Use /channel to see all channels.")
 
     async def _channel_set_cat(self, update: Update, args: list[str]) -> None:
         """Handle /channel cat <name> edu|fun."""
         if len(args) < 2:
-            await update.message.reply_text("Usage: /channel cat <name> edu|fun\n\nThis sets which time budget the channel's videos count against.")
+            await update.effective_message.reply_text("Usage: /channel cat <name> edu|fun\n\nThis sets which time budget the channel's videos count against.")
             return
         cat = args[-1].lower()
         if cat not in ("edu", "fun"):
-            await update.message.reply_text("Category must be edu (Educational) or fun (Entertainment).")
+            await update.effective_message.reply_text("Category must be edu (Educational) or fun (Entertainment).")
             return
         raw = " ".join(args[:-1])
         channel = self.video_store.resolve_channel_name(raw) or raw
@@ -1711,9 +1711,9 @@ class BrainRotGuardBot:
             cat_label = "Educational" if cat == "edu" else "Entertainment"
             if self.on_channel_change:
                 self.on_channel_change()
-            await update.message.reply_text(f"**{channel}** → {cat_label}\nExisting videos from this channel updated too.", parse_mode=MD2)
+            await update.effective_message.reply_text(f"**{channel}** → {cat_label}\nExisting videos from this channel updated too.", parse_mode=MD2)
         else:
-            await update.message.reply_text(f"Channel not in list: {raw}. Use /channel to see all channels.")
+            await update.effective_message.reply_text(f"Channel not in list: {raw}. Use /channel to see all channels.")
 
     _CHANNEL_PAGE_SIZE = 10
 
@@ -1796,7 +1796,7 @@ class BrainRotGuardBot:
 
     async def _channel_list(self, update: Update) -> None:
         text, markup = self._render_channel_menu()
-        await update.message.reply_text(
+        await update.effective_message.reply_text(
             text, parse_mode=MD2, disable_web_page_preview=True,
             reply_markup=markup,
         )
@@ -1841,10 +1841,10 @@ class BrainRotGuardBot:
         activity = self.video_store.get_recent_activity(days)
         if not activity:
             period = "today" if days == 1 else f"last {days} days"
-            await update.message.reply_text(f"No activity in the {period}.")
+            await update.effective_message.reply_text(f"No activity in the {period}.")
             return
         text, keyboard = self._render_logs_page(activity, days, 0)
-        await update.message.reply_text(text, parse_mode=MD2, reply_markup=keyboard)
+        await update.effective_message.reply_text(text, parse_mode=MD2, reply_markup=keyboard)
 
     def _render_logs_page(self, activity: list, days: int, page: int) -> tuple[str, InlineKeyboardMarkup | None]:
         """Render a page of the activity log with pagination."""
@@ -1906,10 +1906,10 @@ class BrainRotGuardBot:
         searches = self.video_store.get_recent_searches(days)
         if not searches:
             period = "today" if days == 1 else f"last {days} days"
-            await update.message.reply_text(f"No searches in the {period}.")
+            await update.effective_message.reply_text(f"No searches in the {period}.")
             return
         text, keyboard = self._render_search_page(searches, days, 0)
-        await update.message.reply_text(
+        await update.effective_message.reply_text(
             text, parse_mode=MD2, reply_markup=keyboard, disable_web_page_preview=True,
         )
 
@@ -1961,38 +1961,38 @@ class BrainRotGuardBot:
             await self._filter_list(update)
             return
         if len(args) < 2:
-            await update.message.reply_text("Usage: /filter add|remove <word>")
+            await update.effective_message.reply_text("Usage: /filter add|remove <word>")
             return
         word = " ".join(args[1:])
         if action == "add":
             if self.video_store.add_word_filter(word):
                 if self.on_channel_change:
                     self.on_channel_change()
-                await update.message.reply_text(
+                await update.effective_message.reply_text(
                     f"Filter added: \"{word}\"\n"
                     "Videos with this word in the title are hidden everywhere."
                 )
             else:
-                await update.message.reply_text(f"Already filtered: \"{word}\"")
+                await update.effective_message.reply_text(f"Already filtered: \"{word}\"")
         elif action in ("remove", "rm", "del"):
             if self.video_store.remove_word_filter(word):
                 if self.on_channel_change:
                     self.on_channel_change()
-                await update.message.reply_text(f"Filter removed: \"{word}\"")
+                await update.effective_message.reply_text(f"Filter removed: \"{word}\"")
             else:
-                await update.message.reply_text(f"\"{word}\" isn't in the filter list.")
+                await update.effective_message.reply_text(f"\"{word}\" isn't in the filter list.")
         else:
-            await update.message.reply_text("Usage: /filter add|remove <word>")
+            await update.effective_message.reply_text("Usage: /filter add|remove <word>")
 
     async def _filter_list(self, update: Update) -> None:
         words = self.video_store.get_word_filters()
         if not words:
-            await update.message.reply_text("No word filters set. Use /filter add <word> to hide videos by title.")
+            await update.effective_message.reply_text("No word filters set. Use /filter add <word> to hide videos by title.")
             return
         lines = ["**Word Filters** (hidden everywhere):\n"]
         for w in words:
             lines.append(f"- `{w}`")
-        await update.message.reply_text(_md("\n".join(lines)), parse_mode=MD2)
+        await update.effective_message.reply_text(_md("\n".join(lines)), parse_mode=MD2)
 
     # --- Time limit command ---
 
@@ -2117,13 +2117,13 @@ class BrainRotGuardBot:
 
                 if arg == "off":
                     cs.set_setting("daily_limit_minutes", "0")
-                    await update.message.reply_text("Watch time limit disabled. Videos can be watched without a daily cap.")
+                    await update.effective_message.reply_text("Watch time limit disabled. Videos can be watched without a daily cap.")
                     return
                 elif arg.isdigit():
                     await self._time_set_flat_limit(update, [arg], store=cs)
                     return
                 else:
-                    await update.message.reply_text(
+                    await update.effective_message.reply_text(
                         "Usage: /time [minutes|off]\n"
                         "       /time setup\n"
                         "       /time start|stop <time|off>\n"
@@ -2283,7 +2283,7 @@ class BrainRotGuardBot:
                 lines.append("_All days: same schedule_")
         lines.append("")
 
-        await update.message.reply_text(_md("\n".join(lines)), parse_mode=MD2)
+        await update.effective_message.reply_text(_md("\n".join(lines)), parse_mode=MD2)
 
     # --- Per-day commands ---
 
@@ -2311,14 +2311,14 @@ class BrainRotGuardBot:
             for key in self._OVERRIDE_KEYS:
                 s.set_setting(f"{prefix}{key}", "")
             label = self._DAY_LABELS[day]
-            await update.message.reply_text(f"{label} overrides cleared — default settings will apply.")
+            await update.effective_message.reply_text(f"{label} overrides cleared — default settings will apply.")
         elif sub == "copy":
             await self._time_day_copy(update, day, args[1:], store=s)
         elif sub.isdigit():
             await self._time_set_flat_limit(update, [sub], day=day, store=s)
         else:
             label = self._DAY_LABELS[day]
-            await update.message.reply_text(
+            await update.effective_message.reply_text(
                 f"Usage: /time {day} [start|stop|edu|fun|limit|off|copy]\n"
                 f"       /time {day} copy <days|weekdays|weekend|all>"
             )
@@ -2365,13 +2365,13 @@ class BrainRotGuardBot:
         else:
             lines.append("\n_No overrides — using default settings._")
 
-        await update.message.reply_text(_md("\n".join(lines)), parse_mode=MD2)
+        await update.effective_message.reply_text(_md("\n".join(lines)), parse_mode=MD2)
 
     async def _time_day_copy(self, update: Update, src_day: str, args: list[str], store=None) -> None:
         """Handle /time <day> copy <targets>."""
         s = store or self.video_store
         if not args:
-            await update.message.reply_text(
+            await update.effective_message.reply_text(
                 f"Usage: /time {src_day} copy <day|weekdays|weekend|all>"
             )
             return
@@ -2387,13 +2387,13 @@ class BrainRotGuardBot:
             elif arg_lower == "all":
                 targets.extend(d for d in DAY_NAMES if d != src_day)
             else:
-                await update.message.reply_text(f"Unknown day: {arg}. Use day names (mon, tue...), weekdays, weekend, or all.")
+                await update.effective_message.reply_text(f"Unknown day: {arg}. Use day names (mon, tue...), weekdays, weekend, or all.")
                 return
 
         # Remove source from targets and deduplicate
         targets = list(dict.fromkeys(t for t in targets if t != src_day))
         if not targets:
-            await update.message.reply_text("No valid days. Use day names (mon, tue...), weekdays, weekend, or all.")
+            await update.effective_message.reply_text("No valid days. Use day names (mon, tue...), weekdays, weekend, or all.")
             return
 
         src_overrides = self._get_day_overrides(src_day, store=s)
@@ -2409,7 +2409,7 @@ class BrainRotGuardBot:
         src_label = self._DAY_LABELS[src_day]
         target_labels = ", ".join(self._DAY_LABELS[t][:3] for t in targets)
         count = len(src_overrides)
-        await update.message.reply_text(
+        await update.effective_message.reply_text(
             f"Copied {count} override(s) from {src_label} \u2192 {target_labels}."
         )
 
@@ -2419,7 +2419,7 @@ class BrainRotGuardBot:
         """Handle /time [<day>] limit|<N> with mode switch warning."""
         s = store or self.video_store
         if not args or not args[0].isdigit():
-            await update.message.reply_text("Usage: /time [<day>] limit <minutes>")
+            await update.effective_message.reply_text("Usage: /time [<day>] limit <minutes>")
             return
         minutes = int(args[0])
 
@@ -2448,7 +2448,7 @@ class BrainRotGuardBot:
                         callback_data="switch_confirm:keep",
                     ),
                 ]])
-                await update.message.reply_text(text, parse_mode=MD2, reply_markup=keyboard)
+                await update.effective_message.reply_text(text, parse_mode=MD2, reply_markup=keyboard)
                 return
 
         prefix = f"{day}_" if day else ""
@@ -2457,9 +2457,9 @@ class BrainRotGuardBot:
 
         if day:
             label = self._DAY_LABELS[day]
-            await update.message.reply_text(f"{label} limit set to {minutes} minutes. Playback stops when time runs out.")
+            await update.effective_message.reply_text(f"{label} limit set to {minutes} minutes. Playback stops when time runs out.")
         else:
-            await update.message.reply_text(f"Daily limit set to {minutes} minutes. Playback stops when time runs out.")
+            await update.effective_message.reply_text(f"Daily limit set to {minutes} minutes. Playback stops when time runs out.")
 
     # --- Category limits ---
 
@@ -2479,21 +2479,21 @@ class BrainRotGuardBot:
                 if limit == 0:
                     # Day override: check if it's explicitly set or just empty
                     if current:
-                        await update.message.reply_text(f"{label} {cat_label}: OFF (override)")
+                        await update.effective_message.reply_text(f"{label} {cat_label}: OFF (override)")
                     else:
                         effective = s.get_setting(f"{category}_limit_minutes", "")
                         eff_val = int(effective) if effective else 0
                         if eff_val:
-                            await update.message.reply_text(f"{label} {cat_label}: {eff_val} min (from default)")
+                            await update.effective_message.reply_text(f"{label} {cat_label}: {eff_val} min (from default)")
                         else:
-                            await update.message.reply_text(f"{label} {cat_label}: OFF")
+                            await update.effective_message.reply_text(f"{label} {cat_label}: OFF")
                 else:
-                    await update.message.reply_text(f"{label} {cat_label}: {limit} min (override)")
+                    await update.effective_message.reply_text(f"{label} {cat_label}: {limit} min (override)")
             else:
                 if limit == 0:
-                    await update.message.reply_text(f"{cat_label} limit: OFF (unlimited)")
+                    await update.effective_message.reply_text(f"{cat_label} limit: OFF (unlimited)")
                 else:
-                    await update.message.reply_text(f"{cat_label} limit: {limit} minutes/day")
+                    await update.effective_message.reply_text(f"{cat_label} limit: {limit} minutes/day")
             return
 
         value = args[0].lower()
@@ -2503,14 +2503,14 @@ class BrainRotGuardBot:
                 # Day override: "off" clears the override (falls back to default)
                 s.set_setting(setting_key, "")
                 label = self._DAY_LABELS[day]
-                await update.message.reply_text(f"{label} {cat_label} override cleared — default settings will apply.")
+                await update.effective_message.reply_text(f"{label} {cat_label} override cleared — default settings will apply.")
             else:
                 s.set_setting(setting_key, "0")
-                await update.message.reply_text(f"{cat_label} limit disabled — no daily cap.")
+                await update.effective_message.reply_text(f"{cat_label} limit disabled — no daily cap.")
             return
 
         if not value.isdigit():
-            await update.message.reply_text(f"Usage: /time {category} <minutes|off>")
+            await update.effective_message.reply_text(f"Usage: /time {category} <minutes|off>")
             return
 
         minutes = int(value)
@@ -2537,7 +2537,7 @@ class BrainRotGuardBot:
                         callback_data="switch_confirm:keep",
                     ),
                 ]])
-                await update.message.reply_text(text, parse_mode=MD2, reply_markup=keyboard)
+                await update.effective_message.reply_text(text, parse_mode=MD2, reply_markup=keyboard)
                 return
 
         s.set_setting(setting_key, str(minutes))
@@ -2545,9 +2545,9 @@ class BrainRotGuardBot:
 
         if day:
             label = self._DAY_LABELS[day]
-            await update.message.reply_text(f"{label} {cat_label} limit set to {minutes} min. Playback stops when budget runs out.")
+            await update.effective_message.reply_text(f"{label} {cat_label} limit set to {minutes} min. Playback stops when budget runs out.")
         else:
-            await update.message.reply_text(f"{cat_label} limit set to {minutes} min/day. Playback stops when budget runs out.")
+            await update.effective_message.reply_text(f"{cat_label} limit set to {minutes} min/day. Playback stops when budget runs out.")
 
     # --- Schedule ---
 
@@ -2562,39 +2562,39 @@ class BrainRotGuardBot:
         if not args:
             current = s.get_setting(setting_key, "")
             if current:
-                await update.message.reply_text(f"{day_label}{label} time: {format_time_12h(current)}")
+                await update.effective_message.reply_text(f"{day_label}{label} time: {format_time_12h(current)}")
             elif day:
                 # Show effective (default fallback)
                 base = "schedule_start" if is_start else "schedule_end"
                 default = s.get_setting(base, "")
                 if default:
-                    await update.message.reply_text(
+                    await update.effective_message.reply_text(
                         f"{day_label}{label} time: {format_time_12h(default)} (from default)"
                     )
                 else:
-                    await update.message.reply_text(f"{day_label}{label} time: not set")
+                    await update.effective_message.reply_text(f"{day_label}{label} time: not set")
             else:
-                await update.message.reply_text(f"{label} time: not set")
+                await update.effective_message.reply_text(f"{label} time: not set")
             return
 
         value = args[0].lower()
         if value == "off":
             s.set_setting(setting_key, "")
             if day:
-                await update.message.reply_text(f"{day_label}{label} time override cleared.")
+                await update.effective_message.reply_text(f"{day_label}{label} time override cleared.")
             else:
-                await update.message.reply_text(f"{label} time cleared.")
+                await update.effective_message.reply_text(f"{label} time cleared.")
             return
 
         parsed = parse_time_input(args[0])
         if not parsed:
-            await update.message.reply_text(
+            await update.effective_message.reply_text(
                 "Invalid time. Examples: 800am, 8:00, 2000, 8:00PM"
             )
             return
 
         s.set_setting(setting_key, parsed)
-        await update.message.reply_text(
+        await update.effective_message.reply_text(
             f"{day_label}{label} time set to {format_time_12h(parsed)}"
         )
 
@@ -2604,11 +2604,11 @@ class BrainRotGuardBot:
         """Handle /time add <minutes> — grant bonus screen time for today only."""
         s = store or self.video_store
         if not args or not args[0].isdigit():
-            await update.message.reply_text("Usage: /time add <minutes>")
+            await update.effective_message.reply_text("Usage: /time add <minutes>")
             return
         add_min = int(args[0])
         if add_min <= 0:
-            await update.message.reply_text("Bonus minutes must be a positive number.")
+            await update.effective_message.reply_text("Bonus minutes must be a positive number.")
             return
         today = get_today_str(self._get_tz())
         bonus_date = s.get_setting("daily_bonus_date", "")
@@ -2619,7 +2619,7 @@ class BrainRotGuardBot:
         new_bonus = existing + add_min
         s.set_setting("daily_bonus_minutes", str(new_bonus))
         s.set_setting("daily_bonus_date", today)
-        await update.message.reply_text(
+        await update.effective_message.reply_text(
             f"Added {add_min} bonus minutes for today ({new_bonus} total). Expires at midnight."
         )
 
@@ -2641,7 +2641,7 @@ class BrainRotGuardBot:
             InlineKeyboardButton("Limits", callback_data="setup_top:limits"),
             InlineKeyboardButton("Schedule", callback_data="setup_top:schedule"),
         ]])
-        await update.message.reply_text(text, parse_mode=MD2, reply_markup=keyboard)
+        await update.effective_message.reply_text(text, parse_mode=MD2, reply_markup=keyboard)
 
     async def _cb_setup_top(self, query, choice: str) -> None:
         """Route top-level setup choice to limits or schedule wizard."""
@@ -3004,7 +3004,7 @@ class BrainRotGuardBot:
         if step.startswith("setup_sched_") or step.startswith("setup_daystart:") or step.startswith("setup_daystop:"):
             parsed = parse_time_input(text)
             if not parsed:
-                await update.message.reply_text(
+                await update.effective_message.reply_text(
                     "Invalid time. Examples: 8am, 08:00, 2000, 8:00PM"
                 )
                 return
@@ -3023,7 +3023,7 @@ class BrainRotGuardBot:
                     InlineKeyboardButton("9 PM", callback_data="setup_sched_stop:21:00"),
                     InlineKeyboardButton("Custom", callback_data="setup_sched_stop:custom"),
                 ]])
-                await update.message.reply_text(stop_text, parse_mode=MD2, reply_markup=keyboard)
+                await update.effective_message.reply_text(stop_text, parse_mode=MD2, reply_markup=keyboard)
             elif step == "setup_sched_stop":
                 ws.set_setting("schedule_end", parsed)
                 start = ws.get_setting("schedule_start", "")
@@ -3034,7 +3034,7 @@ class BrainRotGuardBot:
                     f"Default: {start_disp} \u2013 {end_disp}",
                     f"\nUse `/time <day> start|stop` to adjust later.",
                 ]
-                await update.message.reply_text(_md("\n".join(lines)), parse_mode=MD2)
+                await update.effective_message.reply_text(_md("\n".join(lines)), parse_mode=MD2)
             elif step.startswith("setup_daystart:"):
                 day = step.split(":", 1)[1]
                 ws.set_setting(f"{day}_schedule_start", parsed)
@@ -3049,17 +3049,17 @@ class BrainRotGuardBot:
                     InlineKeyboardButton("10 PM", callback_data=f"setup_daystop:{day}:22:00"),
                     InlineKeyboardButton("Custom", callback_data=f"setup_daystop:{day}:custom"),
                 ]])
-                await update.message.reply_text(stop_text, parse_mode=MD2, reply_markup=keyboard)
+                await update.effective_message.reply_text(stop_text, parse_mode=MD2, reply_markup=keyboard)
             elif step.startswith("setup_daystop:"):
                 day = step.split(":", 1)[1]
                 ws.set_setting(f"{day}_schedule_end", parsed)
                 grid_text, keyboard = self._setup_sched_day_grid(store=ws)
-                await update.message.reply_text(grid_text, parse_mode=MD2, reply_markup=keyboard)
+                await update.effective_message.reply_text(grid_text, parse_mode=MD2, reply_markup=keyboard)
             return
 
         # Limit wizard steps expect positive integer minutes
         if not text.isdigit() or int(text) <= 0:
-            await update.message.reply_text("Please reply with a positive number of minutes.")
+            await update.effective_message.reply_text("Please reply with a positive number of minutes.")
             return
         minutes = int(text)
         del self._pending_wizard[chat_id]
@@ -3067,7 +3067,7 @@ class BrainRotGuardBot:
         if step == "setup_simple":
             ws.set_setting("daily_limit_minutes", str(minutes))
             self._auto_clear_mode("simple", store=ws)
-            await update.message.reply_text(_md(
+            await update.effective_message.reply_text(_md(
                 f"\u2713 **Simple limit set**\n"
                 f"  Daily cap: {minutes} min/day\n\n"
                 f"Use `/time <day> limit <min>` to customize specific days."
@@ -3081,7 +3081,7 @@ class BrainRotGuardBot:
                 InlineKeyboardButton("90 min", callback_data="setup_fun:90"),
                 InlineKeyboardButton("Custom", callback_data="setup_fun:custom"),
             ]])
-            await update.message.reply_text(_md(
+            await update.effective_message.reply_text(_md(
                 f"Educational: {minutes} min \u2713\n"
                 f"Now set **entertainment** limit:"
             ), parse_mode=MD2, reply_markup=keyboard)
@@ -3090,7 +3090,7 @@ class BrainRotGuardBot:
             self._auto_clear_mode("category", store=ws)
             edu = int(ws.get_setting("edu_limit_minutes", "0") or "0")
             total = edu + minutes
-            await update.message.reply_text(_md(
+            await update.effective_message.reply_text(_md(
                 f"\u2713 **Category limits set**\n"
                 f"  Educational: {edu} min/day\n"
                 f"  Entertainment: {minutes} min/day\n"
