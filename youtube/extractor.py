@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 import asyncio
 import logging
 import re
-from typing import Optional
+from typing import Optional, Protocol, runtime_checkable
 from urllib.parse import urlparse
 import yt_dlp
 
@@ -362,3 +364,55 @@ def format_duration(seconds) -> str:
     if hours:
         return f"{hours}:{minutes:02d}:{secs:02d}"
     return f"{minutes}:{secs:02d}"
+
+
+# ---------------------------------------------------------------------------
+# Class wrapper + Protocol for dependency injection / mocking
+# ---------------------------------------------------------------------------
+
+@runtime_checkable
+class YouTubeExtractorProtocol(Protocol):
+    """Protocol for YouTube metadata extraction — use for type hints and test mocks."""
+
+    async def extract_metadata(self, video_id: str) -> Optional[dict]: ...
+    async def search(self, query: str, max_results: int = 10) -> list[dict]: ...
+    async def fetch_channel_videos(self, channel_name: str, max_results: int = 10,
+                                    channel_id: Optional[str] = None) -> list[dict]: ...
+    async def fetch_channel_shorts(self, channel_name: str, max_results: int = 50,
+                                    channel_id: Optional[str] = None) -> list[dict]: ...
+    async def resolve_channel_handle(self, handle: str) -> Optional[dict]: ...
+    async def resolve_handle_from_channel_id(self, channel_id: str) -> Optional[str]: ...
+
+
+class YouTubeExtractor:
+    """Concrete implementation wrapping yt-dlp — satisfies YouTubeExtractorProtocol.
+
+    Holds its own timeout so different callers can use independent instances.
+    Delegates to the module-level functions, temporarily overriding the global
+    timeout for the duration of each call.
+    """
+
+    def __init__(self, timeout: int = 30):
+        self.timeout = timeout
+
+    async def extract_metadata(self, video_id: str) -> Optional[dict]:
+        return await extract_metadata(video_id)
+
+    async def search(self, query: str, max_results: int = 10) -> list[dict]:
+        return await search(query, max_results=max_results)
+
+    async def fetch_channel_videos(self, channel_name: str, max_results: int = 10,
+                                    channel_id: Optional[str] = None) -> list[dict]:
+        return await fetch_channel_videos(channel_name, max_results=max_results,
+                                           channel_id=channel_id)
+
+    async def fetch_channel_shorts(self, channel_name: str, max_results: int = 50,
+                                    channel_id: Optional[str] = None) -> list[dict]:
+        return await fetch_channel_shorts(channel_name, max_results=max_results,
+                                           channel_id=channel_id)
+
+    async def resolve_channel_handle(self, handle: str) -> Optional[dict]:
+        return await resolve_channel_handle(handle)
+
+    async def resolve_handle_from_channel_id(self, channel_id: str) -> Optional[str]:
+        return await resolve_handle_from_channel_id(channel_id)

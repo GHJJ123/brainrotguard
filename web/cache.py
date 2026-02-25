@@ -10,7 +10,6 @@ from urllib.parse import urlparse
 import httpx
 
 from data.child_store import ChildStore
-from youtube.extractor import fetch_channel_videos, fetch_channel_shorts
 from web.helpers import annotate_categories
 
 logger = logging.getLogger(__name__)
@@ -125,7 +124,12 @@ async def _refresh_channel_cache_for_profile(state, profile_id: str):
         return
     yt_cfg = getattr(state, "youtube_config", None)
     max_vids = yt_cfg.channel_cache_results if yt_cfg else 200
-    tasks = [fetch_channel_videos(name, max_results=max_vids, channel_id=cid) for name, cid, _handle, _cat in allowed]
+    extractor = getattr(state, "extractor", None)
+    if extractor:
+        tasks = [extractor.fetch_channel_videos(name, max_results=max_vids, channel_id=cid) for name, cid, _handle, _cat in allowed]
+    else:
+        from youtube.extractor import fetch_channel_videos
+        tasks = [fetch_channel_videos(name, max_results=max_vids, channel_id=cid) for name, cid, _handle, _cat in allowed]
     results = await asyncio.gather(*tasks, return_exceptions=True)
     channels = {}
     channel_id_to_name = {}
@@ -149,7 +153,11 @@ async def _refresh_channel_cache_for_profile(state, profile_id: str):
 
     if shorts_enabled_val:
         shorts_max = max(max_vids // 4, 20)
-        shorts_tasks = [fetch_channel_shorts(name, max_results=shorts_max, channel_id=cid) for name, cid, _handle, _cat in allowed]
+        if extractor:
+            shorts_tasks = [extractor.fetch_channel_shorts(name, max_results=shorts_max, channel_id=cid) for name, cid, _handle, _cat in allowed]
+        else:
+            from youtube.extractor import fetch_channel_shorts
+            shorts_tasks = [fetch_channel_shorts(name, max_results=shorts_max, channel_id=cid) for name, cid, _handle, _cat in allowed]
         shorts_results = await asyncio.gather(*shorts_tasks, return_exceptions=True)
         shorts = {}
         for (ch_name, cid, _h, _c), result in zip(allowed, shorts_results):

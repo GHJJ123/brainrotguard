@@ -39,3 +39,8 @@ def get_notify_cb(request: Request):
 def get_time_limit_cb(request: Request):
     """Async callback for time limit reached notifications."""
     return request.app.state.time_limit_notify_cb
+
+
+def get_extractor(request: Request):
+    """YouTubeExtractor instance."""
+    return request.app.state.extractor

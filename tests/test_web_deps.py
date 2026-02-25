@@ -12,6 +12,7 @@ from web.deps import (
     get_youtube_config,
     get_notify_cb,
     get_time_limit_cb,
+    get_extractor,
 )
 
 
@@ -71,3 +72,10 @@ class TestCallbackDeps:
         cb = MagicMock()
         req = _make_request({"time_limit_notify_cb": cb})
         assert get_time_limit_cb(req) is cb
+
+
+class TestExtractorDep:
+    def test_get_extractor(self):
+        ext = MagicMock()
+        req = _make_request({"extractor": ext})
+        assert get_extractor(req) is ext

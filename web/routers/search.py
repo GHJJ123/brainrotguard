@@ -4,7 +4,7 @@ from fastapi import APIRouter, Request, Form, Query
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from web.shared import templates, limiter
-from web.deps import get_child_store
+from web.deps import get_child_store, get_extractor
 from web.helpers import (
     VIDEO_ID_RE, _ERROR_MESSAGES,
     base_ctx, get_csrf_token, validate_csrf, shorts_enabled,
@@ -12,7 +12,7 @@ from web.helpers import (
 from web.cache import (
     get_word_filter_patterns, title_matches_filter, invalidate_catalog_cache,
 )
-from youtube.extractor import extract_video_id, extract_metadata, search
+from youtube.extractor import extract_video_id
 
 router = APIRouter()
 
@@ -26,6 +26,7 @@ async def search_videos(request: Request, q: str = Query("", max_length=200)):
 
     state = request.app.state
     cs = get_child_store(request)
+    extractor = get_extractor(request)
 
     # Block search queries that contain filtered words
     word_patterns = get_word_filter_patterns(state)
@@ -44,14 +45,14 @@ async def search_videos(request: Request, q: str = Query("", max_length=200)):
     fetch_failed = False
 
     if video_id:
-        metadata = await extract_metadata(video_id)
+        metadata = await extractor.extract_metadata(video_id)
         results = [metadata] if metadata else []
         if not metadata:
             fetch_failed = True
     else:
         yt_cfg = state.youtube_config
         max_results = yt_cfg.search_max_results if yt_cfg else 10
-        results = await search(q, max_results=max_results)
+        results = await extractor.search(q, max_results=max_results)
 
     # Filter out blocked channels
     blocked = cs.get_blocked_channels_set()
@@ -103,6 +104,7 @@ async def request_video(
 
     state = request.app.state
     cs = get_child_store(request)
+    extractor = get_extractor(request)
     profile_id = cs.profile_id
 
     existing = cs.get_video(video_id)
@@ -111,7 +113,7 @@ async def request_video(
             return RedirectResponse(url=f"/watch/{video_id}", status_code=303)
         return RedirectResponse(url=f"/pending/{video_id}", status_code=303)
 
-    metadata = await extract_metadata(video_id)
+    metadata = await extractor.extract_metadata(video_id)
     if not metadata:
         return RedirectResponse(url="/?error=fetch_failed", status_code=303)
 

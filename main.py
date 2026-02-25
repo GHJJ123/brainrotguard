@@ -17,7 +17,7 @@ from bot.telegram_bot import BrainRotGuardBot
 from web.app import app as fastapi_app
 from web.cache import init_app_state, invalidate_channel_cache, invalidate_catalog_cache
 from web.middleware import SecurityHeadersMiddleware, PinAuthMiddleware
-from youtube.extractor import configure_timeout
+from youtube.extractor import configure_timeout, YouTubeExtractor
 
 logging.basicConfig(
     level=logging.INFO,
@@ -88,8 +88,10 @@ class BrainRotGuard:
         state.wl_config = self.config.watch_limits
         init_app_state(state)
 
-        if self.config.youtube and self.config.youtube.ydl_timeout:
-            configure_timeout(self.config.youtube.ydl_timeout)
+        ydl_timeout = self.config.youtube.ydl_timeout if self.config.youtube else 30
+        if ydl_timeout:
+            configure_timeout(ydl_timeout)
+        state.extractor = YouTubeExtractor(timeout=ydl_timeout or 30)
 
         # Configure middleware
         import secrets as _secrets

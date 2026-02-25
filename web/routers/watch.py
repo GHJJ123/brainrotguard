@@ -6,7 +6,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from web.shared import templates, limiter
-from web.deps import get_child_store
+from web.deps import get_child_store, get_extractor
 from web.helpers import (
     VIDEO_ID_RE, HeartbeatRequest,
     _HEARTBEAT_MIN_INTERVAL, _HEARTBEAT_EVICT_AGE,
@@ -16,7 +16,6 @@ from web.helpers import (
 )
 from web.cache import invalidate_catalog_cache
 from utils import CAT_LABELS
-from youtube.extractor import extract_metadata
 
 router = APIRouter()
 
@@ -61,7 +60,8 @@ async def watch_video(request: Request, video_id: str):
 
     if not video:
         # Video not in DB -- auto-approve if channel is allowlisted
-        metadata = await extract_metadata(video_id)
+        extractor = get_extractor(request)
+        metadata = await extractor.extract_metadata(video_id)
         if not metadata:
             return RedirectResponse(url="/", status_code=303)
         if not cs.is_channel_allowed(metadata['channel_name'],
