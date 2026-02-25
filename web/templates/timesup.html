@@ -6,21 +6,21 @@
     <div class="timesup-icon">&#x23F0;</div>
     {% if category %}
     <h2>{{ category }} Time's Up!</h2>
-    <p class="timesup-text">You've used {{ time_info.used_min | int }} out of {{ time_info.limit_min }} {{ category | lower }} minutes today.</p>
+    <p class="timesup-text">{% if child_name %}{{ child_name }} has{% else %}You've{% endif %} used {{ time_info.used_min | int }} out of {{ time_info.limit_min }} {{ category | lower }} minutes today.</p>
     {% if available_categories %}
-    <p class="timesup-subtext">You can still watch:</p>
+    <p class="timesup-subtext">{% if child_name %}{{ child_name }} can{% else %}You can{% endif %} still watch:</p>
     {% for cat in available_categories %}
     <a href="/?category={{ cat.name }}" class="back-link">
         {{ cat.label }}{% if cat.remaining_min > 0 %} ({{ cat.remaining_min | int }} min left){% endif %}
     </a>
     {% endfor %}
     {% else %}
-    <p class="timesup-subtext">Your time resets tomorrow at midnight.</p>
+    <p class="timesup-subtext">Time resets tomorrow at midnight.</p>
     {% endif %}
     {% else %}
     <h2>Time's Up!</h2>
-    <p class="timesup-text">You've used {{ time_info.used_min | int }} out of {{ time_info.limit_min }} minutes today.</p>
-    <p class="timesup-subtext">Your time resets tomorrow at midnight.</p>
+    <p class="timesup-text">{% if child_name %}{{ child_name }} has{% else %}You've{% endif %} used {{ time_info.used_min | int }} out of {{ time_info.limit_min }} minutes today.</p>
+    <p class="timesup-subtext">Time resets tomorrow at midnight.</p>
     {% endif %}
     <a href="/" class="back-link">Back to Home</a>
 </div>

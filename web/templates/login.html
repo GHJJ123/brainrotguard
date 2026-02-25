@@ -3,14 +3,34 @@
 
 {% block content %}
 <div class="login-container">
+    {% if step == "pick" and profiles|length > 1 %}
+    {# Profile picker: show name buttons #}
+    <div class="login-form">
+        <h2>Who's Watching?</h2>
+        <div class="profile-picker">
+            {% for p in profiles %}
+            <a href="/login?profile={{ p.id }}" class="profile-btn">{{ p.display_name }}</a>
+            {% endfor %}
+        </div>
+    </div>
+    {% else %}
+    {# PIN entry for selected profile (or single profile) #}
     <form action="/login" method="POST" class="login-form">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <h2>Enter PIN</h2>
+        <input type="hidden" name="profile_id" value="{{ selected_profile.id if selected_profile else (profiles[0].id if profiles else 'default') }}">
+        {% if selected_profile %}
+        <h2>{{ selected_profile.display_name }}</h2>
+        {% endif %}
+        <h3>Enter PIN</h3>
         {% if error %}
         <p class="login-error">Wrong PIN. Try again.</p>
         {% endif %}
         <input type="password" name="pin" placeholder="PIN" class="pin-input" inputmode="numeric" autofocus>
         <button type="submit" class="btn-primary login-button">Enter</button>
+        {% if profiles|length > 1 %}
+        <a href="/login" class="switch-link">Switch profile</a>
+        {% endif %}
     </form>
+    {% endif %}
 </div>
 {% endblock %}

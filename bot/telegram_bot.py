@@ -17,6 +17,7 @@ from telegram.ext import (
     MessageHandler, filters,
 )
 
+from data.child_store import ChildStore
 from utils import (
     get_today_str, get_day_utc_bounds, get_weekday, parse_time_input,
     format_time_12h, is_within_schedule, DAY_NAMES, DAY_GROUPS,
@@ -95,14 +96,63 @@ class BrainRotGuardBot:
         self.video_store = video_store
         self.config = config
         self._app = None
-        self._limit_notified_cats: dict[str, str] = {}  # category -> date string of last limit notification
+        self._limit_notified_cats: dict[tuple, str] = {}  # (profile_id, category) -> date
         self._pending_wizard: dict[int, dict] = {}  # chat_id -> wizard state for custom input
+        self._pending_cmd: dict[int, dict] = {}  # chat_id -> pending child-scoped command
         self.on_channel_change = None  # callback when channel lists change
         self.on_video_change = None  # callback when video status changes
         self._update_check_task = None  # background version check loop
         # Load starter channels
         from data.starter_channels import load_starter_channels
         self._starter_channels = load_starter_channels(starter_channels_path)
+
+    def _child_store(self, profile_id: str) -> ChildStore:
+        """Get a ChildStore for a specific profile."""
+        return ChildStore(self.video_store, profile_id)
+
+    def _get_profiles(self) -> list[dict]:
+        """Get all profiles."""
+        return self.video_store.get_profiles()
+
+    def _single_profile(self) -> Optional[dict]:
+        """If there's only one profile, return it. Otherwise None."""
+        profiles = self._get_profiles()
+        return profiles[0] if len(profiles) == 1 else None
+
+    async def _with_child_context(self, update: Update, context, handler_fn,
+                                   allow_all: bool = False) -> None:
+        """Route a child-scoped command through profile selection.
+
+        If only one profile, execute directly. Otherwise show selector buttons.
+        handler_fn signature: handler_fn(update, context, child_store, profile)
+        """
+        profiles = self._get_profiles()
+        if len(profiles) == 1:
+            cs = self._child_store(profiles[0]["id"])
+            await handler_fn(update, context, cs, profiles[0])
+            return
+        if not profiles:
+            await update.message.reply_text("No profiles. Use /child add <name> to create one.")
+            return
+
+        # Store pending command for callback
+        chat_id = update.effective_chat.id
+        self._pending_cmd[chat_id] = {"handler": handler_fn, "context": context}
+
+        # Build child selector keyboard
+        buttons = []
+        row = []
+        for p in profiles:
+            row.append(InlineKeyboardButton(p["display_name"], callback_data=f"child_sel:{p['id']}"))
+            if len(row) == 3:
+                buttons.append(row)
+                row = []
+        if row:
+            buttons.append(row)
+        if allow_all:
+            buttons.append([InlineKeyboardButton("All Children", callback_data="child_sel:__all__")])
+        keyboard = InlineKeyboardMarkup(buttons)
+        await update.message.reply_text("Which child?", reply_markup=keyboard)
 
     def _check_admin(self, update: Update) -> bool:
         """Check if interaction is from an authorized admin context.
@@ -129,7 +179,7 @@ class BrainRotGuardBot:
         return False
 
     def _resolve_channel_bg(self, channel_name: str, channel_id: Optional[str] = None,
-                             video_id: Optional[str] = None) -> None:
+                             video_id: Optional[str] = None, profile_id: str = "default") -> None:
         """Fire a background task to resolve and store missing channel identifiers.
 
         Resolves channel_id (via video metadata or @name lookup) and @handle
@@ -137,33 +187,32 @@ class BrainRotGuardBot:
         video row if provided.
         """
         import asyncio
+        cs = self._child_store(profile_id)
         async def _resolve():
             try:
                 cid = channel_id
-                # If no channel_id, try to resolve it
                 if not cid:
                     if video_id:
                         from youtube.extractor import extract_metadata
                         metadata = await extract_metadata(video_id)
                         if metadata and metadata.get("channel_id"):
                             cid = metadata["channel_id"]
-                            self.video_store.update_video_channel_id(video_id, cid)
+                            cs.update_video_channel_id(video_id, cid)
                     if not cid:
                         from youtube.extractor import resolve_channel_handle
                         info = await resolve_channel_handle(f"@{channel_name}")
                         if info and info.get("channel_id"):
                             cid = info["channel_id"]
                             if info.get("handle"):
-                                self.video_store.update_channel_handle(channel_name, info["handle"])
+                                cs.update_channel_handle(channel_name, info["handle"])
                     if cid:
-                        self.video_store.update_channel_id(channel_name, cid)
+                        cs.update_channel_id(channel_name, cid)
                         logger.info(f"Resolved channel_id: {channel_name} → {cid}")
-                # Resolve handle from channel_id
                 if cid:
                     from youtube.extractor import resolve_handle_from_channel_id
                     handle = await resolve_handle_from_channel_id(cid)
                     if handle:
-                        self.video_store.update_channel_handle(channel_name, handle)
+                        cs.update_channel_handle(channel_name, handle)
                         logger.info(f"Resolved handle: {channel_name} → {handle}")
             except Exception as e:
                 logger.debug(f"Background channel resolve failed for {channel_name}: {e}")
@@ -192,6 +241,7 @@ class BrainRotGuardBot:
         self._app.add_handler(CommandHandler("time", self._cmd_timelimit))
         self._app.add_handler(CommandHandler("changelog", self._cmd_changelog))
         self._app.add_handler(CommandHandler("shorts", self._cmd_shorts))
+        self._app.add_handler(CommandHandler("child", self._cmd_child))
         self._app.add_handler(MessageHandler(
             filters.Regex(r'^/revoke_[a-zA-Z0-9_]{11}$'), self._cmd_revoke,
         ))
@@ -307,12 +357,8 @@ class BrainRotGuardBot:
         self.video_store.set_setting("last_notified_version", latest)
         return True
 
-    async def notify_new_request(self, video: dict) -> None:
-        """Send parent a notification about a new video request with Approve/Deny buttons.
-
-        Sends a photo message with the video thumbnail, caption with title/channel/duration/link,
-        and inline Approve/Deny buttons.
-        """
+    async def notify_new_request(self, video: dict, profile_id: str = "default") -> None:
+        """Send parent a notification about a new video request with Approve/Deny buttons."""
         if not self._app:
             logger.warning("Bot not started, cannot send notification")
             return
@@ -327,32 +373,59 @@ class BrainRotGuardBot:
         else:
             yt_link = f"https://www.youtube.com/watch?v={video_id}"
 
+        # Include child name in notification if multiple profiles exist
+        profiles = self._get_profiles()
+        child_name = ""
+        if len(profiles) > 1:
+            p = self.video_store.get_profile(profile_id)
+            child_name = p["display_name"] if p else profile_id
+
+        # Check if already approved for another child
+        other = self.video_store.find_video_approved_for_others(video_id, profile_id)
+        cross_child_note = ""
+        if other and len(profiles) > 1:
+            other_profile = self.video_store.get_profile(other["profile_id"])
+            other_name = other_profile["display_name"] if other_profile else other["profile_id"]
+            cross_child_note = f"\n_Already approved for {other_name}_"
+
         short_label = " [SHORT]" if is_short else ""
+        from_label = f" from {child_name}" if child_name else ""
         caption = _md(
-            f"**New Video Request{short_label}**\n\n"
+            f"**New Video Request{short_label}{from_label}**\n\n"
             f"**Title:** {title}\n"
             f"**Channel:** {channel_link}\n"
             f"**Duration:** {duration}\n"
-            f"[Watch on YouTube]({yt_link})"
+            f"[Watch on YouTube]({yt_link}){cross_child_note}"
         )
 
-        keyboard = InlineKeyboardMarkup([
+        # Use profile_id in callback data — short enough to fit 64-byte limit
+        # Format: action:profile_id:video_id (profile_id max ~20 chars)
+        pid = profile_id
+        buttons = [
             [InlineKeyboardButton("Watch on YouTube", url=yt_link)],
+        ]
+        # If cross-child approved, show auto-approve button
+        if other and len(profiles) > 1:
+            buttons.append([
+                InlineKeyboardButton("Auto-approve", callback_data=f"autoapprove:{pid}:{video_id}"),
+            ])
+        buttons.extend([
             [
-                InlineKeyboardButton("Approve (Edu)", callback_data=f"approve_edu:{video_id}"),
-                InlineKeyboardButton("Approve (Fun)", callback_data=f"approve_fun:{video_id}"),
+                InlineKeyboardButton("Approve (Edu)", callback_data=f"approve_edu:{pid}:{video_id}"),
+                InlineKeyboardButton("Approve (Fun)", callback_data=f"approve_fun:{pid}:{video_id}"),
             ],
             [
-                InlineKeyboardButton("Deny", callback_data=f"deny:{video_id}"),
+                InlineKeyboardButton("Deny", callback_data=f"deny:{pid}:{video_id}"),
             ],
             [
-                InlineKeyboardButton("Allow Ch (Edu)", callback_data=f"allowchan_edu:{video_id}"),
-                InlineKeyboardButton("Allow Ch (Fun)", callback_data=f"allowchan_fun:{video_id}"),
+                InlineKeyboardButton("Allow Ch (Edu)", callback_data=f"allowchan_edu:{pid}:{video_id}"),
+                InlineKeyboardButton("Allow Ch (Fun)", callback_data=f"allowchan_fun:{pid}:{video_id}"),
             ],
             [
-                InlineKeyboardButton("Block Channel", callback_data=f"blockchan:{video_id}"),
+                InlineKeyboardButton("Block Channel", callback_data=f"blockchan:{pid}:{video_id}"),
             ],
         ])
+        keyboard = InlineKeyboardMarkup(buttons)
 
         _THUMB_HOSTS = {
             "i.ytimg.com", "i1.ytimg.com", "i2.ytimg.com", "i3.ytimg.com",
@@ -404,6 +477,24 @@ class BrainRotGuardBot:
             await query.answer()
             return
         parts = data.split(":")
+
+        # Child selector callback
+        if parts[0] == "child_sel" and len(parts) == 2:
+            _answer_bg(query)
+            await self._cb_child_select(query, update, context, parts[1])
+            return
+
+        # Child profile deletion confirmation
+        if parts[0] == "child_del" and len(parts) == 2:
+            _answer_bg(query)
+            await self._cb_child_delete_confirm(query, parts[1])
+            return
+
+        # Cross-child auto-approve
+        if parts[0] == "autoapprove" and len(parts) == 3:
+            _answer_bg(query, "Auto-approved!")
+            await self._cb_auto_approve(query, parts[1], parts[2])
+            return
 
         # Pagination callbacks
         try:
@@ -548,15 +639,21 @@ class BrainRotGuardBot:
             await self.notify_new_request(video)
             return
 
-        if len(parts) != 2:
+        # New format: action:profile_id:video_id (3 parts) or legacy action:video_id (2 parts)
+        if len(parts) == 3:
+            action, profile_id, video_id = parts
+        elif len(parts) == 2:
+            action, video_id = parts
+            profile_id = "default"
+        else:
             await query.answer("Invalid callback.")
             return
 
-        action, video_id = parts
         if not re.fullmatch(r'[a-zA-Z0-9_-]{11}', video_id):
             await query.answer("Invalid callback.")
             return
-        video = self.video_store.get_video(video_id)
+        cs = self._child_store(profile_id)
+        video = cs.get_video(video_id)
         if not video:
             await query.answer("Video not found.")
             return
@@ -564,15 +661,14 @@ class BrainRotGuardBot:
         # Category toggle on approved videos (no status change)
         if action in ("setcat_edu", "setcat_fun") and video["status"] == "approved":
             cat = "edu" if action == "setcat_edu" else "fun"
-            self.video_store.set_video_category(video_id, cat)
+            cs.set_video_category(video_id, cat)
             cat_label = "Educational" if cat == "edu" else "Entertainment"
             _answer_bg(query, f"→ {cat_label}")
-            # Refresh buttons with updated toggle
             toggle_cat = "edu" if cat == "fun" else "fun"
             toggle_label = "→ Edu" if toggle_cat == "edu" else "→ Fun"
             reply_markup = InlineKeyboardMarkup([[
-                InlineKeyboardButton("Revoke", callback_data=f"revoke:{video_id}"),
-                InlineKeyboardButton(toggle_label, callback_data=f"setcat_{toggle_cat}:{video_id}"),
+                InlineKeyboardButton("Revoke", callback_data=f"revoke:{profile_id}:{video_id}"),
+                InlineKeyboardButton(toggle_label, callback_data=f"setcat_{toggle_cat}:{profile_id}:{video_id}"),
             ]])
             try:
                 await query.edit_message_reply_markup(reply_markup=reply_markup)
@@ -586,68 +682,68 @@ class BrainRotGuardBot:
         duration = format_duration(video.get('duration'))
 
         if action == "approve" and video['status'] == 'pending':
-            self.video_store.update_status(video_id, "approved")
-            self.video_store.set_video_category(video_id, "fun")
+            cs.update_status(video_id, "approved")
+            cs.set_video_category(video_id, "fun")
             _answer_bg(query, "Approved!")
             status_label = "APPROVED"
         elif action in ("approve_edu", "approve_fun") and video['status'] == 'pending':
             cat = "edu" if action == "approve_edu" else "fun"
-            self.video_store.update_status(video_id, "approved")
-            self.video_store.set_video_category(video_id, cat)
+            cs.update_status(video_id, "approved")
+            cs.set_video_category(video_id, cat)
             cat_label = "Educational" if cat == "edu" else "Entertainment"
             _answer_bg(query, f"Approved ({cat_label})!")
             status_label = f"APPROVED ({cat_label})"
         elif action == "deny" and video['status'] == 'pending':
-            self.video_store.update_status(video_id, "denied")
+            cs.update_status(video_id, "denied")
             _answer_bg(query, "Denied.")
             status_label = "DENIED"
         elif action == "revoke" and video['status'] == 'approved':
-            self.video_store.update_status(video_id, "denied")
+            cs.update_status(video_id, "denied")
             _answer_bg(query, "Revoked!")
             status_label = "REVOKED"
         elif action == "allowchan":
             channel = video['channel_name']
             cid = video.get('channel_id')
-            self.video_store.add_channel(channel, "allowed", channel_id=cid)
-            self._resolve_channel_bg(channel, cid, video_id=video_id)
+            cs.add_channel(channel, "allowed", channel_id=cid)
+            self._resolve_channel_bg(channel, cid, video_id=video_id, profile_id=profile_id)
             if video['status'] == 'pending':
-                self.video_store.update_status(video_id, "approved")
-                self.video_store.set_video_category(video_id, "fun")
+                cs.update_status(video_id, "approved")
+                cs.set_video_category(video_id, "fun")
                 status_label = "APPROVED + CHANNEL ALLOWED"
             else:
                 status_label = f"CHANNEL ALLOWED (video already {video['status']})"
             _answer_bg(query, f"Allowlisted: {channel}")
             if self.on_channel_change:
-                self.on_channel_change()
+                self.on_channel_change(profile_id)
         elif action in ("allowchan_edu", "allowchan_fun"):
             cat = "edu" if action == "allowchan_edu" else "fun"
             channel = video['channel_name']
             cid = video.get('channel_id')
-            self.video_store.add_channel(channel, "allowed", channel_id=cid, category=cat)
-            self._resolve_channel_bg(channel, cid, video_id=video_id)
+            cs.add_channel(channel, "allowed", channel_id=cid, category=cat)
+            self._resolve_channel_bg(channel, cid, video_id=video_id, profile_id=profile_id)
             cat_label = "Educational" if cat == "edu" else "Entertainment"
             if video['status'] == 'pending':
-                self.video_store.update_status(video_id, "approved")
-                self.video_store.set_video_category(video_id, cat)
+                cs.update_status(video_id, "approved")
+                cs.set_video_category(video_id, cat)
                 status_label = f"APPROVED + CHANNEL ALLOWED ({cat_label})"
             else:
                 status_label = f"CHANNEL ALLOWED ({cat_label}) (video already {video['status']})"
             _answer_bg(query, f"Allowlisted ({cat_label}): {channel}")
             if self.on_channel_change:
-                self.on_channel_change()
+                self.on_channel_change(profile_id)
         elif action == "blockchan":
             channel = video['channel_name']
             cid = video.get('channel_id')
-            self.video_store.add_channel(channel, "blocked", channel_id=cid)
-            self._resolve_channel_bg(channel, cid, video_id=video_id)
+            cs.add_channel(channel, "blocked", channel_id=cid)
+            self._resolve_channel_bg(channel, cid, video_id=video_id, profile_id=profile_id)
             if video['status'] == 'pending':
-                self.video_store.update_status(video_id, "denied")
+                cs.update_status(video_id, "denied")
                 status_label = "DENIED + CHANNEL BLOCKED"
             else:
                 status_label = f"CHANNEL BLOCKED (video already {video['status']})"
             _answer_bg(query, f"Blocked: {channel}")
             if self.on_channel_change:
-                self.on_channel_change()
+                self.on_channel_change(profile_id)
         else:
             _answer_bg(query, f"Already {video['status']}.")
             return
@@ -664,15 +760,14 @@ class BrainRotGuardBot:
             f"[Watch on YouTube]({yt_link})"
         )
 
-        # After approval, show Revoke + category toggle; otherwise remove all buttons
         if status_label.startswith("APPROVED"):
-            video = self.video_store.get_video(video_id)
+            video = cs.get_video(video_id)
             cur_cat = video.get("category", "fun") if video else "fun"
             toggle_cat = "edu" if cur_cat == "fun" else "fun"
             toggle_label = "→ Edu" if toggle_cat == "edu" else "→ Fun"
             reply_markup = InlineKeyboardMarkup([[
-                InlineKeyboardButton("Revoke", callback_data=f"revoke:{video_id}"),
-                InlineKeyboardButton(toggle_label, callback_data=f"setcat_{toggle_cat}:{video_id}"),
+                InlineKeyboardButton("Revoke", callback_data=f"revoke:{profile_id}:{video_id}"),
+                InlineKeyboardButton(toggle_label, callback_data=f"setcat_{toggle_cat}:{profile_id}:{video_id}"),
             ]])
         else:
             reply_markup = None
@@ -681,6 +776,224 @@ class BrainRotGuardBot:
             await query.edit_message_caption(caption=result_text, reply_markup=reply_markup, parse_mode=MD2)
         except Exception:
             await query.edit_message_text(text=result_text, reply_markup=reply_markup, parse_mode=MD2)
+
+    # --- Child selector and profile management ---
+
+    async def _cb_child_select(self, query, update: Update, context, profile_id: str) -> None:
+        """Handle child selector button press."""
+        chat_id = update.effective_chat.id
+        pending = self._pending_cmd.pop(chat_id, None)
+        if not pending:
+            await query.answer("No pending command.")
+            return
+
+        handler_fn = pending["handler"]
+        ctx = pending["context"]
+
+        if profile_id == "__all__":
+            # Execute for all profiles
+            profiles = self._get_profiles()
+            for p in profiles:
+                cs = self._child_store(p["id"])
+                await handler_fn(update, ctx, cs, p)
+        else:
+            p = self.video_store.get_profile(profile_id)
+            if not p:
+                await query.answer("Profile not found.")
+                return
+            cs = self._child_store(profile_id)
+            await handler_fn(update, ctx, cs, p)
+
+        # Remove the selector message
+        try:
+            await query.edit_message_text("Done.")
+        except Exception:
+            pass
+
+    async def _cb_auto_approve(self, query, profile_id: str, video_id: str) -> None:
+        """Handle auto-approve from cross-child notification."""
+        cs = self._child_store(profile_id)
+        video = cs.get_video(video_id)
+        if not video or video["status"] != "pending":
+            await query.answer("No longer pending.")
+            return
+        # Copy category from the other profile's approval
+        other = self.video_store.find_video_approved_for_others(video_id, profile_id)
+        cat = other.get("category", "fun") if other else "fun"
+        cs.update_status(video_id, "approved")
+        cs.set_video_category(video_id, cat)
+
+        if self.on_video_change:
+            self.on_video_change()
+
+        channel_link = _channel_md_link(video['channel_name'], video.get('channel_id'))
+        yt_link = f"https://www.youtube.com/watch?v={video_id}"
+        cat_label = "Educational" if cat == "edu" else "Entertainment"
+        result_text = _md(
+            f"**AUTO-APPROVED ({cat_label})**\n\n"
+            f"**Title:** {video['title']}\n"
+            f"**Channel:** {channel_link}\n"
+            f"[Watch on YouTube]({yt_link})"
+        )
+        reply_markup = InlineKeyboardMarkup([[
+            InlineKeyboardButton("Revoke", callback_data=f"revoke:{profile_id}:{video_id}"),
+        ]])
+        try:
+            await query.edit_message_caption(caption=result_text, reply_markup=reply_markup, parse_mode=MD2)
+        except Exception:
+            await query.edit_message_text(text=result_text, reply_markup=reply_markup, parse_mode=MD2)
+
+    async def _cb_child_delete_confirm(self, query, profile_id: str) -> None:
+        """Handle profile deletion confirmation."""
+        p = self.video_store.get_profile(profile_id)
+        if not p:
+            await query.answer("Profile not found.")
+            return
+        if self.video_store.delete_profile(profile_id):
+            if self.on_channel_change:
+                self.on_channel_change()
+            await _edit_msg(query, f"Deleted profile: {p['display_name']} and all associated data.")
+        else:
+            await query.answer("Failed to delete profile.")
+
+    async def _cmd_child(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Manage child profiles. /child [add|remove|rename|pin]."""
+        if not await self._require_admin(update):
+            return
+        args = context.args or []
+        if not args:
+            await self._child_list(update)
+            return
+        sub = args[0].lower()
+        if sub == "add":
+            await self._child_add(update, args[1:])
+        elif sub == "remove":
+            await self._child_remove(update, args[1:])
+        elif sub == "rename":
+            await self._child_rename(update, args[1:])
+        elif sub == "pin":
+            await self._child_pin(update, args[1:])
+        else:
+            await update.message.reply_text(
+                "Usage: /child [add|remove|rename|pin]\n\n"
+                "`/child` — list profiles\n"
+                "`/child add <name> [pin]` — create\n"
+                "`/child remove <name>` — delete\n"
+                "`/child rename <name> <new>` — rename\n"
+                "`/child pin <name> [pin]` — set/clear PIN"
+            )
+
+    async def _child_list(self, update: Update) -> None:
+        """List all child profiles."""
+        profiles = self._get_profiles()
+        if not profiles:
+            await update.message.reply_text("No profiles. Use /child add <name> to create one.")
+            return
+        lines = ["**Child Profiles**\n"]
+        for p in profiles:
+            pin_status = "PIN set" if p["pin"] else "no PIN"
+            cs = self._child_store(p["id"])
+            stats = cs.get_stats()
+            ch_count = len(cs.get_channels_with_ids("allowed"))
+            lines.append(f"**{p['display_name']}** (`{p['id']}`)")
+            lines.append(f"  {pin_status} · {stats['approved']} videos · {ch_count} channels")
+        await update.message.reply_text(_md("\n".join(lines)), parse_mode=MD2)
+
+    async def _child_add(self, update: Update, args: list[str]) -> None:
+        """Handle /child add <name> [pin]."""
+        if not args:
+            await update.message.reply_text("Usage: /child add <name> [pin]")
+            return
+        name = args[0]
+        pin = args[1] if len(args) > 1 else ""
+        # Generate URL-safe ID from name
+        pid = re.sub(r'[^a-z0-9]', '', name.lower())[:20]
+        if not pid:
+            await update.message.reply_text("Name must contain at least one alphanumeric character.")
+            return
+        # Ensure unique ID
+        if self.video_store.get_profile(pid):
+            await update.message.reply_text(f"Profile '{pid}' already exists.")
+            return
+        if self.video_store.create_profile(pid, name, pin=pin):
+            pin_msg = " with PIN" if pin else " (no PIN)"
+            await update.message.reply_text(f"Created profile: **{name}**{pin_msg}", parse_mode=MD2)
+        else:
+            await update.message.reply_text("Failed to create profile.")
+
+    async def _child_remove(self, update: Update, args: list[str]) -> None:
+        """Handle /child remove <name>."""
+        if not args:
+            await update.message.reply_text("Usage: /child remove <name>")
+            return
+        name = " ".join(args)
+        # Find profile by name or id
+        profiles = self._get_profiles()
+        target = None
+        for p in profiles:
+            if p["display_name"].lower() == name.lower() or p["id"] == name.lower():
+                target = p
+                break
+        if not target:
+            await update.message.reply_text(f"Profile not found: {name}")
+            return
+        # Confirmation button
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton(
+                f"Delete {target['display_name']} and all data",
+                callback_data=f"child_del:{target['id']}",
+            ),
+        ]])
+        await update.message.reply_text(
+            f"Delete **{target['display_name']}**? This removes all videos, channels, watch history, and settings.",
+            parse_mode=MD2,
+            reply_markup=keyboard,
+        )
+
+    async def _child_rename(self, update: Update, args: list[str]) -> None:
+        """Handle /child rename <name> <new_name>."""
+        if len(args) < 2:
+            await update.message.reply_text("Usage: /child rename <name> <new_name>")
+            return
+        old_name = args[0]
+        new_name = " ".join(args[1:])
+        profiles = self._get_profiles()
+        target = None
+        for p in profiles:
+            if p["display_name"].lower() == old_name.lower() or p["id"] == old_name.lower():
+                target = p
+                break
+        if not target:
+            await update.message.reply_text(f"Profile not found: {old_name}")
+            return
+        if self.video_store.update_profile(target["id"], display_name=new_name):
+            await update.message.reply_text(f"Renamed: {target['display_name']} → **{new_name}**", parse_mode=MD2)
+        else:
+            await update.message.reply_text("Failed to rename profile.")
+
+    async def _child_pin(self, update: Update, args: list[str]) -> None:
+        """Handle /child pin <name> [pin]."""
+        if not args:
+            await update.message.reply_text("Usage: /child pin <name> [pin]\nOmit pin to remove it.")
+            return
+        name = args[0]
+        new_pin = args[1] if len(args) > 1 else ""
+        profiles = self._get_profiles()
+        target = None
+        for p in profiles:
+            if p["display_name"].lower() == name.lower() or p["id"] == name.lower():
+                target = p
+                break
+        if not target:
+            await update.message.reply_text(f"Profile not found: {name}")
+            return
+        if self.video_store.update_profile(target["id"], pin=new_pin):
+            if new_pin:
+                await update.message.reply_text(f"PIN set for **{target['display_name']}**.", parse_mode=MD2)
+            else:
+                await update.message.reply_text(f"PIN removed for **{target['display_name']}**.", parse_mode=MD2)
+        else:
+            await update.message.reply_text("Failed to update PIN.")
 
     async def _cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Welcome message on first /start contact."""
@@ -742,6 +1055,10 @@ class BrainRotGuardBot:
             "`/time <day> copy <days|weekdays|weekend|all>`\n"
             "`/shorts [on|off]` - Toggle Shorts row\n"
             "`/changelog` - Latest changes\n\n"
+            "**Profiles:**\n"
+            "`/child` - List child profiles\n"
+            "`/child add <name> [pin]`\n"
+            "`/child remove|rename|pin <name>`\n\n"
             f"{help_link}"
             "☕ [Buy me a coffee](https://ko-fi.com/coffee4jj)"
         ), parse_mode=MD2, disable_web_page_preview=True)
@@ -1124,18 +1441,29 @@ class BrainRotGuardBot:
         """Return the configured timezone string (or empty for UTC)."""
         return self.config.watch_limits.timezone if self.config else ""
 
-    async def notify_time_limit_reached(self, used_min: float, limit_min: int, category: str = "") -> None:
-        """Send notification when daily time limit is reached (once per day per category)."""
+    async def notify_time_limit_reached(self, used_min: float, limit_min: int,
+                                        category: str = "", profile_id: str = "default") -> None:
+        """Send notification when daily time limit is reached (once per day per category per profile)."""
         if not self._app:
             return
         today = get_today_str(self._get_tz())
-        if self._limit_notified_cats.get(category) == today:
+        key = (profile_id, category)
+        if self._limit_notified_cats.get(key) == today:
             return
-        self._limit_notified_cats[category] = today
+        self._limit_notified_cats[key] = today
+
+        # Include child name if multiple profiles
+        profiles = self._get_profiles()
+        child_label = ""
+        if len(profiles) > 1:
+            p = self.video_store.get_profile(profile_id)
+            if p:
+                child_label = f" — {p['display_name']}"
+
         cat_label = {"edu": "Educational", "fun": "Entertainment"}.get(category, "")
         cat_text = f" ({cat_label})" if cat_label else ""
         text = _md(
-            f"**Daily watch limit reached{cat_text}**\n\n"
+            f"**Daily watch limit reached{cat_text}{child_label}**\n\n"
             f"**Used:** {int(used_min)} min / {limit_min} min limit\n"
             f"{'Videos in this category are' if cat_label else 'Videos are'} blocked until tomorrow."
         )

@@ -540,6 +540,60 @@ main {
     font-size: 17px;
 }
 
+.login-form h3 {
+    font-size: 18px;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+.profile-picker {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.profile-btn {
+    display: block;
+    padding: 16px;
+    font-size: 18px;
+    font-weight: 600;
+    text-align: center;
+    background: var(--bg-card);
+    color: var(--text-primary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    text-decoration: none;
+    transition: border-color 0.2s, background 0.2s;
+}
+
+.profile-btn:hover {
+    border-color: rgba(233, 69, 96, 0.4);
+    background: rgba(233, 69, 96, 0.08);
+}
+
+.switch-link {
+    color: var(--text-secondary);
+    font-size: 14px;
+    text-decoration: none;
+}
+
+.switch-link:hover {
+    color: var(--text-primary);
+}
+
+.profile-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+    padding: 0 12px;
+}
+
+.profile-name {
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
 /* === Time's Up Page === */
 .timesup-container {
     text-align: center;

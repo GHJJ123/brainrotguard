@@ -20,6 +20,12 @@
             <input type="text" name="q" placeholder="Search or paste a link..." class="header-search-input" {% block search_attrs %}{% endblock %}>
             <button type="submit" class="btn-primary header-search-btn">Search</button>
         </form>
+        {% if child_name and multi_profile %}
+        <div class="profile-badge">
+            <span class="profile-name">{{ child_name }}</span>
+            <a href="/switch-profile" class="switch-link">Switch</a>
+        </div>
+        {% endif %}
     </header>
     <main>
         {% block content %}{% endblock %}

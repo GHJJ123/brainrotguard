@@ -21,6 +21,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
+from data.child_store import ChildStore
 from utils import get_today_str, get_day_utc_bounds, get_weekday, is_within_schedule, format_time_12h, DAY_NAMES
 from youtube.extractor import extract_video_id, extract_metadata, search, fetch_channel_videos, fetch_channel_shorts, format_duration, configure_timeout
 
@@ -82,22 +83,38 @@ _API_AUTH_EXEMPT = ("/api/status/", "/api/yt-iframe-api.js", "/api/yt-widget-api
 
 
 class PinAuthMiddleware(BaseHTTPMiddleware):
-    """Require PIN authentication when configured."""
+    """Require profile-based authentication when any profile has a PIN."""
 
     def __init__(self, app, pin: str = ""):
         super().__init__(app)
-        self.pin = pin
+        self.pin = pin  # legacy single-PIN (used for backwards compat check)
 
     async def dispatch(self, request: Request, call_next) -> Response:
-        if not self.pin:
-            return await call_next(request)
         # Allow unauthenticated access to login, static assets, and specific read-only APIs
         if request.url.path.startswith(("/login", "/static", "/help")):
             return await call_next(request)
         if request.url.path.startswith(_API_AUTH_EXEMPT):
             return await call_next(request)
-        if request.session.get("authenticated"):
+
+        # Profile-based auth: check if child_id is in session
+        if request.session.get("child_id"):
             return await call_next(request)
+
+        # Auto-login: if only one profile and it has no PIN, set session directly
+        if video_store:
+            profiles = video_store.get_profiles()
+            if len(profiles) == 1 and not profiles[0]["pin"]:
+                request.session["child_id"] = profiles[0]["id"]
+                request.session["child_name"] = profiles[0]["display_name"]
+                return await call_next(request)
+            if not profiles:
+                # No profiles at all — shouldn't happen after bootstrap, but handle gracefully
+                return await call_next(request)
+
+        # Legacy: if no profiles exist but PIN auth is disabled
+        if not self.pin and (not video_store or not video_store.get_profiles()):
+            return await call_next(request)
+
         # Return JSON 401 for API endpoints instead of redirect
         if request.url.path.startswith("/api/"):
             return JSONResponse({"error": "unauthorized"}, status_code=401)
@@ -265,10 +282,24 @@ def format_views(count) -> str:
 templates.env.filters["format_views"] = format_views
 
 
-def _shorts_enabled() -> bool:
-    """Check if Shorts are enabled (DB override > config default)."""
-    if video_store:
-        db_val = video_store.get_setting("shorts_enabled", "")
+def _get_child_store(request: Request) -> ChildStore:
+    """Get a ChildStore scoped to the current session's child profile."""
+    child_id = request.session.get("child_id", "default")
+    return ChildStore(video_store, child_id)
+
+
+def _get_child_name(request: Request) -> str:
+    """Get the current child's display name from session."""
+    return request.session.get("child_name", "")
+
+
+def _shorts_enabled(child_store=None) -> bool:
+    """Check if Shorts are enabled (DB override > config default).
+    Accepts a ChildStore or uses global video_store for the setting check.
+    """
+    store = child_store or video_store
+    if store:
+        db_val = store.get_setting("shorts_enabled", "")
         if db_val:
             return db_val.lower() == "true"
     if youtube_config:
@@ -282,22 +313,32 @@ _HEARTBEAT_MIN_INTERVAL = 10  # seconds (must be < client heartbeat interval)
 _HEARTBEAT_EVICT_AGE = 120  # evict entries older than this (seconds)
 _heartbeat_last_cleanup: float = 0.0
 
-# Channel sidebar cache: allowlisted channels → fresh YouTube videos
-_channel_cache: dict = {"channels": {}, "updated_at": 0.0}
+# Channel sidebar cache: per-profile → {channels: {}, shorts: {}, updated_at: 0.0}
+_channel_caches: dict[str, dict] = {}
 _channel_cache_task = None  # prevent GC of background task
 _CHANNEL_CACHE_TTL = 1800  # default; overridden by youtube_config.channel_cache_ttl
 
 
-async def _refresh_channel_cache():
-    """Fetch latest videos and Shorts for each allowlisted channel and update cache."""
+def _get_profile_cache(profile_id: str) -> dict:
+    """Get or create the channel cache for a profile."""
+    if profile_id not in _channel_caches:
+        _channel_caches[profile_id] = {"channels": {}, "shorts": {}, "id_to_name": {}, "updated_at": 0.0}
+    return _channel_caches[profile_id]
+
+
+async def _refresh_channel_cache_for_profile(profile_id: str):
+    """Fetch latest videos and Shorts for a profile's allowlisted channels."""
     import asyncio
     if not video_store:
         return
-    allowed = video_store.get_channels_with_ids("allowed")
+    cache = _get_profile_cache(profile_id)
+    child_store = ChildStore(video_store, profile_id)
+    allowed = child_store.get_channels_with_ids("allowed")
     if not allowed:
-        _channel_cache["channels"] = {}
-        _channel_cache["shorts"] = {}
-        _channel_cache["updated_at"] = time.monotonic()
+        cache["channels"] = {}
+        cache["shorts"] = {}
+        cache["id_to_name"] = {}
+        cache["updated_at"] = time.monotonic()
         return
     max_vids = youtube_config.channel_cache_results if youtube_config else 200
     tasks = [fetch_channel_videos(name, max_results=max_vids, channel_id=cid) for name, cid, _handle, _cat in allowed]
@@ -305,7 +346,6 @@ async def _refresh_channel_cache():
     channels = {}
     channel_id_to_name = {}
     for (ch_name, cid, _h, _c), result in zip(allowed, results):
-        # Key by channel_id (stable); fall back to name for channels without ID
         cache_key = cid or ch_name
         if cid:
             channel_id_to_name[cid] = ch_name
@@ -315,8 +355,8 @@ async def _refresh_channel_cache():
         else:
             channels[cache_key] = result
 
-    # Fetch Shorts from each channel's /shorts tab (skip when disabled)
-    if _shorts_enabled():
+    # Fetch Shorts from each channel's /shorts tab
+    if _shorts_enabled(child_store):
         shorts_max = max(max_vids // 4, 20)
         shorts_tasks = [fetch_channel_shorts(name, max_results=shorts_max, channel_id=cid) for name, cid, _handle, _cat in allowed]
         shorts_results = await asyncio.gather(*shorts_tasks, return_exceptions=True)
@@ -331,34 +371,56 @@ async def _refresh_channel_cache():
     else:
         shorts = {}
 
-    _channel_cache["channels"] = channels
-    _channel_cache["shorts"] = shorts
-    _channel_cache["id_to_name"] = channel_id_to_name
-    _channel_cache["updated_at"] = time.monotonic()
-    logger.info("Refreshed channel cache: %d channels, %d with shorts",
-                len(channels), sum(1 for v in shorts.values() if v))
+    cache["channels"] = channels
+    cache["shorts"] = shorts
+    cache["id_to_name"] = channel_id_to_name
+    cache["updated_at"] = time.monotonic()
+    logger.info("Refreshed channel cache for profile '%s': %d channels, %d with shorts",
+                profile_id, len(channels), sum(1 for v in shorts.values() if v))
 
 
-def invalidate_channel_cache():
-    """Mark cache as stale so next page load triggers a refresh."""
-    _channel_cache["updated_at"] = 0.0
+async def _refresh_all_channel_caches():
+    """Refresh channel caches for all profiles."""
+    if not video_store:
+        return
+    profiles = video_store.get_profiles()
+    if not profiles:
+        # Single default profile (backwards compat)
+        await _refresh_channel_cache_for_profile("default")
+        return
+    for p in profiles:
+        await _refresh_channel_cache_for_profile(p["id"])
+
+
+def invalidate_channel_cache(profile_id: str = ""):
+    """Mark cache as stale. If profile_id given, only that profile; otherwise all."""
     _invalidate_catalog_cache()
     import asyncio
-    try:
-        loop = asyncio.get_running_loop()
-        loop.create_task(_refresh_channel_cache())
-    except RuntimeError:
-        pass
+    if profile_id:
+        cache = _get_profile_cache(profile_id)
+        cache["updated_at"] = 0.0
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(_refresh_channel_cache_for_profile(profile_id))
+        except RuntimeError:
+            pass
+    else:
+        for cache in _channel_caches.values():
+            cache["updated_at"] = 0.0
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(_refresh_all_channel_caches())
+        except RuntimeError:
+            pass
 
 
 async def _channel_cache_loop():
-    """Background loop to refresh channel cache periodically."""
+    """Background loop to refresh channel caches periodically."""
     import asyncio
-    # Initial delay to let app fully start
     await asyncio.sleep(5)
     while True:
         try:
-            await _refresh_channel_cache()
+            await _refresh_all_channel_caches()
         except Exception as e:
             logger.error("Channel cache refresh error: %s", e)
         ttl = youtube_config.channel_cache_ttl if youtube_config else _CHANNEL_CACHE_TTL
@@ -398,16 +460,17 @@ def _invalidate_catalog_cache():
     _catalog_cache_time = 0.0
 
 
-def _build_shorts_catalog() -> list[dict]:
-    """Build Shorts catalog from channel cache + DB approved shorts."""
-    if not _shorts_enabled():
+def _build_shorts_catalog(profile_id: str = "default") -> list[dict]:
+    """Build Shorts catalog from channel cache + DB approved shorts for a profile."""
+    child_store = ChildStore(video_store, profile_id) if video_store else None
+    if not _shorts_enabled(child_store):
         return []
-    denied_ids = video_store.get_denied_video_ids() if video_store else set()
+    denied_ids = child_store.get_denied_video_ids() if child_store else set()
     seen_ids = set(denied_ids)
     shorts = []
 
-    # Round-robin interleave Shorts across channels (same as main catalog)
-    shorts_channels = _channel_cache.get("shorts", {})
+    cache = _get_profile_cache(profile_id)
+    shorts_channels = cache.get("shorts", {})
     if shorts_channels:
         chan_lists = [list(vids) for vids in shorts_channels.values() if vids]
         indices = [0] * len(chan_lists)
@@ -425,19 +488,17 @@ def _build_shorts_catalog() -> list[dict]:
             if not added:
                 break
 
-    # DB approved shorts
-    if video_store:
-        for v in video_store.get_approved_shorts():
+    if child_store:
+        for v in child_store.get_approved_shorts():
             vid = v.get("video_id", "")
             if vid and vid not in seen_ids:
                 seen_ids.add(vid)
                 shorts.append(dict(v))
 
-    # Attach category from channel settings (keyed by channel_id, name fallback)
-    if video_store:
+    if child_store:
         _cat_by_cid = {}
         _cat_by_name = {}
-        for ch_name, cid, _h, cat in video_store.get_channels_with_ids("allowed"):
+        for ch_name, cid, _h, cat in child_store.get_channels_with_ids("allowed"):
             if cat:
                 if cid:
                     _cat_by_cid[cid] = cat
@@ -449,7 +510,6 @@ def _build_shorts_catalog() -> list[dict]:
                 cat = _cat_by_name.get(v.get("channel_name", ""))
             v["category"] = cat or v.get("category") or "fun"
 
-    # Filter out titles matching word filters
     wf = _get_word_filter_patterns()
     if wf:
         shorts = [v for v in shorts if not _title_matches_filter(v.get("title", ""), wf)]
@@ -457,21 +517,17 @@ def _build_shorts_catalog() -> list[dict]:
     return shorts
 
 
-def _build_requests_row(limit: int = 50) -> list[dict]:
-    """Build 'Your Requests' row from DB-approved non-Short videos.
-
-    Excludes videos from currently-allowlisted channels (those are auto-approved
-    and already appear in the main Channel Videos grid).
-    """
+def _build_requests_row(limit: int = 50, profile_id: str = "default") -> list[dict]:
+    """Build 'Your Requests' row from DB-approved non-Short videos for a profile."""
     if not video_store:
         return []
-    requests = video_store.get_recent_requests(limit=limit)
-    # Build allowlist sets by channel_id (stable) with name fallback
+    child_store = ChildStore(video_store, profile_id)
+    requests = child_store.get_recent_requests(limit=limit)
     allowed_channel_ids = set()
-    allowed_names = set()  # fallback for legacy rows without channel_id
+    allowed_names = set()
     _cat_by_cid = {}
     _cat_by_name = {}
-    for ch_name, cid, _h, cat in video_store.get_channels_with_ids("allowed"):
+    for ch_name, cid, _h, cat in child_store.get_channels_with_ids("allowed"):
         if cid:
             allowed_channel_ids.add(cid)
             if cat:
@@ -480,7 +536,6 @@ def _build_requests_row(limit: int = 50) -> list[dict]:
             allowed_names.add(ch_name.lower())
         if cat:
             _cat_by_name[ch_name] = cat
-    # Filter out videos from allowlisted channels (match on channel_id, fallback to name)
     filtered = []
     for v in requests:
         vid_cid = v.get("channel_id")
@@ -488,7 +543,6 @@ def _build_requests_row(limit: int = 50) -> list[dict]:
             continue
         if not vid_cid and v.get("channel_name", "").lower() in allowed_names:
             continue
-        # Category: prefer channel_id lookup, then name, then existing value
         cat = None
         if vid_cid:
             cat = _cat_by_cid.get(vid_cid)
@@ -505,18 +559,15 @@ def _build_requests_row(limit: int = 50) -> list[dict]:
     return filtered
 
 
-def _build_catalog(channel_filter: str = "") -> list[dict]:
-    """Build unified catalog: interleaved channel-cache videos + DB approved videos.
-
-    channel_filter accepts a channel_id (preferred) or channel_name for cache lookup.
-    """
+def _build_catalog(channel_filter: str = "", profile_id: str = "default") -> list[dict]:
+    """Build unified catalog for a profile."""
     global _catalog_cache, _catalog_cache_time
-    channels = _channel_cache.get("channels", {})
+    cache = _get_profile_cache(profile_id)
+    channels = cache.get("channels", {})
+    child_store = ChildStore(video_store, profile_id) if video_store else None
 
-    # Excluded: videos explicitly denied/revoked (shouldn't appear even if channel is allowed)
-    denied_ids = video_store.get_denied_video_ids() if video_store else set()
+    denied_ids = child_store.get_denied_video_ids() if child_store else set()
 
-    # If filtering by channel, build on demand (not cached — small result set)
     if channel_filter:
         seen_ids = set(denied_ids)
         filtered = []
@@ -525,25 +576,23 @@ def _build_catalog(channel_filter: str = "") -> list[dict]:
             if vid and vid not in seen_ids and not v.get("is_short"):
                 seen_ids.add(vid)
                 filtered.append(dict(v))
-        # Determine if filter is a channel_id or a channel_name fallback
-        id_to_name = _channel_cache.get("id_to_name", {})
+        id_to_name = cache.get("id_to_name", {})
         is_channel_id = channel_filter in id_to_name
-        if video_store:
+        if child_store:
             if is_channel_id:
-                db_vids = video_store.get_by_status("approved", channel_id=channel_filter)
+                db_vids = child_store.get_by_status("approved", channel_id=channel_filter)
             else:
-                db_vids = video_store.get_by_status("approved", channel_name=channel_filter)
+                db_vids = child_store.get_by_status("approved", channel_name=channel_filter)
             for v in db_vids:
                 vid = v.get("video_id", "")
                 if vid and vid not in seen_ids and not v.get("is_short"):
                     seen_ids.add(vid)
                     filtered.append(v)
         filtered.sort(key=lambda v: v.get("timestamp") or 0, reverse=True)
-        # Attach category to each filtered video (keyed by channel_id, name fallback)
-        if video_store:
+        if child_store:
             _cat_by_cid = {}
             _cat_by_name = {}
-            for ch_name, cid, _h, cat in video_store.get_channels_with_ids("allowed"):
+            for ch_name, cid, _h, cat in child_store.get_channels_with_ids("allowed"):
                 if cat:
                     if cid:
                         _cat_by_cid[cid] = cat
@@ -554,19 +603,19 @@ def _build_catalog(channel_filter: str = "") -> list[dict]:
                 if not cat:
                     cat = _cat_by_name.get(v.get("channel_name", ""))
                 v["category"] = cat or v.get("category") or "fun"
-        # Filter out titles matching word filters
         wf = _get_word_filter_patterns()
         if wf:
             filtered = [v for v in filtered if not _title_matches_filter(v.get("title", ""), wf)]
         return filtered
 
-    # Return cached full catalog if fresh
-    cache_age = _channel_cache.get("updated_at", 0.0)
+    # NOTE: catalog_cache is global for now — multi-profile invalidation is handled
+    # by _invalidate_catalog_cache() calls. Per-profile caching deferred.
+    cache_age = cache.get("updated_at", 0.0)
     if _catalog_cache and _catalog_cache_time >= cache_age and _catalog_cache_time > 0:
-        return _catalog_cache
+        # Only use cache for default profile (multi-profile always rebuilds)
+        if profile_id == "default":
+            return _catalog_cache
 
-    # Round-robin interleave channels (each already newest-first from YouTube)
-    # Copy dicts to avoid mutating shared channel cache references
     seen_ids = set(denied_ids)
     catalog = []
     if channels:
@@ -579,9 +628,6 @@ def _build_catalog(channel_filter: str = "") -> list[dict]:
                     v = vids[indices[i]]
                     vid = v.get("video_id", "")
                     indices[i] += 1
-                    # Always skip Shorts from main grid — they either
-                    # appear in the dedicated Shorts row (enabled) or
-                    # are hidden everywhere (disabled)
                     if v.get("is_short"):
                         added = True
                         continue
@@ -592,19 +638,17 @@ def _build_catalog(channel_filter: str = "") -> list[dict]:
             if not added:
                 break
 
-    # Append individually approved DB videos not already in channel set
-    if video_store:
-        for v in video_store.get_by_status("approved"):
+    if child_store:
+        for v in child_store.get_by_status("approved"):
             vid = v.get("video_id", "")
             if vid and vid not in seen_ids and not v.get("is_short"):
                 seen_ids.add(vid)
                 catalog.append(v)
 
-    # Attach category to each catalog video (keyed by channel_id, name fallback)
-    if video_store:
+    if child_store:
         _cat_by_cid = {}
         _cat_by_name = {}
-        for ch_name, cid, _h, cat in video_store.get_channels_with_ids("allowed"):
+        for ch_name, cid, _h, cat in child_store.get_channels_with_ids("allowed"):
             if cat:
                 if cid:
                     _cat_by_cid[cid] = cat
@@ -616,13 +660,13 @@ def _build_catalog(channel_filter: str = "") -> list[dict]:
                 cat = _cat_by_name.get(v.get("channel_name", ""))
             v["category"] = cat or v.get("category") or "fun"
 
-    # Filter out titles matching word filters BEFORE caching
     wf = _get_word_filter_patterns()
     if wf:
         catalog = [v for v in catalog if not _title_matches_filter(v.get("title", ""), wf)]
 
-    _catalog_cache = catalog
-    _catalog_cache_time = time.monotonic()
+    if profile_id == "default":
+        _catalog_cache = catalog
+        _catalog_cache_time = time.monotonic()
     return catalog
 
 
@@ -637,13 +681,14 @@ async def api_catalog(
     shorts: bool = Query(False),
     requests: bool = Query(False),
 ):
-    """Paginated catalog of all watchable videos."""
+    """Paginated catalog of all watchable videos for the current profile."""
+    profile_id = request.session.get("child_id", "default")
     if requests:
-        full = _build_requests_row(limit=200)
+        full = _build_requests_row(limit=200, profile_id=profile_id)
     elif shorts:
-        full = _build_shorts_catalog()
+        full = _build_shorts_catalog(profile_id=profile_id)
     else:
-        full = _build_catalog(channel_filter=channel)
+        full = _build_catalog(channel_filter=channel, profile_id=profile_id)
     if category:
         full = [v for v in full if v.get("category", "fun") == category]
     page = full[offset:offset + limit]
@@ -654,26 +699,31 @@ async def api_catalog(
     })
 
 
-def _resolve_setting(base_key: str, default: str = "") -> str:
+def _resolve_setting(base_key: str, default: str = "", store=None) -> str:
     """Resolve a setting with per-day override support.
 
     Checks {day}_{base_key} first; falls back to {base_key}.
+    Accepts a ChildStore or uses global video_store.
     """
-    if not video_store:
+    s = store or video_store
+    if not s:
         return default
     tz = wl_config.timezone if wl_config else ""
     day = get_weekday(tz)
-    day_val = video_store.get_setting(f"{day}_{base_key}", "")
+    day_val = s.get_setting(f"{day}_{base_key}", "")
     if day_val:
         return day_val
-    return video_store.get_setting(base_key, default)
+    return s.get_setting(base_key, default)
 
 
-def _get_time_limit_info() -> dict | None:
-    """Get time limit info. Returns None if limits disabled."""
-    if not video_store:
+def _get_time_limit_info(store=None) -> dict | None:
+    """Get time limit info. Returns None if limits disabled.
+    Accepts a ChildStore or uses global video_store.
+    """
+    s = store or video_store
+    if not s:
         return None
-    limit_str = _resolve_setting("daily_limit_minutes", "")
+    limit_str = _resolve_setting("daily_limit_minutes", "", store=s)
     if not limit_str and wl_config:
         limit_min = wl_config.daily_limit_minutes
     else:
@@ -683,12 +733,11 @@ def _get_time_limit_info() -> dict | None:
     tz = wl_config.timezone if wl_config else ""
     today = get_today_str(tz)
     bounds = get_day_utc_bounds(today, tz)
-    # Add today's bonus minutes (auto-expires when date doesn't match)
-    bonus_date = video_store.get_setting("daily_bonus_date", "")
+    bonus_date = s.get_setting("daily_bonus_date", "")
     if bonus_date == today:
-        bonus = int(video_store.get_setting("daily_bonus_minutes", "0") or "0")
+        bonus = int(s.get_setting("daily_bonus_minutes", "0") or "0")
         limit_min += bonus
-    used_min = video_store.get_daily_watch_minutes(today, utc_bounds=bounds)
+    used_min = s.get_daily_watch_minutes(today, utc_bounds=bounds)
     remaining_min = max(0.0, limit_min - used_min)
     return {
         "limit_min": limit_min,
@@ -699,44 +748,43 @@ def _get_time_limit_info() -> dict | None:
     }
 
 
-def _resolve_video_category(video: dict) -> str:
+def _resolve_video_category(video: dict, store=None) -> str:
     """Resolve effective category: video override > channel default > fun."""
     cat = video.get("category")
     if cat:
         return cat
+    s = store or video_store
     channel_name = video.get("channel_name", "")
-    if channel_name and video_store:
-        ch_cat = video_store.get_channel_category(channel_name)
+    if channel_name and s:
+        ch_cat = s.get_channel_category(channel_name)
         if ch_cat:
             return ch_cat
     return "fun"
 
 
-def _get_category_time_info() -> dict | None:
-    """Get per-category time budget info. Returns None if no category limits configured."""
-    if not video_store:
+def _get_category_time_info(store=None) -> dict | None:
+    """Get per-category time budget info. Accepts a ChildStore or uses global video_store."""
+    s = store or video_store
+    if not s:
         return None
-    edu_limit_str = _resolve_setting("edu_limit_minutes", "")
-    fun_limit_str = _resolve_setting("fun_limit_minutes", "")
+    edu_limit_str = _resolve_setting("edu_limit_minutes", "", store=s)
+    fun_limit_str = _resolve_setting("fun_limit_minutes", "", store=s)
     edu_limit = int(edu_limit_str) if edu_limit_str else 0
     fun_limit = int(fun_limit_str) if fun_limit_str else 0
-    # If neither category limit is set, fall back to legacy global limit
     if edu_limit == 0 and fun_limit == 0:
         return None
     tz = wl_config.timezone if wl_config else ""
     today = get_today_str(tz)
     bounds = get_day_utc_bounds(today, tz)
-    usage = video_store.get_daily_watch_by_category(today, utc_bounds=bounds)
-    # Bonus minutes apply to both categories
+    usage = s.get_daily_watch_by_category(today, utc_bounds=bounds)
     bonus = 0
-    bonus_date = video_store.get_setting("daily_bonus_date", "")
+    bonus_date = s.get_setting("daily_bonus_date", "")
     if bonus_date == today:
-        bonus = int(video_store.get_setting("daily_bonus_minutes", "0") or "0")
+        bonus = int(s.get_setting("daily_bonus_minutes", "0") or "0")
 
     result = {"categories": {}}
     for cat, limit in [("edu", edu_limit), ("fun", fun_limit)]:
         used = usage.get(cat, 0.0)
-        # Uncategorized counts as fun
         if cat == "fun":
             used += usage.get(None, 0.0)
         effective_limit = limit + bonus if limit > 0 else 0
@@ -756,18 +804,18 @@ def _get_category_time_info() -> dict | None:
     return result
 
 
-def _get_schedule_info() -> dict | None:
-    """Get schedule window info. Returns None if no schedule configured."""
-    if not video_store:
+def _get_schedule_info(store=None) -> dict | None:
+    """Get schedule window info. Accepts a ChildStore or uses global video_store."""
+    s = store or video_store
+    if not s:
         return None
-    start = _resolve_setting("schedule_start", "")
-    end = _resolve_setting("schedule_end", "")
+    start = _resolve_setting("schedule_start", "", store=s)
+    end = _resolve_setting("schedule_end", "", store=s)
     if not start and not end:
         return None
     tz = wl_config.timezone if wl_config else ""
     allowed, unlock_time = is_within_schedule(start, end, tz)
     if not allowed and end:
-        # Check if we're past today's end time → unlock is tomorrow's start
         from datetime import datetime as _dt
         if tz:
             from zoneinfo import ZoneInfo
@@ -778,7 +826,7 @@ def _get_schedule_info() -> dict | None:
         try:
             eh, em = map(int, end.split(":"))
             if now.hour * 60 + now.minute >= eh * 60 + em:
-                next_start = _get_next_start_time()
+                next_start = _get_next_start_time(store=s)
                 if next_start:
                     unlock_time = f"tomorrow at {next_start}"
         except (ValueError, AttributeError):
@@ -791,27 +839,60 @@ def _get_schedule_info() -> dict | None:
     }
 
 
-def _get_next_start_time() -> str | None:
+def _get_next_start_time(store=None) -> str | None:
     """Get the next day's schedule start time formatted for display."""
-    if not video_store:
+    s = store or video_store
+    if not s:
         return None
     tz_name = wl_config.timezone if wl_config else ""
     today = get_weekday(tz_name)
     tomorrow = DAY_NAMES[(DAY_NAMES.index(today) + 1) % 7]
-    next_start = video_store.get_setting(f"{tomorrow}_schedule_start", "")
+    next_start = s.get_setting(f"{tomorrow}_schedule_start", "")
     if not next_start:
-        next_start = video_store.get_setting("schedule_start", "")
+        next_start = s.get_setting("schedule_start", "")
     return format_time_12h(next_start) if next_start else None
 
 
 @app.get("/login", response_class=HTMLResponse)
-async def login_page(request: Request):
-    """PIN entry page."""
+async def login_page(request: Request, profile: str = Query("", max_length=50)):
+    """Profile picker → optional PIN entry."""
+    profiles = video_store.get_profiles() if video_store else []
+
+    # Auto-login: single profile with no PIN
+    if len(profiles) == 1 and not profiles[0]["pin"]:
+        request.session["child_id"] = profiles[0]["id"]
+        request.session["child_name"] = profiles[0]["display_name"]
+        return RedirectResponse(url="/", status_code=303)
+
     csrf_token = _get_csrf_token(request)
+
+    # If a profile is selected and it needs a PIN, show PIN input
+    if profile:
+        p = video_store.get_profile(profile) if video_store else None
+        if p and not p["pin"]:
+            # No PIN required — log in immediately
+            request.session["child_id"] = p["id"]
+            request.session["child_name"] = p["display_name"]
+            request.session["csrf_token"] = secrets.token_hex(32)
+            return RedirectResponse(url="/", status_code=303)
+        if p:
+            return templates.TemplateResponse("login.html", {
+                "request": request,
+                "csrf_token": csrf_token,
+                "error": False,
+                "profiles": profiles,
+                "selected_profile": p,
+                "step": "pin",
+            })
+
+    # Show profile picker
     return templates.TemplateResponse("login.html", {
         "request": request,
         "csrf_token": csrf_token,
         "error": False,
+        "profiles": profiles,
+        "selected_profile": None,
+        "step": "pick" if len(profiles) > 1 else "pin",
     })
 
 
@@ -819,30 +900,56 @@ async def login_page(request: Request):
 @limiter.limit("5/hour")
 async def login_submit(
     request: Request,
-    pin: str = Form(...),
+    pin: str = Form(""),
+    profile_id: str = Form(""),
     csrf_token: str = Form(""),
 ):
-    """Validate PIN and create session."""
+    """Validate PIN and create session for selected profile."""
     if not _validate_csrf(request, csrf_token):
         return RedirectResponse(url="/login", status_code=303)
 
-    expected_pin = web_config.pin if web_config else ""
-    if not expected_pin:
-        # PIN auth disabled — session is already open via middleware
+    if not video_store:
         return RedirectResponse(url="/", status_code=303)
-    if hmac.compare_digest(pin, expected_pin):
-        request.session["authenticated"] = True
+
+    # Find the profile
+    profile = video_store.get_profile(profile_id) if profile_id else None
+    if not profile:
+        return RedirectResponse(url="/login", status_code=303)
+
+    # No PIN required
+    if not profile["pin"]:
+        request.session["child_id"] = profile["id"]
+        request.session["child_name"] = profile["display_name"]
         request.session["csrf_token"] = secrets.token_hex(32)
         return RedirectResponse(url="/", status_code=303)
 
-    # Regenerate CSRF token on failed attempt to prevent replay
+    # Validate PIN
+    if pin and hmac.compare_digest(pin, profile["pin"]):
+        request.session["child_id"] = profile["id"]
+        request.session["child_name"] = profile["display_name"]
+        request.session["csrf_token"] = secrets.token_hex(32)
+        return RedirectResponse(url="/", status_code=303)
+
+    # Failed PIN
+    profiles = video_store.get_profiles()
     new_csrf = secrets.token_hex(32)
     request.session["csrf_token"] = new_csrf
     return templates.TemplateResponse("login.html", {
         "request": request,
         "csrf_token": new_csrf,
         "error": True,
+        "profiles": profiles,
+        "selected_profile": profile,
+        "step": "pin",
     })
+
+
+@app.get("/switch-profile")
+async def switch_profile(request: Request):
+    """Clear current session and return to profile picker."""
+    request.session.pop("child_id", None)
+    request.session.pop("child_name", None)
+    return RedirectResponse(url="/login", status_code=303)
 
 
 @app.get("/help", response_class=HTMLResponse)
@@ -860,34 +967,37 @@ _ERROR_MESSAGES = {
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request, error: str = Query("", max_length=50)):
     """Homepage: search bar + unified video catalog."""
+    cs = _get_child_store(request)
+    profile_id = cs.profile_id
     page_size = 12
-    full_catalog = _build_catalog()
+    full_catalog = _build_catalog(profile_id=profile_id)
     catalog = full_catalog[:page_size]
     requests_page = 4
-    full_requests = _build_requests_row(limit=50)
+    full_requests = _build_requests_row(limit=50, profile_id=profile_id)
     requests_row = full_requests[:requests_page]
     has_more_requests = len(full_requests) > requests_page
     shorts_page = 9
-    full_shorts = _build_shorts_catalog()
+    full_shorts = _build_shorts_catalog(profile_id=profile_id)
     shorts_catalog = full_shorts[:shorts_page]
     has_more_shorts = len(full_shorts) > shorts_page
-    time_info = _get_time_limit_info()
-    schedule_info = _get_schedule_info()
-    cat_info = _get_category_time_info()
-    channel_videos = _channel_cache.get("channels", {})
-    id_to_name = _channel_cache.get("id_to_name", {})
-    # Pick a random video from each channel for the hero carousel
+    time_info = _get_time_limit_info(store=cs)
+    schedule_info = _get_schedule_info(store=cs)
+    cat_info = _get_category_time_info(store=cs)
+    cache = _get_profile_cache(profile_id)
+    channel_videos = cache.get("channels", {})
+    id_to_name = cache.get("id_to_name", {})
     hero_highlights = []
     for cache_key, ch_vids in channel_videos.items():
         if ch_vids:
             hero_highlights.append(random.choice(ch_vids))
     random.shuffle(hero_highlights)
-    # Build channel_id → display_name map for channel pills
     channel_pills = {}
     for cache_key in channel_videos:
         display = id_to_name.get(cache_key, cache_key)
         channel_pills[cache_key] = display
     error_message = _ERROR_MESSAGES.get(error, "") if error else ""
+    child_name = _get_child_name(request)
+    profiles = video_store.get_profiles() if video_store else []
     return templates.TemplateResponse("index.html", {
         "request": request,
         "catalog": catalog,
@@ -897,40 +1007,45 @@ async def index(request: Request, error: str = Query("", max_length=50)):
         "has_more_requests": has_more_requests,
         "shorts_catalog": shorts_catalog,
         "has_more_shorts": has_more_shorts,
-        "shorts_enabled": _shorts_enabled(),
+        "shorts_enabled": _shorts_enabled(cs),
         "time_info": time_info,
         "schedule_info": schedule_info,
         "cat_info": cat_info,
         "channel_pills": channel_pills,
         "hero_highlights": hero_highlights,
         "error_message": error_message,
+        "child_name": child_name,
+        "multi_profile": len(profiles) > 1,
     })
 
 
 @app.get("/activity", response_class=HTMLResponse)
 async def activity_page(request: Request):
     """Today's watch log — per-video breakdown and total."""
+    cs = _get_child_store(request)
     tz = wl_config.timezone if wl_config else ""
     today = get_today_str(tz)
     bounds = get_day_utc_bounds(today, tz)
-    breakdown = video_store.get_daily_watch_breakdown(today, utc_bounds=bounds)
-    time_info = _get_time_limit_info()
-    cat_info = _get_category_time_info()
+    breakdown = cs.get_daily_watch_breakdown(today, utc_bounds=bounds)
+    time_info = _get_time_limit_info(store=cs)
+    cat_info = _get_category_time_info(store=cs)
     total_min = sum(v["minutes"] for v in breakdown)
-    # Resolve effective category for each breakdown entry
-    if video_store:
-        _chan_cats = {}
-        for ch_name, _cid, _h, cat in video_store.get_channels_with_ids("allowed"):
-            if cat:
-                _chan_cats[ch_name] = cat
-        for v in breakdown:
-            v["category"] = _chan_cats.get(v.get("channel_name", ""), v.get("category") or "fun")
+    _chan_cats = {}
+    for ch_name, _cid, _h, cat in cs.get_channels_with_ids("allowed"):
+        if cat:
+            _chan_cats[ch_name] = cat
+    for v in breakdown:
+        v["category"] = _chan_cats.get(v.get("channel_name", ""), v.get("category") or "fun")
+    child_name = _get_child_name(request)
+    profiles = video_store.get_profiles() if video_store else []
     return templates.TemplateResponse("activity.html", {
         "request": request,
         "breakdown": breakdown,
         "total_min": round(total_min, 1),
         "time_info": time_info,
         "cat_info": cat_info,
+        "child_name": child_name,
+        "multi_profile": len(profiles) > 1,
     })
 
 
@@ -941,6 +1056,8 @@ async def search_videos(request: Request, q: str = Query("", max_length=200)):
     if not q:
         return RedirectResponse(url="/", status_code=303)
 
+    cs = _get_child_store(request)
+
     # Block search queries that contain filtered words
     filtered_words = video_store.get_word_filters_set()
     if filtered_words:
@@ -949,7 +1066,7 @@ async def search_videos(request: Request, q: str = Query("", max_length=200)):
             for w in filtered_words
         ]
         if any(p.search(q) for p in word_patterns):
-            video_store.record_search(q, 0)
+            cs.record_search(q, 0)
             csrf_token = _get_csrf_token(request)
             return templates.TemplateResponse("search.html", {
                 "request": request,
@@ -973,7 +1090,7 @@ async def search_videos(request: Request, q: str = Query("", max_length=200)):
         results = await search(q, max_results=max_results)
 
     # Filter out blocked channels
-    blocked = video_store.get_blocked_channels_set()
+    blocked = cs.get_blocked_channels_set()
     if blocked:
         results = [r for r in results if r.get('channel_name', '').lower() not in blocked]
 
@@ -985,11 +1102,11 @@ async def search_videos(request: Request, q: str = Query("", max_length=200)):
         ]
 
     # Hide Shorts from search when disabled
-    if not _shorts_enabled():
+    if not _shorts_enabled(cs):
         results = [r for r in results if not r.get('is_short')]
 
     # Log search query
-    video_store.record_search(q, len(results))
+    cs.record_search(q, len(results))
 
     csrf_token = _get_csrf_token(request)
     error_message = _ERROR_MESSAGES["fetch_failed"] if fetch_failed else ""
@@ -1020,7 +1137,10 @@ async def request_video(
     if not VIDEO_ID_RE.match(video_id):
         return RedirectResponse(url="/?error=invalid_video", status_code=303)
 
-    existing = video_store.get_video(video_id)
+    cs = _get_child_store(request)
+    profile_id = cs.profile_id
+
+    existing = cs.get_video(video_id)
     if existing:
         if existing["status"] == "approved":
             return RedirectResponse(url=f"/watch/{video_id}", status_code=303)
@@ -1035,8 +1155,8 @@ async def request_video(
     is_short = metadata.get('is_short', False)
 
     # Check if channel is blocked → auto-deny
-    if video_store.is_channel_blocked(channel_name, channel_id=channel_id or ""):
-        video = video_store.add_video(
+    if cs.is_channel_blocked(channel_name, channel_id=channel_id or ""):
+        video = cs.add_video(
             video_id=metadata['video_id'],
             title=metadata['title'],
             channel_name=channel_name,
@@ -1045,16 +1165,16 @@ async def request_video(
             channel_id=channel_id,
             is_short=is_short,
         )
-        video_store.update_status(video_id, "denied")
+        cs.update_status(video_id, "denied")
         _invalidate_catalog_cache()
         return templates.TemplateResponse("denied.html", {
             "request": request,
-            "video": video_store.get_video(video_id),
+            "video": cs.get_video(video_id),
         })
 
     # Check if channel is allowlisted → auto-approve
-    if video_store.is_channel_allowed(channel_name, channel_id=channel_id or ""):
-        video = video_store.add_video(
+    if cs.is_channel_allowed(channel_name, channel_id=channel_id or ""):
+        video = cs.add_video(
             video_id=metadata['video_id'],
             title=metadata['title'],
             channel_name=channel_name,
@@ -1063,11 +1183,11 @@ async def request_video(
             channel_id=channel_id,
             is_short=is_short,
         )
-        video_store.update_status(video_id, "approved")
+        cs.update_status(video_id, "approved")
         _invalidate_catalog_cache()
         return RedirectResponse(url=f"/watch/{video_id}", status_code=303)
 
-    video = video_store.add_video(
+    video = cs.add_video(
         video_id=metadata['video_id'],
         title=metadata['title'],
         channel_name=channel_name,
@@ -1078,7 +1198,7 @@ async def request_video(
     )
 
     if notify_callback:
-        await notify_callback(video)
+        await notify_callback(video, profile_id)
 
     return RedirectResponse(url=f"/pending/{video_id}", status_code=303)
 
@@ -1088,7 +1208,8 @@ async def pending_video(request: Request, video_id: str):
     """Waiting screen with polling."""
     if not VIDEO_ID_RE.match(video_id):
         return RedirectResponse(url="/", status_code=303)
-    video = video_store.get_video(video_id)
+    cs = _get_child_store(request)
+    video = cs.get_video(video_id)
 
     if not video:
         return RedirectResponse(url="/", status_code=303)
@@ -1114,17 +1235,18 @@ async def watch_video(request: Request, video_id: str):
     """Play approved video (embed)."""
     if not VIDEO_ID_RE.match(video_id):
         return RedirectResponse(url="/", status_code=303)
-    video = video_store.get_video(video_id)
+    cs = _get_child_store(request)
+    video = cs.get_video(video_id)
 
     if not video:
         # Video not in DB — auto-approve if channel is allowlisted
         metadata = await extract_metadata(video_id)
         if not metadata:
             return RedirectResponse(url="/", status_code=303)
-        if not video_store.is_channel_allowed(metadata['channel_name'],
-                                                channel_id=metadata.get('channel_id') or ""):
+        if not cs.is_channel_allowed(metadata['channel_name'],
+                                     channel_id=metadata.get('channel_id') or ""):
             return RedirectResponse(url="/", status_code=303)
-        video_store.add_video(
+        cs.add_video(
             video_id=metadata['video_id'],
             title=metadata['title'],
             channel_name=metadata['channel_name'],
@@ -1133,22 +1255,21 @@ async def watch_video(request: Request, video_id: str):
             channel_id=metadata.get('channel_id'),
             is_short=metadata.get('is_short', False),
         )
-        video_store.update_status(video_id, "approved")
+        cs.update_status(video_id, "approved")
         _invalidate_catalog_cache()
-        video = video_store.get_video(video_id)
+        video = cs.get_video(video_id)
 
     if not video or video["status"] != "approved":
         return RedirectResponse(url="/", status_code=303)
 
-    # Check category-specific time limit before allowing playback
-    video_cat = _resolve_video_category(video)
+    video_cat = _resolve_video_category(video, store=cs)
     cat_label = "Educational" if video_cat == "edu" else "Entertainment"
-    cat_info = _get_category_time_info()
+    cat_info = _get_category_time_info(store=cs)
+    child_name = _get_child_name(request)
     time_info = None
     if cat_info:
         cat_budget = cat_info["categories"].get(video_cat, {})
         if cat_budget.get("exceeded"):
-            # Find categories that still have time
             available = []
             for c, info in cat_info["categories"].items():
                 if not info["exceeded"] and c != video_cat:
@@ -1159,28 +1280,30 @@ async def watch_video(request: Request, video_id: str):
                 "time_info": cat_budget,
                 "category": cat_label,
                 "available_categories": available,
-                "next_start": _get_next_start_time(),
+                "next_start": _get_next_start_time(store=cs),
+                "child_name": child_name,
             })
         if cat_budget.get("limit_min", 0) > 0:
             time_info = cat_budget
     else:
-        time_info = _get_time_limit_info()
+        time_info = _get_time_limit_info(store=cs)
         if time_info and time_info["exceeded"]:
             return templates.TemplateResponse("timesup.html", {
                 "request": request,
                 "time_info": time_info,
-                "next_start": _get_next_start_time(),
+                "next_start": _get_next_start_time(store=cs),
+                "child_name": child_name,
             })
 
-    # Check schedule window before allowing playback
-    schedule_info = _get_schedule_info()
+    schedule_info = _get_schedule_info(store=cs)
     if schedule_info and not schedule_info["allowed"]:
         return templates.TemplateResponse("outsidehours.html", {
             "request": request,
             "schedule_info": schedule_info,
+            "child_name": child_name,
         })
 
-    video_store.record_view(video_id)
+    cs.record_view(video_id)
     request.session["watching"] = video_id
 
     embed_url = f"https://www.youtube-nocookie.com/embed/{video_id}?enablejsapi=1"
@@ -1204,7 +1327,8 @@ async def api_status(request: Request, video_id: str):
     if not VIDEO_ID_RE.match(video_id):
         return JSONResponse({"status": "not_found"})
 
-    video = video_store.get_video(video_id)
+    profile_id = request.session.get("child_id", "default")
+    video = video_store.get_video(video_id, profile_id=profile_id) if video_store else None
 
     if not video:
         return JSONResponse({"status": "not_found"})
@@ -1227,12 +1351,13 @@ async def watch_heartbeat(request: Request, body: HeartbeatRequest):
         return JSONResponse({"error": "not_watching"}, status_code=400)
 
     # Verify the video exists and is approved before accepting heartbeat
-    video = video_store.get_video(vid)
+    cs = _get_child_store(request)
+    video = cs.get_video(vid)
     if not video or video["status"] != "approved":
         return JSONResponse({"error": "not_approved"}, status_code=400)
 
     # Check schedule window
-    schedule_info = _get_schedule_info()
+    schedule_info = _get_schedule_info(store=cs)
     if schedule_info and not schedule_info["allowed"]:
         return JSONResponse({"error": "outside_schedule"}, status_code=403)
 
@@ -1252,23 +1377,23 @@ async def watch_heartbeat(request: Request, body: HeartbeatRequest):
             del _last_heartbeat[k]
 
     if seconds > 0:
-        video_store.record_watch_seconds(vid, seconds)
+        cs.record_watch_seconds(vid, seconds)
 
     # Per-category time limit check
-    video_cat = _resolve_video_category(video) if video else "fun"
-    cat_info = _get_category_time_info()
+    video_cat = _resolve_video_category(video, store=cs) if video else "fun"
+    cat_info = _get_category_time_info(store=cs)
+    profile_id = cs.profile_id
     remaining = -1
     if cat_info:
         cat_budget = cat_info["categories"].get(video_cat, {})
         if cat_budget.get("limit_min", 0) > 0:
             remaining = cat_budget.get("remaining_sec", -1)
-        # Notify parent if category limit just reached
         if cat_budget.get("exceeded") and time_limit_notify_cb:
-            await time_limit_notify_cb(cat_budget["used_min"], cat_budget["limit_min"], video_cat)
+            await time_limit_notify_cb(cat_budget["used_min"], cat_budget["limit_min"], video_cat, profile_id)
     else:
-        time_info = _get_time_limit_info()
+        time_info = _get_time_limit_info(store=cs)
         remaining = time_info["remaining_sec"] if time_info else -1
         if time_info and time_info["exceeded"] and time_limit_notify_cb:
-            await time_limit_notify_cb(time_info["used_min"], time_info["limit_min"])
+            await time_limit_notify_cb(time_info["used_min"], time_info["limit_min"], "", profile_id)
 
     return JSONResponse({"remaining": remaining})
