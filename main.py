@@ -14,7 +14,11 @@ from config import load_config, Config
 from data.child_store import ChildStore
 from data.video_store import VideoStore
 from bot.telegram_bot import BrainRotGuardBot
-from web.app import app as fastapi_app, setup as web_setup, invalidate_channel_cache
+from web.app import (
+    app as fastapi_app, init_app_state, invalidate_channel_cache,
+    _invalidate_catalog_cache, SecurityHeadersMiddleware, PinAuthMiddleware,
+)
+from youtube.extractor import configure_timeout
 
 logging.basicConfig(
     level=logging.INFO,
@@ -60,12 +64,12 @@ class BrainRotGuard:
                 config=self.config,
                 starter_channels_path=Path(__file__).parent / "starter-channels.yaml",
             )
-            self.bot.on_channel_change = invalidate_channel_cache
-            from web.app import _invalidate_catalog_cache
-            self.bot.on_video_change = _invalidate_catalog_cache
+            state = fastapi_app.state
+            self.bot.on_channel_change = lambda pid="": invalidate_channel_cache(state, pid)
+            self.bot.on_video_change = lambda: _invalidate_catalog_cache(state)
             logger.info("Telegram bot initialized")
 
-        # Wire up web app with video store and notification callbacks
+        # Wire dependencies onto app.state (replaces old setup() call)
         async def notify_callback(video: dict, profile_id: str = "default"):
             if self.bot:
                 await self.bot.notify_new_request(video, profile_id=profile_id)
@@ -76,11 +80,35 @@ class BrainRotGuard:
                 await self.bot.notify_time_limit_reached(
                     used_min, limit_min, category, profile_id=profile_id)
 
-        web_setup(
-            self.video_store, notify_callback, self.config.youtube, self.config.web,
-            wl_cfg=self.config.watch_limits,
-            time_limit_cb=time_limit_cb,
-        )
+        state = fastapi_app.state
+        state.video_store = self.video_store
+        state.notify_callback = notify_callback
+        state.time_limit_notify_cb = time_limit_cb
+        state.youtube_config = self.config.youtube
+        state.web_config = self.config.web
+        state.wl_config = self.config.watch_limits
+        init_app_state(state)
+
+        if self.config.youtube and self.config.youtube.ydl_timeout:
+            configure_timeout(self.config.youtube.ydl_timeout)
+
+        # Configure middleware
+        import secrets as _secrets
+        if self.config.web and self.config.web.session_secret:
+            session_secret = self.config.web.session_secret
+        else:
+            session_secret = self.video_store.get_setting("session_secret")
+            if not session_secret:
+                session_secret = _secrets.token_hex(32)
+                self.video_store.set_setting("session_secret", session_secret)
+                logger.info("Generated and persisted new session secret")
+        pin = self.config.web.pin if self.config.web else ""
+
+        from starlette.middleware.sessions import SessionMiddleware
+        fastapi_app.add_middleware(SecurityHeadersMiddleware)
+        fastapi_app.add_middleware(PinAuthMiddleware, pin=pin)
+        fastapi_app.add_middleware(SessionMiddleware, secret_key=session_secret, max_age=86400)
+
         logger.info("Web app initialized")
 
     async def run(self) -> None:
