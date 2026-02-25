@@ -98,9 +98,12 @@ footer a:hover {
 /* === Search Toggle (mobile only) === */
 .search-toggle {
     display: none;
-    padding: 10px 22px;
-    font-size: 13px;
-    flex: 1;
+    background: none;
+    border: none;
+    font-size: 22px;
+    cursor: pointer;
+    padding: 4px;
+    line-height: 1;
 }
 
 /* === Search Overlay (mobile only) === */

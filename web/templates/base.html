@@ -16,7 +16,7 @@
             <a href="/"><img src="/static/logo.png" alt="BrainRotGuard" class="logo-img"></a>
             <a href="https://github.com/GHJJ123/brainrotguard/blob/main/CHANGELOG.md" target="_blank" rel="noopener" class="version-tag">v{{ app_version }}</a>
         </div>
-        <button type="button" class="search-toggle btn-primary" onclick="var o=document.querySelector('.search-overlay');o.classList.add('open');o.querySelector('input').focus();">Search</button>
+        <button type="button" class="search-toggle" onclick="var o=document.querySelector('.search-overlay');o.classList.add('open');o.querySelector('input').focus();">&#x1F50D;</button>
         <form action="/search" method="GET" class="header-search">
             <input type="text" name="q" placeholder="Search or paste a link..." class="header-search-input" {% block search_attrs %}{% endblock %}>
             <button type="submit" class="btn-primary header-search-btn">Search</button>

@@ -384,14 +384,14 @@ class BrainRotGuardBot:
         child_name = ""
         if len(profiles) > 1:
             p = self.video_store.get_profile(profile_id)
-            child_name = p["display_name"] if p else profile_id
+            child_name = p["display_name"] if p else ""
 
         # Check if already approved for another child
         other = self.video_store.find_video_approved_for_others(video_id, profile_id)
         cross_child_note = ""
         if other and len(profiles) > 1:
             other_profile = self.video_store.get_profile(other["profile_id"])
-            other_name = other_profile["display_name"] if other_profile else other["profile_id"]
+            other_name = other_profile["display_name"] if other_profile else "another child"
             cross_child_note = f"\n_Already approved for {other_name}_"
 
         short_label = " [SHORT]" if is_short else ""
@@ -906,7 +906,7 @@ class BrainRotGuardBot:
             cs = self._child_store(p["id"])
             stats = cs.get_stats()
             ch_count = len(cs.get_channels_with_ids("allowed"))
-            lines.append(f"**{p['display_name']}** (`{p['id']}`)")
+            lines.append(f"**{p['display_name']}**")
             lines.append(f"  {pin_status} · {stats['approved']} videos · {ch_count} channels")
         await update.effective_message.reply_text(_md("\n".join(lines)), parse_mode=MD2)
 
@@ -924,7 +924,7 @@ class BrainRotGuardBot:
             return
         # Ensure unique ID
         if self.video_store.get_profile(pid):
-            await update.effective_message.reply_text(f"Profile '{pid}' already exists.")
+            await update.effective_message.reply_text(f"A profile named '{name}' already exists.")
             return
         if self.video_store.create_profile(pid, name, pin=pin):
             pin_msg = " with PIN" if pin else " (no PIN)"
