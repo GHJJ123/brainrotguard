@@ -504,39 +504,40 @@ class BrainRotGuardBot:
 
         # Pagination callbacks
         try:
-            if parts[0] == "approved_page" and len(parts) == 2:
-                await self._cb_approved_page(query, int(parts[1]))
+            if parts[0] == "approved_page" and len(parts) == 3:
+                await self._cb_approved_page(query, parts[1], int(parts[2]))
                 return
-            if parts[0] == "logs_page" and len(parts) == 3:
-                await self._cb_logs_page(query, int(parts[1]), int(parts[2]))
+            if parts[0] == "logs_page" and len(parts) == 4:
+                await self._cb_logs_page(query, parts[1], int(parts[2]), int(parts[3]))
                 return
-            if parts[0] == "search_page" and len(parts) == 3:
-                await self._cb_search_page(query, int(parts[1]), int(parts[2]))
+            if parts[0] == "search_page" and len(parts) == 4:
+                await self._cb_search_page(query, parts[1], int(parts[2]), int(parts[3]))
                 return
-            if parts[0] == "chan_page" and len(parts) == 3 and parts[1] in ("allowed", "blocked"):
-                await self._cb_channel_page(query, parts[1], int(parts[2]))
+            if parts[0] == "chan_page" and len(parts) == 4 and parts[2] in ("allowed", "blocked"):
+                await self._cb_channel_page(query, parts[1], parts[2], int(parts[3]))
                 return
-            if parts[0] == "chan_filter" and len(parts) == 2 and parts[1] in ("allowed", "blocked"):
-                await self._cb_channel_filter(query, parts[1])
+            if parts[0] == "chan_filter" and len(parts) == 3 and parts[2] in ("allowed", "blocked"):
+                await self._cb_channel_filter(query, parts[1], parts[2])
                 return
-            if parts[0] == "chan_menu" and len(parts) == 1:
-                await self._cb_channel_menu(query)
+            if parts[0] == "chan_menu" and len(parts) == 2:
+                await self._cb_channel_menu(query, parts[1])
                 return
-            if parts[0] == "pending_page" and len(parts) == 2:
-                await self._cb_pending_page(query, int(parts[1]))
+            if parts[0] == "pending_page" and len(parts) == 3:
+                await self._cb_pending_page(query, parts[1], int(parts[2]))
                 return
-            if parts[0] == "starter_page" and len(parts) == 2:
-                await self._cb_starter_page(query, int(parts[1]))
+            if parts[0] == "starter_page" and len(parts) == 3:
+                await self._cb_starter_page(query, parts[1], int(parts[2]))
                 return
         except (ValueError, IndexError):
             await query.answer("Invalid callback.")
             return
 
-        # Starter channels prompt (Yes/No from welcome message)
+        # Starter channels prompt (Yes/No from welcome message — first-run, default profile)
         if parts[0] == "starter_prompt" and len(parts) == 2:
             _answer_bg(query, "Got it!" if parts[1] == "no" else "")
             if parts[1] == "yes":
-                text, markup = self._render_starter_message()
+                cs = self._child_store("default")
+                text, markup = self._render_starter_message(store=cs, profile_id="default")
                 await _edit_msg(query, text, markup, disable_preview=True)
             else:
                 try:
@@ -545,10 +546,10 @@ class BrainRotGuardBot:
                     pass
             return
 
-        # Starter channel import
-        if parts[0] == "starter_import" and len(parts) == 2:
+        # Starter channel import: starter_import:profile_id:idx
+        if parts[0] == "starter_import" and len(parts) == 3:
             try:
-                await self._cb_starter_import(query, int(parts[1]))
+                await self._cb_starter_import(query, parts[1], int(parts[2]))
             except (ValueError, IndexError):
                 await query.answer("Invalid callback.")
             return
@@ -611,38 +612,42 @@ class BrainRotGuardBot:
             await self._cb_switch_confirm(query, ":".join(parts[1:]))
             return
 
-        # Channel management callbacks (unallow:name or unblock:name)
-        # Channel names may contain colons, so rejoin everything after first ':'
-        if parts[0] in ("unallow", "unblock") and len(parts) >= 2:
-            ch_name = ":".join(parts[1:])
+        # Channel management callbacks: unallow:profile_id:name or unblock:profile_id:name
+        # Channel names may contain colons, so rejoin everything after second ':'
+        if parts[0] in ("unallow", "unblock") and len(parts) >= 3:
+            profile_id = parts[1]
+            ch_name = ":".join(parts[2:])
+            cs = self._child_store(profile_id)
             # Look up channel_id before removing (remove_channel deletes the row)
             ch_id = ""
-            ch_rows = self.video_store.get_channels_with_ids(
+            ch_rows = cs.get_channels_with_ids(
                 "allowed" if parts[0] == "unallow" else "blocked"
             )
             for name, cid, _h, _c in ch_rows:
                 if name.lower() == ch_name.lower():
                     ch_id = cid or ""
                     break
-            if self.video_store.remove_channel(ch_name):
+            if cs.remove_channel(ch_name):
                 if parts[0] == "unallow":
-                    self.video_store.delete_channel_videos(ch_name, channel_id=ch_id)
+                    cs.delete_channel_videos(ch_name, channel_id=ch_id)
                 if self.on_channel_change:
-                    self.on_channel_change()
+                    self.on_channel_change(profile_id)
                 _answer_bg(query, f"Removed: {ch_name}")
-                await self._update_channel_list_message(query)
+                await self._update_channel_list_message(query, profile_id=profile_id)
             else:
                 _answer_bg(query, f"Not found: {ch_name}")
             return
 
-        # Resend notification callback from /pending
-        if parts[0] == "resend" and len(parts) == 2:
-            video = self.video_store.get_video(parts[1])
+        # Resend notification callback from /pending: resend:profile_id:video_id
+        if parts[0] == "resend" and len(parts) == 3:
+            profile_id = parts[1]
+            cs = self._child_store(profile_id)
+            video = cs.get_video(parts[2])
             if not video or video['status'] != 'pending':
                 await query.answer("No longer pending.")
                 return
             _answer_bg(query, "Resending...")
-            await self.notify_new_request(video)
+            await self.notify_new_request(video, profile_id=profile_id)
             return
 
         # New format: action:profile_id:video_id (3 parts) or legacy action:video_id (2 parts)
@@ -1129,14 +1134,18 @@ class BrainRotGuardBot:
     async def _cmd_pending(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not self._check_admin(update):
             return
-        pending = self.video_store.get_pending()
-        if not pending:
-            await update.effective_message.reply_text("No pending requests. Videos requested from the web app will appear here.")
-            return
-        text, keyboard = self._render_pending_page(pending, 0)
-        await update.effective_message.reply_text(text, parse_mode=MD2, reply_markup=keyboard)
 
-    def _render_pending_page(self, pending: list, page: int) -> tuple[str, InlineKeyboardMarkup]:
+        async def _inner(update, context, cs, profile):
+            pending = cs.get_pending()
+            if not pending:
+                await update.effective_message.reply_text("No pending requests. Videos requested from the web app will appear here.")
+                return
+            text, keyboard = self._render_pending_page(pending, 0, profile_id=profile["id"])
+            await update.effective_message.reply_text(text, parse_mode=MD2, reply_markup=keyboard)
+
+        await self._with_child_context(update, context, _inner)
+
+    def _render_pending_page(self, pending: list, page: int, profile_id: str = "default") -> tuple[str, InlineKeyboardMarkup]:
         """Render a page of the pending list with resend buttons."""
         total = len(pending)
         ps = self._PENDING_PAGE_SIZE
@@ -1157,22 +1166,23 @@ class BrainRotGuardBot:
             lines.append(f"  _{ch} \u00b7 {duration}_")
             lines.append("")
             buttons.append([InlineKeyboardButton(
-                f"Resend: {v['title'][:30]}", callback_data=f"resend:{v['video_id']}",
+                f"Resend: {v['title'][:30]}", callback_data=f"resend:{profile_id}:{v['video_id']}",
             )])
 
-        nav = _nav_row(page, total, ps, "pending_page")
+        nav = _nav_row(page, total, ps, f"pending_page:{profile_id}")
         if nav:
             buttons.append(nav)
         return _md("\n".join(lines)), InlineKeyboardMarkup(buttons)
 
-    async def _cb_pending_page(self, query, page: int) -> None:
+    async def _cb_pending_page(self, query, profile_id: str, page: int) -> None:
         """Handle pending list pagination."""
-        pending = self.video_store.get_pending()
+        cs = self._child_store(profile_id)
+        pending = cs.get_pending()
         if not pending:
             await query.answer("No pending requests.")
             return
         _answer_bg(query)
-        text, keyboard = self._render_pending_page(pending, page)
+        text, keyboard = self._render_pending_page(pending, page, profile_id=profile_id)
         await _edit_msg(query, text, keyboard)
 
     _APPROVED_PAGE_SIZE = 10
@@ -1180,28 +1190,34 @@ class BrainRotGuardBot:
     async def _cmd_approved(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not self._check_admin(update):
             return
-        query = " ".join(context.args)[:200] if context.args else ""
-        if query:
-            results = self.video_store.search_approved(query)
-            if not results:
-                await update.effective_message.reply_text(f"No approved videos matching \"{query}\".")
+
+        async def _inner(update, context, cs, profile):
+            pid = profile["id"]
+            query_str = " ".join(context.args)[:200] if context.args else ""
+            if query_str:
+                results = cs.search_approved(query_str)
+                if not results:
+                    await update.effective_message.reply_text(f"No approved videos matching \"{query_str}\".")
+                    return
+                text, keyboard = self._render_approved_page(results, len(results), 0, search=query_str, store=cs, profile_id=pid)
+                await update.effective_message.reply_text(
+                    text, parse_mode=MD2, reply_markup=keyboard, disable_web_page_preview=True,
+                )
                 return
-            text, keyboard = self._render_approved_page(results, len(results), 0, search=query)
+            page_items, total = cs.get_approved_page(0, self._APPROVED_PAGE_SIZE)
+            if not page_items:
+                await update.effective_message.reply_text("No approved videos yet. Approve requests or use /channel to allow channels.")
+                return
+            text, keyboard = self._render_approved_page(page_items, total, 0, store=cs, profile_id=pid)
             await update.effective_message.reply_text(
                 text, parse_mode=MD2, reply_markup=keyboard, disable_web_page_preview=True,
             )
-            return
-        page_items, total = self.video_store.get_approved_page(0, self._APPROVED_PAGE_SIZE)
-        if not page_items:
-            await update.effective_message.reply_text("No approved videos yet. Approve requests or use /channel to allow channels.")
-            return
-        text, keyboard = self._render_approved_page(page_items, total, 0)
-        await update.effective_message.reply_text(
-            text, parse_mode=MD2, reply_markup=keyboard, disable_web_page_preview=True,
-        )
 
-    def _render_approved_page(self, page_items: list, total: int, page: int, search: str = "") -> tuple[str, InlineKeyboardMarkup | None]:
+        await self._with_child_context(update, context, _inner)
+
+    def _render_approved_page(self, page_items: list, total: int, page: int, search: str = "", store=None, profile_id: str = "default") -> tuple[str, InlineKeyboardMarkup | None]:
         """Render a page of the approved list."""
+        s = store or self.video_store
         ps = self._APPROVED_PAGE_SIZE
         end = (page + 1) * ps
         total_pages = (total + ps - 1) // ps
@@ -1213,7 +1229,7 @@ class BrainRotGuardBot:
         if total_pages > 1:
             header += f" \u00b7 pg {page + 1}/{total_pages}"
         lines = [header, ""]
-        watch_mins = self.video_store.get_batch_watch_minutes(
+        watch_mins = s.get_batch_watch_minutes(
             [v['video_id'] for v in page_items]
         )
         for v in page_items:
@@ -1233,18 +1249,19 @@ class BrainRotGuardBot:
             lines.append(f"  /revoke\\_{vid.replace('-', '_')}")
             lines.append("")
 
-        nav = _nav_row(page, total, ps, "approved_page")
+        nav = _nav_row(page, total, ps, f"approved_page:{profile_id}")
         keyboard = InlineKeyboardMarkup([nav]) if nav else None
         return _md("\n".join(lines)), keyboard
 
-    async def _cb_approved_page(self, query, page: int) -> None:
+    async def _cb_approved_page(self, query, profile_id: str, page: int) -> None:
         """Handle approved list pagination."""
-        page_items, total = self.video_store.get_approved_page(page, self._APPROVED_PAGE_SIZE)
+        cs = self._child_store(profile_id)
+        page_items, total = cs.get_approved_page(page, self._APPROVED_PAGE_SIZE)
         if not page_items and page == 0:
             await query.answer("No approved videos.")
             return
         _answer_bg(query)
-        text, keyboard = self._render_approved_page(page_items, total, page)
+        text, keyboard = self._render_approved_page(page_items, total, page, store=cs, profile_id=profile_id)
         await _edit_msg(query, text, keyboard, disable_preview=True)
 
     async def _cmd_revoke(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1253,18 +1270,30 @@ class BrainRotGuardBot:
         # Extract video_id from /revoke_VIDEOID (hyphens encoded as underscores)
         text = update.message.text.strip()
         raw_id = text.split("_", 1)[1] if "_" in text else ""
-        video = self.video_store.get_video(raw_id)
-        if not video:
-            # Try restoring hyphens — Telegram commands can't contain them
-            video = self.video_store.find_video_fuzzy(raw_id)
-        video_id = video['video_id'] if video else raw_id
+        # Search all profiles for this video
+        video = None
+        found_profile = None
+        for p in self._get_profiles():
+            cs = self._child_store(p["id"])
+            v = cs.get_video(raw_id)
+            if not v:
+                v = cs.find_video_fuzzy(raw_id)
+            if v and v['status'] == 'approved':
+                video = v
+                found_profile = p
+                break
+            if v and not video:
+                video = v
+                found_profile = p
         if not video:
             await update.effective_message.reply_text("Video not found — it may have been removed from the database.")
             return
+        video_id = video['video_id']
         if video['status'] != 'approved':
             await update.effective_message.reply_text(f"Already {video['status']} — no change needed.")
             return
-        self.video_store.update_status(video_id, "denied")
+        cs = self._child_store(found_profile["id"])
+        cs.update_status(video_id, "denied")
         await update.effective_message.reply_text(
             _md(f"**Approval removed:** {video['title']}\nThe video is no longer watchable."), parse_mode=MD2,
         )
@@ -1417,15 +1446,19 @@ class BrainRotGuardBot:
     async def _cmd_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not self._check_admin(update):
             return
-        stats = self.video_store.get_stats()
-        await update.effective_message.reply_text(_md(
-            f"**BrainRotGuard Stats**\n\n"
-            f"**Total videos:** {stats['total']}\n"
-            f"**Pending:** {stats['pending']}\n"
-            f"**Approved:** {stats['approved']}\n"
-            f"**Denied:** {stats['denied']}\n"
-            f"**Total views:** {stats['total_views']}"
-        ), parse_mode=MD2)
+
+        async def _inner(update, context, cs, profile):
+            stats = cs.get_stats()
+            await update.effective_message.reply_text(_md(
+                f"**BrainRotGuard Stats**\n\n"
+                f"**Total videos:** {stats['total']}\n"
+                f"**Pending:** {stats['pending']}\n"
+                f"**Approved:** {stats['approved']}\n"
+                f"**Denied:** {stats['denied']}\n"
+                f"**Total views:** {stats['total_views']}"
+            ), parse_mode=MD2)
+
+        await self._with_child_context(update, context, _inner)
 
     async def _cmd_changelog(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not await self._require_admin(update):
@@ -1495,44 +1528,52 @@ class BrainRotGuardBot:
     async def _cmd_channel(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not self._check_admin(update):
             return
-        if not context.args:
-            await self._channel_list(update)
-            return
-        sub = context.args[0].lower()
-        rest = context.args[1:]
 
-        if sub == "allow":
-            await self._channel_allow(update, rest)
-        elif sub == "unallow":
-            await self._channel_unallow(update, rest)
-        elif sub == "block":
-            await self._channel_block(update, rest)
-        elif sub == "unblock":
-            await self._channel_unblock(update, rest)
-        elif sub == "cat":
-            await self._channel_set_cat(update, rest)
-        elif sub == "starter":
-            await self._channel_starter(update)
-        else:
-            await update.effective_message.reply_text(
-                "Usage: /channel allow|unallow|block|unblock|cat|starter <name>"
-            )
+        async def _inner(update, context, cs, profile):
+            args = context.args or []
+            if not args:
+                await self._channel_list(update, store=cs)
+                return
+            sub = args[0].lower()
+            rest = args[1:]
 
-    async def _channel_starter(self, update: Update) -> None:
+            if sub == "allow":
+                await self._channel_allow(update, rest, store=cs)
+            elif sub == "unallow":
+                await self._channel_unallow(update, rest, store=cs)
+            elif sub == "block":
+                await self._channel_block(update, rest, store=cs)
+            elif sub == "unblock":
+                await self._channel_unblock(update, rest, store=cs)
+            elif sub == "cat":
+                await self._channel_set_cat(update, rest, store=cs)
+            elif sub == "starter":
+                await self._channel_starter(update, store=cs)
+            else:
+                await update.effective_message.reply_text(
+                    "Usage: /channel allow|unallow|block|unblock|cat|starter <name>"
+                )
+
+        await self._with_child_context(update, context, _inner, allow_all=True)
+
+    async def _channel_starter(self, update: Update, store=None) -> None:
         """Handle /channel starter — show importable starter channels."""
         if not self._starter_channels:
             await update.effective_message.reply_text("No starter channels configured.")
             return
-        text, markup = self._render_starter_message()
+        s = store or self.video_store
+        pid = getattr(s, 'profile_id', 'default')
+        text, markup = self._render_starter_message(store=s, profile_id=pid)
         await update.effective_message.reply_text(
             text, parse_mode=MD2, reply_markup=markup, disable_web_page_preview=True,
         )
 
     _STARTER_PAGE_SIZE = 10
 
-    def _render_starter_message(self, page: int = 0) -> tuple[str, InlineKeyboardMarkup | None]:
+    def _render_starter_message(self, page: int = 0, store=None, profile_id: str = "default") -> tuple[str, InlineKeyboardMarkup | None]:
         """Build starter channels message with per-channel Import buttons and pagination."""
-        existing = self.video_store.get_channel_handles_set()
+        s = store or self.video_store
+        existing = s.get_channel_handles_set()
         total = len(self._starter_channels)
         ps = self._STARTER_PAGE_SIZE
         start = page * ps
@@ -1560,33 +1601,35 @@ class BrainRotGuardBot:
             else:
                 lines.append("")
                 buttons.append([InlineKeyboardButton(
-                    f"Import: {name}", callback_data=f"starter_import:{idx}",
+                    f"Import: {name}", callback_data=f"starter_import:{profile_id}:{idx}",
                 )])
 
-        nav = _nav_row(page, total, ps, "starter_page")
+        nav = _nav_row(page, total, ps, f"starter_page:{profile_id}")
         if nav:
             buttons.append(nav)
         markup = InlineKeyboardMarkup(buttons) if buttons else None
         return _md("\n".join(lines)), markup
 
-    async def _cb_starter_page(self, query, page: int) -> None:
+    async def _cb_starter_page(self, query, profile_id: str, page: int) -> None:
         """Handle starter channels pagination."""
         _answer_bg(query)
-        text, markup = self._render_starter_message(page)
+        cs = self._child_store(profile_id)
+        text, markup = self._render_starter_message(page, store=cs, profile_id=profile_id)
         await _edit_msg(query, text, markup, disable_preview=True)
 
-    async def _cb_starter_import(self, query, idx: int) -> None:
+    async def _cb_starter_import(self, query, profile_id: str, idx: int) -> None:
         """Handle Import button press from starter channels message."""
         if idx < 0 or idx >= len(self._starter_channels):
             await query.answer("Invalid channel.")
             return
+        cs = self._child_store(profile_id)
         ch = self._starter_channels[idx]
         handle = ch["handle"]
         name = ch["name"]
         cat = ch.get("category")
 
         # Idempotency: already imported?
-        existing = self.video_store.get_channel_handles_set()
+        existing = cs.get_channel_handles_set()
         already = handle.lower() in existing
         if not already:
             # Resolve channel_id from @handle before inserting
@@ -1601,9 +1644,9 @@ class BrainRotGuardBot:
                         name = info["channel_name"]
             except Exception:
                 pass  # proceed without channel_id; backfill loop will retry
-            self.video_store.add_channel(name, "allowed", channel_id=cid, handle=handle, category=cat)
+            cs.add_channel(name, "allowed", channel_id=cid, handle=handle, category=cat)
             if self.on_channel_change:
-                self.on_channel_change()
+                self.on_channel_change(profile_id)
 
         # Acknowledge callback in background (non-blocking)
         msg = f"Already imported: {name}" if already else f"Imported: {name}"
@@ -1611,20 +1654,22 @@ class BrainRotGuardBot:
 
         # Re-render the message immediately
         page = idx // self._STARTER_PAGE_SIZE
-        text, markup = self._render_starter_message(page)
+        text, markup = self._render_starter_message(page, store=cs, profile_id=profile_id)
         await _edit_msg(query, text, markup, disable_preview=True)
 
-    async def _channel_allow(self, update: Update, args: list[str]) -> None:
-        await self._channel_resolve_and_add(update, args, "allowed")
+    async def _channel_allow(self, update: Update, args: list[str], store=None) -> None:
+        await self._channel_resolve_and_add(update, args, "allowed", store=store)
 
-    async def _channel_unallow(self, update: Update, args: list[str]) -> None:
-        await self._channel_remove(update, args, "unallow")
+    async def _channel_unallow(self, update: Update, args: list[str], store=None) -> None:
+        await self._channel_remove(update, args, "unallow", store=store)
 
-    async def _channel_block(self, update: Update, args: list[str]) -> None:
-        await self._channel_resolve_and_add(update, args, "blocked")
+    async def _channel_block(self, update: Update, args: list[str], store=None) -> None:
+        await self._channel_resolve_and_add(update, args, "blocked", store=store)
 
-    async def _channel_resolve_and_add(self, update: Update, args: list[str], status: str) -> None:
+    async def _channel_resolve_and_add(self, update: Update, args: list[str], status: str, store=None) -> None:
         """Resolve a @handle via yt-dlp and add to channel list."""
+        s = store or self.video_store
+        pid = getattr(s, 'profile_id', 'default')
         verb = "allow" if status == "allowed" else "block"
         example = "@LEGO" if status == "allowed" else "@Slurry"
         if not args:
@@ -1649,9 +1694,9 @@ class BrainRotGuardBot:
         cat = None
         if status == "allowed" and len(args) > 1 and args[1].lower() in ("edu", "fun"):
             cat = args[1].lower()
-        self.video_store.add_channel(channel_name, status, channel_id=channel_id, handle=handle, category=cat)
+        s.add_channel(channel_name, status, channel_id=channel_id, handle=handle, category=cat)
         if self.on_channel_change:
-            self.on_channel_change()
+            self.on_channel_change(pid)
         if status == "allowed":
             cat_label = {"edu": "Educational", "fun": "Entertainment"}.get(cat, "No category")
             await update.effective_message.reply_text(
@@ -1660,11 +1705,13 @@ class BrainRotGuardBot:
         else:
             await update.effective_message.reply_text(f"Blocked: {channel_name}\nVideos from this channel will be auto-denied.")
 
-    async def _channel_unblock(self, update: Update, args: list[str]) -> None:
-        await self._channel_remove(update, args, "unblock")
+    async def _channel_unblock(self, update: Update, args: list[str], store=None) -> None:
+        await self._channel_remove(update, args, "unblock", store=store)
 
-    async def _channel_remove(self, update: Update, args: list[str], verb: str) -> None:
+    async def _channel_remove(self, update: Update, args: list[str], verb: str, store=None) -> None:
         """Remove a channel from allow/block list."""
+        s = store or self.video_store
+        pid = getattr(s, 'profile_id', 'default')
         if not args:
             await update.effective_message.reply_text(f"Usage: /channel {verb} <channel name>")
             return
@@ -1672,25 +1719,27 @@ class BrainRotGuardBot:
         # Look up channel_id before removing (remove_channel deletes the row)
         ch_id = ""
         status = "allowed" if verb == "unallow" else "blocked"
-        for name, cid, _h, _c in self.video_store.get_channels_with_ids(status):
+        for name, cid, _h, _c in s.get_channels_with_ids(status):
             if name.lower() == channel.lower():
                 ch_id = cid or ""
                 break
-        if self.video_store.remove_channel(channel):
+        if s.remove_channel(channel):
             if verb == "unallow":
-                deleted = self.video_store.delete_channel_videos(channel, channel_id=ch_id)
+                deleted = s.delete_channel_videos(channel, channel_id=ch_id)
             else:
                 deleted = 0
             if self.on_channel_change:
-                self.on_channel_change()
+                self.on_channel_change(pid)
             label = "Removed from allowlist" if verb == "unallow" else "Unblocked"
             extra = f" Deleted {deleted} video{'s' if deleted != 1 else ''} from catalog." if deleted else ""
             await update.effective_message.reply_text(f"{label}: {channel}.{extra}")
         else:
             await update.effective_message.reply_text(f"Channel not in list: {channel}. Use /channel to see all channels.")
 
-    async def _channel_set_cat(self, update: Update, args: list[str]) -> None:
+    async def _channel_set_cat(self, update: Update, args: list[str], store=None) -> None:
         """Handle /channel cat <name> edu|fun."""
+        s = store or self.video_store
+        pid = getattr(s, 'profile_id', 'default')
         if len(args) < 2:
             await update.effective_message.reply_text("Usage: /channel cat <name> edu|fun\n\nThis sets which time budget the channel's videos count against.")
             return
@@ -1699,28 +1748,29 @@ class BrainRotGuardBot:
             await update.effective_message.reply_text("Category must be edu (Educational) or fun (Entertainment).")
             return
         raw = " ".join(args[:-1])
-        channel = self.video_store.resolve_channel_name(raw) or raw
-        if self.video_store.set_channel_category(channel, cat):
+        channel = s.resolve_channel_name(raw) or raw
+        if s.set_channel_category(channel, cat):
             # Look up channel_id for stable matching
             ch_id = ""
-            for name, cid, _h, _c in self.video_store.get_channels_with_ids("allowed"):
+            for name, cid, _h, _c in s.get_channels_with_ids("allowed"):
                 if name.lower() == channel.lower():
                     ch_id = cid or ""
                     break
-            self.video_store.set_channel_videos_category(channel, cat, channel_id=ch_id)
+            s.set_channel_videos_category(channel, cat, channel_id=ch_id)
             cat_label = "Educational" if cat == "edu" else "Entertainment"
             if self.on_channel_change:
-                self.on_channel_change()
+                self.on_channel_change(pid)
             await update.effective_message.reply_text(f"**{channel}** → {cat_label}\nExisting videos from this channel updated too.", parse_mode=MD2)
         else:
             await update.effective_message.reply_text(f"Channel not in list: {raw}. Use /channel to see all channels.")
 
     _CHANNEL_PAGE_SIZE = 10
 
-    def _render_channel_menu(self) -> tuple[str, InlineKeyboardMarkup | None]:
+    def _render_channel_menu(self, store=None, profile_id: str = "default") -> tuple[str, InlineKeyboardMarkup | None]:
         """Build the channel menu with Allowed/Blocked buttons and summary stats."""
-        allowed = self.video_store.get_channels_with_ids("allowed")
-        blocked = self.video_store.get_channels_with_ids("blocked")
+        s = store or self.video_store
+        allowed = s.get_channels_with_ids("allowed")
+        blocked = s.get_channels_with_ids("blocked")
         if not allowed and not blocked:
             return "No channels configured.", None
         total = len(allowed) + len(blocked)
@@ -1745,17 +1795,18 @@ class BrainRotGuardBot:
         row = []
         if allowed:
             row.append(InlineKeyboardButton(
-                f"Allowed ({len(allowed)})", callback_data="chan_filter:allowed",
+                f"Allowed ({len(allowed)})", callback_data=f"chan_filter:{profile_id}:allowed",
             ))
         if blocked:
             row.append(InlineKeyboardButton(
-                f"Blocked ({len(blocked)})", callback_data="chan_filter:blocked",
+                f"Blocked ({len(blocked)})", callback_data=f"chan_filter:{profile_id}:blocked",
             ))
         return text, InlineKeyboardMarkup([row]) if row else None
 
-    def _render_channel_page(self, status: str, page: int = 0) -> tuple[str, InlineKeyboardMarkup | None]:
+    def _render_channel_page(self, status: str, page: int = 0, store=None, profile_id: str = "default") -> tuple[str, InlineKeyboardMarkup | None]:
         """Build text + inline buttons for a page of the channel list filtered by status."""
-        entries = self.video_store.get_channels_with_ids(status)
+        s = store or self.video_store
+        entries = s.get_channels_with_ids(status)
         if not entries:
             return f"No {status} channels.", None
 
@@ -1781,47 +1832,53 @@ class BrainRotGuardBot:
             btn_label = f"Unallow: {ch}" if status == "allowed" else f"Unblock: {ch}"
             btn_action = "unallow" if status == "allowed" else "unblock"
             buttons.append([InlineKeyboardButton(
-                btn_label, callback_data=f"{btn_action}:{ch}"
+                btn_label, callback_data=f"{btn_action}:{profile_id}:{ch}"
             )])
 
-        nav = _nav_row(page, total, page_size, f"chan_page:{status}")
+        nav = _nav_row(page, total, page_size, f"chan_page:{profile_id}:{status}")
         if nav:
             buttons.append(nav)
         # Back to menu
-        buttons.append([InlineKeyboardButton("\U0001f4cb Channels", callback_data="chan_menu")])
+        buttons.append([InlineKeyboardButton("\U0001f4cb Channels", callback_data=f"chan_menu:{profile_id}")])
 
         text = _md("\n".join(lines))
         markup = InlineKeyboardMarkup(buttons) if buttons else None
         return text, markup
 
-    async def _channel_list(self, update: Update) -> None:
-        text, markup = self._render_channel_menu()
+    async def _channel_list(self, update: Update, store=None) -> None:
+        s = store or self.video_store
+        pid = getattr(s, 'profile_id', 'default')
+        text, markup = self._render_channel_menu(store=s, profile_id=pid)
         await update.effective_message.reply_text(
             text, parse_mode=MD2, disable_web_page_preview=True,
             reply_markup=markup,
         )
 
-    async def _cb_channel_filter(self, query, status: str) -> None:
+    async def _cb_channel_filter(self, query, profile_id: str, status: str) -> None:
         """Handle Allowed/Blocked button press from channel menu."""
         _answer_bg(query)
-        text, markup = self._render_channel_page(status, 0)
+        cs = self._child_store(profile_id)
+        text, markup = self._render_channel_page(status, 0, store=cs, profile_id=profile_id)
         await _edit_msg(query, text, markup, disable_preview=True)
 
-    async def _cb_channel_menu(self, query) -> None:
+    async def _cb_channel_menu(self, query, profile_id: str = "default") -> None:
         """Handle back-to-menu button press."""
         _answer_bg(query)
-        text, markup = self._render_channel_menu()
+        cs = self._child_store(profile_id)
+        text, markup = self._render_channel_menu(store=cs, profile_id=profile_id)
         await _edit_msg(query, text, markup, disable_preview=True)
 
-    async def _cb_channel_page(self, query, status: str, page: int) -> None:
+    async def _cb_channel_page(self, query, profile_id: str, status: str, page: int) -> None:
         """Handle channel list pagination."""
         _answer_bg(query)
-        text, markup = self._render_channel_page(status, page)
+        cs = self._child_store(profile_id)
+        text, markup = self._render_channel_page(status, page, store=cs, profile_id=profile_id)
         await _edit_msg(query, text, markup, disable_preview=True)
 
-    async def _update_channel_list_message(self, query) -> None:
+    async def _update_channel_list_message(self, query, profile_id: str = "default") -> None:
         """Refresh back to channel menu after unallow/unblock."""
-        text, markup = self._render_channel_menu()
+        cs = self._child_store(profile_id)
+        text, markup = self._render_channel_menu(store=cs, profile_id=profile_id)
         await _edit_msg(query, text, markup, disable_preview=True)
 
     # --- Activity report ---
@@ -1831,22 +1888,26 @@ class BrainRotGuardBot:
     async def _cmd_logs(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not self._check_admin(update):
             return
-        days = 7
-        if context.args:
-            arg = context.args[0].lower()
-            if arg == "today":
-                days = 1
-            elif arg.isdigit():
-                days = min(int(arg), 365)
-        activity = self.video_store.get_recent_activity(days)
-        if not activity:
-            period = "today" if days == 1 else f"last {days} days"
-            await update.effective_message.reply_text(f"No activity in the {period}.")
-            return
-        text, keyboard = self._render_logs_page(activity, days, 0)
-        await update.effective_message.reply_text(text, parse_mode=MD2, reply_markup=keyboard)
 
-    def _render_logs_page(self, activity: list, days: int, page: int) -> tuple[str, InlineKeyboardMarkup | None]:
+        async def _inner(update, context, cs, profile):
+            days = 7
+            if context.args:
+                arg = context.args[0].lower()
+                if arg == "today":
+                    days = 1
+                elif arg.isdigit():
+                    days = min(int(arg), 365)
+            activity = cs.get_recent_activity(days)
+            if not activity:
+                period = "today" if days == 1 else f"last {days} days"
+                await update.effective_message.reply_text(f"No activity in the {period}.")
+                return
+            text, keyboard = self._render_logs_page(activity, days, 0, profile_id=profile["id"])
+            await update.effective_message.reply_text(text, parse_mode=MD2, reply_markup=keyboard)
+
+        await self._with_child_context(update, context, _inner)
+
+    def _render_logs_page(self, activity: list, days: int, page: int, profile_id: str = "default") -> tuple[str, InlineKeyboardMarkup | None]:
         """Render a page of the activity log with pagination."""
         total = len(activity)
         page_size = self._LOGS_PAGE_SIZE
@@ -1868,19 +1929,20 @@ class BrainRotGuardBot:
             lines.append(f"{icon} {ts}  {title}")
         lines.append("```")
 
-        nav = _nav_row(page, total, page_size, f"logs_page:{days}")
+        nav = _nav_row(page, total, page_size, f"logs_page:{profile_id}:{days}")
         keyboard = InlineKeyboardMarkup([nav]) if nav else None
         return _md("\n".join(lines)), keyboard
 
-    async def _cb_logs_page(self, query, days: int, page: int) -> None:
+    async def _cb_logs_page(self, query, profile_id: str, days: int, page: int) -> None:
         """Handle logs pagination."""
         days = min(max(1, days), 365)
-        activity = self.video_store.get_recent_activity(days)
+        cs = self._child_store(profile_id)
+        activity = cs.get_recent_activity(days)
         if not activity:
             await query.answer("No activity.")
             return
         _answer_bg(query)
-        text, keyboard = self._render_logs_page(activity, days, page)
+        text, keyboard = self._render_logs_page(activity, days, page, profile_id=profile_id)
         await _edit_msg(query, text, keyboard)
 
     # --- /search subcommands ---
@@ -1889,11 +1951,16 @@ class BrainRotGuardBot:
         """Show search history. /search [days|today|all]."""
         if not self._check_admin(update):
             return
-        await self._search_history(update, context.args or [])
+
+        async def _inner(update, context, cs, profile):
+            await self._search_history(update, context.args or [], store=cs, profile_id=profile["id"])
+
+        await self._with_child_context(update, context, _inner)
 
     _SEARCH_PAGE_SIZE = 20
 
-    async def _search_history(self, update: Update, args: list[str]) -> None:
+    async def _search_history(self, update: Update, args: list[str], store=None, profile_id: str = "default") -> None:
+        s = store or self.video_store
         days = 7
         if args:
             arg = args[0].lower()
@@ -1903,17 +1970,17 @@ class BrainRotGuardBot:
                 days = 365
             elif arg.isdigit():
                 days = min(int(arg), 365)
-        searches = self.video_store.get_recent_searches(days)
+        searches = s.get_recent_searches(days)
         if not searches:
             period = "today" if days == 1 else f"last {days} days"
             await update.effective_message.reply_text(f"No searches in the {period}.")
             return
-        text, keyboard = self._render_search_page(searches, days, 0)
+        text, keyboard = self._render_search_page(searches, days, 0, profile_id=profile_id)
         await update.effective_message.reply_text(
             text, parse_mode=MD2, reply_markup=keyboard, disable_web_page_preview=True,
         )
 
-    def _render_search_page(self, searches: list, days: int, page: int) -> tuple[str, InlineKeyboardMarkup | None]:
+    def _render_search_page(self, searches: list, days: int, page: int, profile_id: str = "default") -> tuple[str, InlineKeyboardMarkup | None]:
         """Render a page of search history."""
         total = len(searches)
         ps = self._SEARCH_PAGE_SIZE
@@ -1933,19 +2000,20 @@ class BrainRotGuardBot:
             lines.append(f"{ts}  {query}")
         lines.append("```")
 
-        nav = _nav_row(page, total, ps, f"search_page:{days}")
+        nav = _nav_row(page, total, ps, f"search_page:{profile_id}:{days}")
         keyboard = InlineKeyboardMarkup([nav]) if nav else None
         return _md("\n".join(lines)), keyboard
 
-    async def _cb_search_page(self, query, days: int, page: int) -> None:
+    async def _cb_search_page(self, query, profile_id: str, days: int, page: int) -> None:
         """Handle search history pagination."""
         days = min(max(1, days), 365)
-        searches = self.video_store.get_recent_searches(days)
+        cs = self._child_store(profile_id)
+        searches = cs.get_recent_searches(days)
         if not searches:
             await query.answer("No searches.")
             return
         _answer_bg(query)
-        text, keyboard = self._render_search_page(searches, days, page)
+        text, keyboard = self._render_search_page(searches, days, page, profile_id=profile_id)
         await _edit_msg(query, text, keyboard, disable_preview=True)
 
     async def _cmd_filter(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

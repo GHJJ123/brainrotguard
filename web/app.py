@@ -886,6 +886,17 @@ async def login_page(request: Request, profile: str = Query("", max_length=50)):
                 "step": "pin",
             })
 
+    # Single profile with PIN — go straight to PIN entry
+    if len(profiles) == 1:
+        return templates.TemplateResponse("login.html", {
+            "request": request,
+            "csrf_token": csrf_token,
+            "error": False,
+            "profiles": profiles,
+            "selected_profile": profiles[0],
+            "step": "pin",
+        })
+
     # Show profile picker
     return templates.TemplateResponse("login.html", {
         "request": request,
@@ -893,7 +904,7 @@ async def login_page(request: Request, profile: str = Query("", max_length=50)):
         "error": False,
         "profiles": profiles,
         "selected_profile": None,
-        "step": "pick" if len(profiles) > 1 else "pin",
+        "step": "pick",
     })
 
 
