@@ -387,13 +387,9 @@ class YouTubeExtractorProtocol(Protocol):
 class YouTubeExtractor:
     """Concrete implementation wrapping yt-dlp — satisfies YouTubeExtractorProtocol.
 
-    Holds its own timeout so different callers can use independent instances.
-    Delegates to the module-level functions, temporarily overriding the global
-    timeout for the duration of each call.
+    Thin namespace wrapper that delegates to the module-level functions.
+    Timeout is configured globally via configure_timeout().
     """
-
-    def __init__(self, timeout: int = 30):
-        self.timeout = timeout
 
     async def extract_metadata(self, video_id: str) -> Optional[dict]:
         return await extract_metadata(video_id)

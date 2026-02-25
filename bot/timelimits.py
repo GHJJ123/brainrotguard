@@ -9,8 +9,8 @@ from bot.helpers import _md, _answer_bg, _edit_msg, MD2
 from data.child_store import ChildStore
 from utils import (
     get_today_str, get_day_utc_bounds, get_weekday, parse_time_input,
-    format_time_12h, is_within_schedule, resolve_setting, DAY_NAMES, DAY_GROUPS,
-    CAT_LABELS,
+    format_time_12h, is_within_schedule, resolve_setting, get_bonus_minutes,
+    DAY_NAMES, DAY_GROUPS, CAT_LABELS,
 )
 
 logger = logging.getLogger(__name__)
@@ -290,10 +290,7 @@ class TimeLimitMixin:
             lines.append(f"Schedule: {s_display} \u2013 {e_display}")
 
         # Bonus
-        bonus = 0
-        bonus_date = s.get_setting("daily_bonus_date", "")
-        if bonus_date == today:
-            bonus = int(s.get_setting("daily_bonus_minutes", "0") or "0")
+        bonus = get_bonus_minutes(s, today)
 
         # Category mode
         if edu_limit > 0 or fun_limit > 0:

@@ -83,9 +83,9 @@ def init_app_state(state):
     # Channel cache (per-profile)
     state.channel_caches = {}
     state.channel_cache_task = None
-    # Catalog cache
-    state.catalog_cache = []
-    state.catalog_cache_time = 0.0
+    # Catalog cache (per-profile)
+    state.catalog_caches = {}
+    state.catalog_cache_times = {}
     # Word filter cache
     state.word_filter_cache = None
     # Heartbeat dedup
@@ -253,9 +253,13 @@ def title_matches_filter(title: str, patterns: list[re.Pattern]) -> bool:
 # Catalog cache
 # ---------------------------------------------------------------------------
 
-def invalidate_catalog_cache(state):
+def invalidate_catalog_cache(state, profile_id: str = ""):
     """Mark catalog cache and word filter cache as stale."""
-    state.catalog_cache_time = 0.0
+    if profile_id:
+        state.catalog_cache_times[profile_id] = 0.0
+    else:
+        for k in list(state.catalog_cache_times):
+            state.catalog_cache_times[k] = 0.0
     state.word_filter_cache = None
 
 
@@ -383,12 +387,12 @@ def build_catalog(state, channel_filter: str = "", profile_id: str = "default") 
             filtered = [v for v in filtered if not title_matches_filter(v.get("title", ""), wf)]
         return filtered
 
-    # Check catalog cache
+    # Check catalog cache (per-profile)
     cache_age = cache.get("updated_at", 0.0)
-    if state.catalog_cache and state.catalog_cache_time >= cache_age and state.catalog_cache_time > 0:
-        # Only use cache for default profile (multi-profile always rebuilds)
-        if profile_id == "default":
-            return state.catalog_cache
+    cached = state.catalog_caches.get(profile_id)
+    cache_time = state.catalog_cache_times.get(profile_id, 0.0)
+    if cached and cache_time >= cache_age and cache_time > 0:
+        return cached
 
     seen_ids = set(denied_ids)
     catalog = []
@@ -426,7 +430,6 @@ def build_catalog(state, channel_filter: str = "", profile_id: str = "default") 
     if wf:
         catalog = [v for v in catalog if not title_matches_filter(v.get("title", ""), wf)]
 
-    if profile_id == "default":
-        state.catalog_cache = catalog
-        state.catalog_cache_time = time.monotonic()
+    state.catalog_caches[profile_id] = catalog
+    state.catalog_cache_times[profile_id] = time.monotonic()
     return catalog

@@ -17,16 +17,6 @@ class TestYouTubeExtractorProtocol:
         assert isinstance(mock, YouTubeExtractorProtocol)
 
 
-class TestYouTubeExtractorInit:
-    def test_default_timeout(self):
-        e = YouTubeExtractor()
-        assert e.timeout == 30
-
-    def test_custom_timeout(self):
-        e = YouTubeExtractor(timeout=60)
-        assert e.timeout == 60
-
-
 class TestYouTubeExtractorHasAllMethods:
     """Verify all Protocol methods exist on the class."""
 

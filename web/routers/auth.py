@@ -102,7 +102,8 @@ async def login_submit(
         return RedirectResponse(url="/", status_code=303)
 
     # Validate PIN
-    if pin and hmac.compare_digest(pin, profile["pin"]):
+    stored_pin = profile["pin"] or ""
+    if pin and stored_pin and hmac.compare_digest(pin, stored_pin):
         request.session["child_id"] = profile["id"]
         request.session["child_name"] = profile["display_name"]
         request.session["avatar_icon"] = profile.get("avatar_icon") or ""

@@ -326,8 +326,12 @@ class ChannelMixin:
             lines.append(f"  [{ch}]({url}){handle_tag}{cat_tag}")
             btn_label = f"Unallow: {ch}" if status == "allowed" else f"Unblock: {ch}"
             btn_action = "unallow" if status == "allowed" else "unblock"
+            # Telegram enforces 64-byte limit on callback_data; truncate channel name
+            prefix = f"{btn_action}:{profile_id}:"
+            max_ch_bytes = 64 - len(prefix.encode("utf-8"))
+            ch_cb = ch.encode("utf-8")[:max_ch_bytes].decode("utf-8", errors="ignore")
             buttons.append([InlineKeyboardButton(
-                btn_label, callback_data=f"{btn_action}:{profile_id}:{ch}"
+                btn_label, callback_data=f"{prefix}{ch_cb}"
             )])
 
         nav = _nav_row(page, total, page_size, f"chan_page:{profile_id}:{status}")
@@ -386,21 +390,30 @@ class ChannelMixin:
     async def _cb_channel_remove(self, query, action: str, profile_id: str, ch_name: str) -> None:
         """Handle unallow/unblock inline button press."""
         cs = self._child_store(profile_id)
-        # Look up channel_id before removing (remove_channel deletes the row)
+        # Resolve possibly-truncated callback name to full channel name
         ch_id = ""
         ch_rows = cs.get_channels_with_ids(
             "allowed" if action == "unallow" else "blocked"
         )
+        resolved_name = ch_name
         for name, cid, _h, _c in ch_rows:
             if name.lower() == ch_name.lower():
+                resolved_name = name
                 ch_id = cid or ""
                 break
-        if cs.remove_channel(ch_name):
+        else:
+            # Exact match failed — try prefix match (truncated callback_data)
+            for name, cid, _h, _c in ch_rows:
+                if name.lower().startswith(ch_name.lower()):
+                    resolved_name = name
+                    ch_id = cid or ""
+                    break
+        if cs.remove_channel(resolved_name):
             if action == "unallow":
-                cs.delete_channel_videos(ch_name, channel_id=ch_id)
+                cs.delete_channel_videos(resolved_name, channel_id=ch_id)
             if self.on_channel_change:
                 self.on_channel_change(profile_id)
-            _answer_bg(query, f"Removed: {ch_name}")
+            _answer_bg(query, f"Removed: {resolved_name}")
             await self._update_channel_list_message(query, profile_id=profile_id)
         else:
             _answer_bg(query, f"Not found: {ch_name}")

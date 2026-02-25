@@ -185,10 +185,12 @@ async def watch_heartbeat(request: Request, body: HeartbeatRequest):
     # Clamp seconds to 0 if heartbeat arrives faster than expected interval
     now = time.monotonic()
     last_hb = state.last_heartbeat
-    last = last_hb.get(vid, 0.0)
+    profile_id = cs.profile_id
+    hb_key = (vid, profile_id)
+    last = last_hb.get(hb_key, 0.0)
     if last and (now - last) < _HEARTBEAT_MIN_INTERVAL:
         seconds = 0
-    last_hb[vid] = now
+    last_hb[hb_key] = now
 
     # Periodic cleanup: evict stale entries to prevent unbounded growth
     if now - state.heartbeat_last_cleanup > _HEARTBEAT_EVICT_AGE:
@@ -203,7 +205,6 @@ async def watch_heartbeat(request: Request, body: HeartbeatRequest):
     # Per-category time limit check
     video_cat = resolve_video_category(video, store=cs) if video else "fun"
     cat_info = get_category_time_info(store=cs, wl_cfg=wl_cfg)
-    profile_id = cs.profile_id
     remaining = -1
     time_limit_cb = state.time_limit_notify_cb
     if cat_info:

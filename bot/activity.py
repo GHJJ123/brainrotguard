@@ -2,13 +2,12 @@
 
 import logging
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
-from bot.helpers import _md, _answer_bg, _nav_row, _edit_msg, MD2
+from bot.helpers import _md, _answer_bg, _nav_row, _edit_msg, _channel_md_link, MD2
 from bot.timelimits import _progress_bar
-from utils import get_today_str, get_day_utc_bounds, resolve_setting, CAT_LABELS
-from youtube.extractor import format_duration
+from utils import get_today_str, get_day_utc_bounds, get_bonus_minutes
 
 logger = logging.getLogger(__name__)
 
@@ -67,10 +66,7 @@ class ActivityMixin:
                 bounds = get_day_utc_bounds(today, self._get_tz())
                 used = cs.get_daily_watch_minutes(today, utc_bounds=bounds)
 
-                bonus = 0
-                bonus_date = cs.get_setting("daily_bonus_date", "")
-                if bonus_date == today:
-                    bonus = int(cs.get_setting("daily_bonus_minutes", "0") or "0")
+                bonus = get_bonus_minutes(cs, today)
 
                 if limit_min == 0:
                     lines.append(f"**Watch limit:** OFF")

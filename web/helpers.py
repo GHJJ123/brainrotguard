@@ -10,7 +10,7 @@ from data.child_store import ChildStore
 from utils import (
     get_today_str, get_day_utc_bounds, get_weekday,
     is_within_schedule, format_time_12h, resolve_setting,
-    DAY_NAMES, CAT_LABELS,
+    get_bonus_minutes, DAY_NAMES, CAT_LABELS,
 )
 
 # ---------------------------------------------------------------------------
@@ -161,10 +161,7 @@ def get_time_limit_info(store, wl_cfg) -> dict | None:
     tz = wl_cfg.timezone if wl_cfg else ""
     today = get_today_str(tz)
     bounds = get_day_utc_bounds(today, tz)
-    bonus_date = store.get_setting("daily_bonus_date", "")
-    if bonus_date == today:
-        bonus = int(store.get_setting("daily_bonus_minutes", "0") or "0")
-        limit_min += bonus
+    limit_min += get_bonus_minutes(store, today)
     used_min = store.get_daily_watch_minutes(today, utc_bounds=bounds)
     remaining_min = max(0.0, limit_min - used_min)
     return {
@@ -203,10 +200,7 @@ def get_category_time_info(store, wl_cfg) -> dict | None:
     today = get_today_str(tz)
     bounds = get_day_utc_bounds(today, tz)
     usage = store.get_daily_watch_by_category(today, utc_bounds=bounds)
-    bonus = 0
-    bonus_date = store.get_setting("daily_bonus_date", "")
-    if bonus_date == today:
-        bonus = int(store.get_setting("daily_bonus_minutes", "0") or "0")
+    bonus = get_bonus_minutes(store, today)
 
     result = {"categories": {}}
     for cat, limit in [("edu", edu_limit), ("fun", fun_limit)]:

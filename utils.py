@@ -201,6 +201,14 @@ def is_within_schedule(start_str: str, end_str: str, tz_name: str = "") -> tuple
     return (allowed, unlock_time)
 
 
+def get_bonus_minutes(store, today_str: str) -> int:
+    """Get today's bonus minutes from store. Returns 0 if none or date mismatch."""
+    bonus_date = store.get_setting("daily_bonus_date", "")
+    if bonus_date == today_str:
+        return int(store.get_setting("daily_bonus_minutes", "0") or "0")
+    return 0
+
+
 def resolve_setting(base_key: str, store, tz_name: str = "", default: str = "") -> str:
     """Resolve a setting with per-day override support.
 

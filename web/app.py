@@ -8,8 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from slowapi.errors import RateLimitExceeded
 
 from web.shared import templates, limiter, static_dir, register_filters
-from web.cache import channel_cache_loop, init_app_state, invalidate_channel_cache, invalidate_catalog_cache
-from web.middleware import SecurityHeadersMiddleware, PinAuthMiddleware
+from web.cache import channel_cache_loop
 
 from web.routers.auth import router as auth_router
 from web.routers.profile import router as profile_router

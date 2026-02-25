@@ -10,6 +10,7 @@ from utils import (
     format_time_12h,
     is_within_schedule,
     resolve_setting,
+    get_bonus_minutes,
     get_day_utc_bounds,
     get_weekday,
     get_today_str,
@@ -249,3 +250,25 @@ class TestGetTodayStr:
     def test_with_timezone(self):
         result = get_today_str("America/New_York")
         assert len(result) == 10
+
+
+class TestGetBonusMinutes:
+    def test_matching_date_returns_bonus(self):
+        store = MagicMock()
+        store.get_setting = lambda k, d="": {"daily_bonus_date": "2024-01-15", "daily_bonus_minutes": "30"}.get(k, d)
+        assert get_bonus_minutes(store, "2024-01-15") == 30
+
+    def test_mismatched_date_returns_zero(self):
+        store = MagicMock()
+        store.get_setting = lambda k, d="": {"daily_bonus_date": "2024-01-14", "daily_bonus_minutes": "30"}.get(k, d)
+        assert get_bonus_minutes(store, "2024-01-15") == 0
+
+    def test_no_bonus_date_returns_zero(self):
+        store = MagicMock()
+        store.get_setting = lambda k, d="": d
+        assert get_bonus_minutes(store, "2024-01-15") == 0
+
+    def test_empty_bonus_minutes_returns_zero(self):
+        store = MagicMock()
+        store.get_setting = lambda k, d="": {"daily_bonus_date": "2024-01-15", "daily_bonus_minutes": ""}.get(k, d)
+        assert get_bonus_minutes(store, "2024-01-15") == 0

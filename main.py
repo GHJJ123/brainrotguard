@@ -91,7 +91,7 @@ class BrainRotGuard:
         ydl_timeout = self.config.youtube.ydl_timeout if self.config.youtube else 30
         if ydl_timeout:
             configure_timeout(ydl_timeout)
-        state.extractor = YouTubeExtractor(timeout=ydl_timeout or 30)
+        state.extractor = YouTubeExtractor()
 
         # Configure middleware
         import secrets as _secrets
@@ -108,7 +108,7 @@ class BrainRotGuard:
         from starlette.middleware.sessions import SessionMiddleware
         fastapi_app.add_middleware(SecurityHeadersMiddleware)
         fastapi_app.add_middleware(PinAuthMiddleware, pin=pin)
-        fastapi_app.add_middleware(SessionMiddleware, secret_key=session_secret, max_age=86400)
+        fastapi_app.add_middleware(SessionMiddleware, secret_key=session_secret, max_age=86400, same_site="strict")
 
         logger.info("Web app initialized")
 

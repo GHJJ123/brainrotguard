@@ -56,6 +56,7 @@ class PinAuthMiddleware(BaseHTTPMiddleware):
 
         # Auto-login: if only one profile and it has no PIN, set session directly
         vs = getattr(request.app.state, "video_store", None)
+        profiles = []
         if vs:
             profiles = vs.get_profiles()
             if len(profiles) == 1 and not profiles[0]["pin"]:
@@ -69,7 +70,7 @@ class PinAuthMiddleware(BaseHTTPMiddleware):
                 return await call_next(request)
 
         # Legacy: if no profiles exist but PIN auth is disabled
-        if not self.pin and (not vs or not vs.get_profiles()):
+        if not self.pin and (not vs or not profiles):
             return await call_next(request)
 
         # Return JSON 401 for API endpoints instead of redirect
