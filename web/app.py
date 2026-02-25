@@ -49,7 +49,7 @@ web_config = None
 wl_config = None  # WatchLimitsConfig
 
 AVATAR_ICONS = ["🐱", "🐶", "🐻", "🦊", "🐸", "🐼", "🚀", "⭐", "🌙", "⚽", "🏀", "🎮", "🎨", "🎵", "🦖", "🌈"]
-AVATAR_COLORS = ["#e94560", "#4caf50", "#2196f3", "#ff9800", "#9c27b0", "#00bcd4", "#ff5722", "#607d8b"]
+AVATAR_COLORS = ["#f4a0b0", "#a8d8a8", "#8ec5e8", "#f5c890", "#c8a0d8", "#90d4d4", "#f0b8a0", "#b0bec5"]
 
 
 class HeartbeatRequest(BaseModel):

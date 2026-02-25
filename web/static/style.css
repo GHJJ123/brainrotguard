@@ -96,69 +96,16 @@ footer a:hover {
 }
 
 /* === Search Toggle (mobile only) === */
-.search-toggle {
+.search-dropdown-wrap {
     display: none;
+}
+
+.search-toggle {
     background: none;
     border: none;
     font-size: 22px;
     cursor: pointer;
     padding: 4px;
-    line-height: 1;
-}
-
-/* === Search Overlay (mobile only) === */
-.search-overlay {
-    display: none;
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.6);
-    z-index: 200;
-    padding: 12px;
-    align-items: flex-start;
-    justify-content: center;
-}
-
-.search-overlay.open {
-    display: flex;
-}
-
-.search-overlay-bar {
-    display: flex;
-    gap: 8px;
-    width: 100%;
-    max-width: 560px;
-    margin-top: 8px;
-}
-
-.search-overlay-input {
-    flex: 1;
-    padding: 12px 16px;
-    font-size: 15px;
-    border: none;
-    border-radius: var(--radius-btn);
-    background: var(--bg-card);
-    color: var(--text-primary);
-    outline: none;
-    min-width: 0;
-}
-
-.search-overlay-input::placeholder {
-    color: #666;
-}
-
-.search-overlay-go {
-    padding: 12px 20px;
-    font-size: 15px;
-    flex-shrink: 0;
-}
-
-.search-overlay-close {
-    background: none;
-    border: none;
-    color: var(--text-secondary);
-    font-size: 24px;
-    cursor: pointer;
-    padding: 8px;
     line-height: 1;
 }
 
@@ -1094,12 +1041,17 @@ main {
         height: 36px;
     }
     .logo { order: 1; }
-    .search-toggle {
+    .search-dropdown-wrap {
         display: block;
         order: 2;
     }
-    .profile-badge {
+    .search-toggle {
+        display: block;
+    }
+    .profile-badge,
+    .avatar-dropdown-wrap {
         order: 3;
+        margin-left: auto;
     }
     .header-search {
         display: none;
@@ -1879,6 +1831,63 @@ main {
     }
 }
 
+/* === Search Dropdown (mobile) === */
+.search-dropdown-wrap {
+    position: relative;
+    flex-shrink: 0;
+}
+
+.search-dropdown {
+    display: none;
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    top: calc(100% + 8px);
+    width: 280px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-card);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+    padding: 16px;
+    z-index: 150;
+    animation: avatar-dd-in 0.15s ease-out;
+}
+
+.search-dropdown.open {
+    display: block;
+}
+
+.search-dd-form {
+    display: flex;
+    gap: 8px;
+}
+
+.search-dd-input {
+    flex: 1;
+    padding: 10px 14px;
+    font-size: 14px;
+    border: none;
+    border-radius: var(--radius-btn);
+    background: var(--border-subtle);
+    color: var(--text-primary);
+    outline: none;
+    min-width: 0;
+}
+
+.search-dd-input::placeholder {
+    color: #666;
+}
+
+.search-dd-input:focus {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.search-dd-go {
+    padding: 10px 18px;
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
 /* === Avatar Dropdown === */
 .avatar-dropdown-wrap {
     position: relative;
@@ -1965,13 +1974,13 @@ main {
 .color-grid {
     display: grid;
     grid-template-columns: repeat(8, 1fr);
-    gap: 6px;
+    gap: 4px;
     margin-bottom: 14px;
 }
 
 .color-option {
-    width: 24px;
-    height: 24px;
+    width: 22px;
+    height: 22px;
     border-radius: 50%;
     border: 2px solid transparent;
     cursor: pointer;

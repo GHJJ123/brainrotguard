@@ -16,7 +16,16 @@
             <a href="/"><img src="/static/logo.png" alt="BrainRotGuard" class="logo-img"></a>
             <a href="https://github.com/GHJJ123/brainrotguard/blob/main/CHANGELOG.md" target="_blank" rel="noopener" class="version-tag">v{{ app_version }}</a>
         </div>
-        <button type="button" class="search-toggle" onclick="var o=document.querySelector('.search-overlay');o.classList.add('open');o.querySelector('input').focus();">&#x1F50D;</button>
+        <div class="search-dropdown-wrap">
+            <button type="button" class="search-toggle" onclick="var d=this.nextElementSibling;d.classList.toggle('open');if(d.classList.contains('open'))d.querySelector('input').focus();">&#x1F50D;</button>
+            <div class="search-dropdown">
+                <div class="avatar-dd-label">Search YouTube</div>
+                <form action="/search" method="GET" class="search-dd-form">
+                    <input type="text" name="q" placeholder="Search or paste a link..." class="search-dd-input">
+                    <button type="submit" class="btn-primary search-dd-go">Go</button>
+                </form>
+            </div>
+        </div>
         <form action="/search" method="GET" class="header-search">
             <input type="text" name="q" placeholder="Search or paste a link..." class="header-search-input" {% block search_attrs %}{% endblock %}>
             <button type="submit" class="btn-primary header-search-btn">Search</button>
@@ -47,13 +56,6 @@
         </div>
         {% endif %}
     </header>
-    <div class="search-overlay" onclick="if(event.target===this)this.classList.remove('open')">
-        <form action="/search" method="GET" class="search-overlay-bar">
-            <input type="text" name="q" placeholder="Search or paste a link..." class="search-overlay-input">
-            <button type="submit" class="btn-primary search-overlay-go">Go</button>
-            <button type="button" class="search-overlay-close" onclick="this.closest('.search-overlay').classList.remove('open')">&times;</button>
-        </form>
-    </div>
     <main>
         {% block content %}{% endblock %}
     </main>
@@ -63,6 +65,9 @@
     {% block scripts %}{% endblock %}
     <script>
     (function(){
+        // Search dropdown: outside-click close
+        var sw=document.querySelector('.search-dropdown-wrap');
+        if(sw){var sd=sw.querySelector('.search-dropdown');document.addEventListener('click',function(e){if(!sw.contains(e.target))sd.classList.remove('open')})}
         var wrap=document.querySelector('.avatar-dropdown-wrap');
         if(!wrap) return;
         var dd=wrap.querySelector('.avatar-dropdown');
