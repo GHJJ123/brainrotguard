@@ -234,7 +234,7 @@ def _fetch_from_channel_page(channel_id: str, channel_name: str, max_results: in
                 if not entry:
                     continue
                 vid_id = entry.get('id')
-                if not vid_id:
+                if not vid_id or not _VIDEO_ID_RE.match(vid_id):
                     continue
                 videos.append({
                     'video_id': vid_id,
@@ -323,7 +323,7 @@ def _fetch_from_channel_shorts(channel_id: str, channel_name: str, max_results: 
                 if not entry:
                     continue
                 vid_id = entry.get('id')
-                if not vid_id:
+                if not vid_id or not _VIDEO_ID_RE.match(vid_id):
                     continue
                 videos.append({
                     'video_id': vid_id,

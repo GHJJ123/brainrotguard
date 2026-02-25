@@ -16,6 +16,9 @@ from youtube.extractor import extract_video_id
 
 router = APIRouter()
 
+# Guard against duplicate notifications from concurrent requests for the same video
+_pending_requests: set[tuple[str, str]] = set()  # (profile_id, video_id)
+
 
 @router.get("/search", response_class=HTMLResponse)
 @limiter.limit("10/minute")
@@ -113,16 +116,54 @@ async def request_video(
             return RedirectResponse(url=f"/watch/{video_id}", status_code=303)
         return RedirectResponse(url=f"/pending/{video_id}", status_code=303)
 
-    metadata = await extractor.extract_metadata(video_id)
-    if not metadata:
-        return RedirectResponse(url="/?error=fetch_failed", status_code=303)
+    # Prevent duplicate notifications from concurrent requests for the same video
+    req_key = (profile_id, video_id)
+    if req_key in _pending_requests:
+        return RedirectResponse(url=f"/pending/{video_id}", status_code=303)
+    _pending_requests.add(req_key)
 
-    channel_name = metadata['channel_name']
-    channel_id = metadata.get('channel_id')
-    is_short = metadata.get('is_short', False)
+    try:
+        metadata = await extractor.extract_metadata(video_id)
+        if not metadata:
+            return RedirectResponse(url="/?error=fetch_failed", status_code=303)
 
-    # Check if channel is blocked -> auto-deny
-    if cs.is_channel_blocked(channel_name, channel_id=channel_id or ""):
+        channel_name = metadata['channel_name']
+        channel_id = metadata.get('channel_id')
+        is_short = metadata.get('is_short', False)
+
+        # Check if channel is blocked -> auto-deny
+        if cs.is_channel_blocked(channel_name, channel_id=channel_id or ""):
+            cs.add_video(
+                video_id=metadata['video_id'],
+                title=metadata['title'],
+                channel_name=channel_name,
+                thumbnail_url=metadata.get('thumbnail_url'),
+                duration=metadata.get('duration'),
+                channel_id=channel_id,
+                is_short=is_short,
+            )
+            cs.update_status(video_id, "denied")
+            invalidate_catalog_cache(state)
+            return templates.TemplateResponse("denied.html", {
+                **base_ctx(request),
+                "video": cs.get_video(video_id),
+            })
+
+        # Check if channel is allowlisted -> auto-approve
+        if cs.is_channel_allowed(channel_name, channel_id=channel_id or ""):
+            cs.add_video(
+                video_id=metadata['video_id'],
+                title=metadata['title'],
+                channel_name=channel_name,
+                thumbnail_url=metadata.get('thumbnail_url'),
+                duration=metadata.get('duration'),
+                channel_id=channel_id,
+                is_short=is_short,
+            )
+            cs.update_status(video_id, "approved")
+            invalidate_catalog_cache(state)
+            return RedirectResponse(url=f"/watch/{video_id}", status_code=303)
+
         video = cs.add_video(
             video_id=metadata['video_id'],
             title=metadata['title'],
@@ -132,40 +173,11 @@ async def request_video(
             channel_id=channel_id,
             is_short=is_short,
         )
-        cs.update_status(video_id, "denied")
-        invalidate_catalog_cache(state)
-        return templates.TemplateResponse("denied.html", {
-            **base_ctx(request),
-            "video": cs.get_video(video_id),
-        })
 
-    # Check if channel is allowlisted -> auto-approve
-    if cs.is_channel_allowed(channel_name, channel_id=channel_id or ""):
-        video = cs.add_video(
-            video_id=metadata['video_id'],
-            title=metadata['title'],
-            channel_name=channel_name,
-            thumbnail_url=metadata.get('thumbnail_url'),
-            duration=metadata.get('duration'),
-            channel_id=channel_id,
-            is_short=is_short,
-        )
-        cs.update_status(video_id, "approved")
-        invalidate_catalog_cache(state)
-        return RedirectResponse(url=f"/watch/{video_id}", status_code=303)
+        notify_cb = state.notify_callback
+        if notify_cb:
+            await notify_cb(video, profile_id)
 
-    video = cs.add_video(
-        video_id=metadata['video_id'],
-        title=metadata['title'],
-        channel_name=channel_name,
-        thumbnail_url=metadata.get('thumbnail_url'),
-        duration=metadata.get('duration'),
-        channel_id=channel_id,
-        is_short=is_short,
-    )
-
-    notify_cb = state.notify_callback
-    if notify_cb:
-        await notify_cb(video, profile_id)
-
-    return RedirectResponse(url=f"/pending/{video_id}", status_code=303)
+        return RedirectResponse(url=f"/pending/{video_id}", status_code=303)
+    finally:
+        _pending_requests.discard(req_key)

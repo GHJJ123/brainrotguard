@@ -132,4 +132,5 @@ async def switch_profile(request: Request):
     request.session.pop("child_name", None)
     request.session.pop("avatar_icon", None)
     request.session.pop("avatar_color", None)
+    request.session.pop("watching", None)
     return RedirectResponse(url="/login", status_code=303)

@@ -187,7 +187,9 @@ class TimeLimitMixin:
 
                 if arg == "off":
                     cs.set_setting("daily_limit_minutes", "0")
-                    await update.effective_message.reply_text("Watch time limit disabled. Videos can be watched without a daily cap.")
+                    cs.set_setting("edu_limit_minutes", "0")
+                    cs.set_setting("fun_limit_minutes", "0")
+                    await update.effective_message.reply_text("All watch time limits disabled. Videos can be watched without a daily cap.")
                     return
                 elif arg.isdigit():
                     await self._time_set_flat_limit(update, [arg], store=cs)
@@ -489,6 +491,9 @@ class TimeLimitMixin:
             await update.effective_message.reply_text("Usage: /time [<day>] limit <minutes>")
             return
         minutes = int(args[0])
+        if minutes == 0:
+            await update.effective_message.reply_text("Use `/time off` to disable the time limit.", parse_mode="MarkdownV2")
+            return
 
         # Mode switch check (only for default, not per-day)
         if not day:
@@ -676,6 +681,9 @@ class TimeLimitMixin:
         add_min = int(args[0])
         if add_min <= 0:
             await update.effective_message.reply_text("Bonus minutes must be a positive number.")
+            return
+        if add_min > 480:
+            await update.effective_message.reply_text("Bonus must be 480 minutes (8 hours) or less.")
             return
         today = get_today_str(self._get_tz())
         bonus_date = s.get_setting("daily_bonus_date", "")

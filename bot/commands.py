@@ -74,8 +74,9 @@ class CommandsMixin:
             await update.effective_message.reply_text("Name must contain at least one alphanumeric character.")
             return
         # Ensure unique ID
-        if self.video_store.get_profile(pid):
-            await update.effective_message.reply_text(f"A profile named '{name}' already exists.")
+        existing = self.video_store.get_profile(pid)
+        if existing:
+            await update.effective_message.reply_text(f"Profile ID conflict with '{existing['display_name']}' — try a different name.")
             return
         if self.video_store.create_profile(pid, name, pin=pin):
             pin_msg = " with PIN" if pin else " (no PIN)"
@@ -124,6 +125,11 @@ class CommandsMixin:
         target = self._find_profile(old_name)
         if not target:
             await update.effective_message.reply_text(f"Profile not found: {old_name}")
+            return
+        # Check for display_name uniqueness
+        conflict = self._find_profile(new_name)
+        if conflict and conflict["id"] != target["id"]:
+            await update.effective_message.reply_text(f"A profile named '{new_name}' already exists.")
             return
         if self.video_store.update_profile(target["id"], display_name=new_name):
             await update.effective_message.reply_text(_md(f"Renamed: {target['display_name']} → **{new_name}**"), parse_mode=MD2)

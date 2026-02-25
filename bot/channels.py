@@ -244,6 +244,15 @@ class ChannelMixin:
             return
         raw = " ".join(args[:-1])
         channel = s.resolve_channel_name(raw) or raw
+        # Check channel is actually allowed (not blocked)
+        allowed_names = {name.lower() for name, *_ in s.get_channels_with_ids("allowed")}
+        if channel.lower() not in allowed_names:
+            blocked_names = {name.lower() for name, *_ in s.get_channels_with_ids("blocked")}
+            if channel.lower() in blocked_names:
+                await update.effective_message.reply_text(f"**{channel}** is blocked, not allowed\\. Unblock it first, then allow with a category\\.", parse_mode=MD2)
+            else:
+                await update.effective_message.reply_text(f"Channel not in allowlist: {raw}. Use /channel to see all channels.")
+            return
         if s.set_channel_category(channel, cat):
             # Look up channel_id for stable matching
             ch_id = ""
@@ -416,7 +425,7 @@ class ChannelMixin:
             _answer_bg(query, f"Removed: {resolved_name}")
             await self._update_channel_list_message(query, profile_id=profile_id)
         else:
-            _answer_bg(query, f"Not found: {ch_name}")
+            _answer_bg(query, f"Not found: {resolved_name}")
 
     async def _update_channel_list_message(self, query, profile_id: str = "default") -> None:
         """Refresh back to channel menu after unallow/unblock."""

@@ -4,7 +4,7 @@
 {% block content %}
 <div class="pending-container">
     <div class="pending-card">
-        <img src="{{ video.thumbnail_url }}" alt="{{ video.title }}" class="pending-thumbnail">
+        <img src="{{ video.thumbnail_url or 'https://i.ytimg.com/vi/' ~ video.video_id ~ '/hqdefault.jpg' }}" alt="{{ video.title }}" class="pending-thumbnail">
         <h2 class="pending-title">{{ video.title }}</h2>
         <p class="pending-channel">{{ video.channel_name }}</p>
     </div>

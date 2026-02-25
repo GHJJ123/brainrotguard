@@ -381,12 +381,21 @@ class BrainRotGuardBot(ApprovalMixin, ChannelMixin, TimeLimitMixin, CommandsMixi
 
         # Fallthrough: video action callbacks (approve/deny/revoke/allowchan/blockchan/setcat)
         # Format: action:profile_id:video_id (3 parts) or legacy action:video_id (2 parts)
+        _VIDEO_ACTIONS = {
+            "approve", "approve_edu", "approve_fun", "deny", "revoke",
+            "allowchan", "allowchan_edu", "allowchan_fun", "blockchan",
+            "setcat_edu", "setcat_fun",
+        }
         if len(parts) == 3:
             action, profile_id, video_id = parts
         elif len(parts) == 2:
             action, video_id = parts
             profile_id = "default"
         else:
+            await query.answer("Invalid callback.")
+            return
+
+        if action not in _VIDEO_ACTIONS:
             await query.answer("Invalid callback.")
             return
 
