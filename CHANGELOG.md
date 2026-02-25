@@ -1,4 +1,17 @@
 # Changelog
+## v1.24.0 - 2026-02-24
+
+**Added**
+- `/time`, `/shorts`, `/watch` commands now scoped per-child profile — each child gets independent time limits, schedules, bonus minutes, and Shorts settings
+- `/time setup` wizard preserves child context through all steps (button and custom text flows)
+
+**Fixed**
+- `/time off` no longer overridden by `config.yaml` defaults (string vs integer fallback guard)
+
+**Changed**
+- Config-level time limit fallbacks (`time_limits.*` in YAML) only apply to the "default" profile — new profiles start with no restrictions
+- Mode switch confirmation callbacks (`switch_confirm`) include profile_id for correct scoping
+
 ## v1.23.0 - 2026-02-24
 
 **Added**
