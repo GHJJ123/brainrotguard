@@ -1,4 +1,11 @@
 # Changelog
+## v1.24.1 - 2026-02-24
+
+**Fixed**
+- Login redirect loop when only one profile exists and it has a PIN
+- `/pending`, `/approved`, `/stats`, `/logs`, `/search`, `/channel`, `/revoke` now scoped per-child profile (previously always operated on default profile)
+- All inline button callbacks (unallow/unblock, resend, channel menu/filter/page, starter import, pagination) now carry profile_id for correct routing
+
 ## v1.24.0 - 2026-02-24
 
 **Added**
