@@ -863,7 +863,7 @@ class BrainRotGuardBot:
         if self.video_store.delete_profile(profile_id):
             if self.on_channel_change:
                 self.on_channel_change()
-            await _edit_msg(query, f"Deleted profile: {p['display_name']} and all associated data.")
+            await _edit_msg(query, _md(f"Deleted profile: **{p['display_name']}** and all associated data."))
         else:
             await query.answer("Failed to delete profile.")
 
