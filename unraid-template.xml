@@ -1,0 +1,117 @@
+<?xml version="1.0"?>
+<Container version="2">
+    <Name>BrainRotGuard</Name>
+    <Repository>ghcr.io/ghjj123/brainrotguard:latest</Repository>
+    <Registry>https://github.com/GHJJ123/brainrotguard/pkgs/container/brainrotguard</Registry>
+    <Branch>
+        <Tag>latest</Tag>
+        <TagDescription>Latest stable release</TagDescription>
+    </Branch>
+    <Network>bridge</Network>
+    <Privileged>false</Privileged>
+    <Support>https://github.com/GHJJ123/brainrotguard/issues</Support>
+    <Project>https://github.com/GHJJ123/brainrotguard</Project>
+    <Overview>YouTube approval system for kids. Your child searches YouTube via a kid-friendly web UI, you get a Telegram notification with thumbnail and details, tap Approve or Deny, and approved videos play via privacy-enhanced embeds. Includes channel allow/block lists, daily watch time limits, scheduled access windows, category labeling, and search history tracking. Pair with DNS blocking (Pi-hole/AdGuard) for full control.</Overview>
+    <Category>MediaApp:Video HomeAutomation Tools:</Category>
+    <WebUI>http://[IP]:[PORT:8080]</WebUI>
+    <Icon>https://raw.githubusercontent.com/GHJJ123/brainrotguard/main/web/static/brg-logo.png</Icon>
+    <ExtraSearchTerms>youtube kids parental controls screen time telegram</ExtraSearchTerms>
+    <Requires>A Telegram Bot Token (create one via @BotFather) and your Telegram Chat ID.</Requires>
+    <DonateText/>
+    <DonateLink/>
+    <DonateImg/>
+
+    <!-- Port -->
+    <Config
+        Name="Web UI Port"
+        Target="8080"
+        Default="8080"
+        Mode="tcp"
+        Description="Port for the BrainRotGuard web interface."
+        Type="Port"
+        Display="always"
+        Required="true"
+    />
+
+    <!-- Volumes -->
+    <Config
+        Name="Database"
+        Target="/app/db"
+        Default="/mnt/user/appdata/brainrotguard/db"
+        Mode="rw"
+        Description="Stores the SQLite database (watch history, approvals, channel lists)."
+        Type="Path"
+        Display="always"
+        Required="true"
+    />
+    <Config
+        Name="Config File (optional)"
+        Target="/app/config.yaml"
+        Default=""
+        Mode="ro"
+        Description="Optional: mount a custom config.yaml for advanced settings. Leave empty to configure entirely via environment variables."
+        Type="Path"
+        Display="advanced"
+        Required="false"
+    />
+
+    <!-- Required Environment Variables -->
+    <Config
+        Name="Telegram Bot Token"
+        Target="BRG_BOT_TOKEN"
+        Default=""
+        Description="Bot token from @BotFather on Telegram."
+        Type="Variable"
+        Display="always"
+        Required="true"
+        Mask="true"
+    />
+    <Config
+        Name="Telegram Admin Chat ID"
+        Target="BRG_ADMIN_CHAT_ID"
+        Default=""
+        Description="Your Telegram numeric chat ID. Send /start to @userinfobot to find it."
+        Type="Variable"
+        Display="always"
+        Required="true"
+    />
+
+    <!-- Optional Environment Variables -->
+    <Config
+        Name="PIN Code"
+        Target="BRG_PIN"
+        Default=""
+        Description="Optional PIN to protect the web UI. Leave empty for no PIN."
+        Type="Variable"
+        Display="always"
+        Required="false"
+        Mask="true"
+    />
+    <Config
+        Name="Base URL"
+        Target="BRG_BASE_URL"
+        Default=""
+        Description="LAN URL for Telegram deep links (e.g. http://192.168.1.50:8080). Auto-detected if empty."
+        Type="Variable"
+        Display="always"
+        Required="false"
+    />
+    <Config
+        Name="Daily Watch Limit (minutes)"
+        Target="BRG_DAILY_LIMIT_MINUTES"
+        Default="120"
+        Description="Daily screen time limit in minutes. 0 = unlimited."
+        Type="Variable"
+        Display="advanced"
+        Required="false"
+    />
+    <Config
+        Name="Timezone"
+        Target="BRG_TIMEZONE"
+        Default="America/New_York"
+        Description="Timezone for daily limit resets and scheduled access windows (e.g. America/Chicago, Europe/London)."
+        Type="Variable"
+        Display="advanced"
+        Required="false"
+    />
+</Container>
