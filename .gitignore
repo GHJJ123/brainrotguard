@@ -9,3 +9,4 @@ db/
 .venv/
 venv/
 CLAUDE.md
+.claude/
