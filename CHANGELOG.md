@@ -1,4 +1,26 @@
 # Changelog
+## v1.23.0 - 2026-02-24
+
+**Added**
+- Multi-child profile support — each child gets isolated videos, channels, watch history, and time limits
+- `/child` command for profile management (`add`, `remove`, `rename`, `pin` subcommands)
+- Profile picker login flow ("Who's Watching?" → optional PIN entry per child)
+- Cross-child auto-approve: when a video is already approved for one child, the notification for another shows an "Auto-approve" button
+- `ChildStore` wrapper that scopes all `VideoStore` operations to a single profile
+- Profile badge in web UI header with "Switch" link when multiple profiles exist
+- `profiles` table with full CRUD and cascade delete
+
+**Changed**
+- All database tables (`videos`, `channels`, `watch_log`, `search_log`) now include a `profile_id` column — existing databases auto-migrate on startup
+- Unique constraints updated: `videos(video_id)` → `videos(video_id, profile_id)`, `channels(channel_name)` → `channels(channel_name, profile_id)`
+- Callback data format: `action:video_id` → `action:profile_id:video_id` (legacy 2-part format still accepted)
+- Channel cache is now per-profile
+- Time limits, schedule windows, and category budgets resolve per-profile
+- Telegram notifications include child name when multiple profiles exist
+- "Time's Up" page shows child name (e.g., "Alex has used..." instead of "You've used...")
+- PIN auth middleware rewritten for profile-based sessions (`child_id` / `child_name` in session)
+- Auto-creates "default" profile on first startup (inherits PIN from config)
+
 ## v1.22.0 - 2026-02-24
 
 **Added**
