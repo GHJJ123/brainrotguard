@@ -1,4 +1,27 @@
 # Changelog
+## v1.26.0 - 2026-02-25
+
+**Modularity refactor** — decomposed two monolithic files into 20 focused modules with dependency injection, declarative callback routing, and 241 automated tests.
+
+**Changed**
+- `web/app.py` (1,433 → 50 lines): split into 7 domain routers + deps/helpers/middleware/cache modules
+- `bot/telegram_bot.py` (3,151 → 394 lines): split into 6 mixins (approval, channels, timelimits, commands, activity, helpers) + declarative callback router
+- `youtube/extractor.py`: wrapped in `YouTubeExtractor` class with `ExtractorProtocol` for DI and mocking
+- Catalog cache now per-profile (multi-child setups no longer rebuild on every request)
+- Bonus-minutes logic deduplicated into `get_bonus_minutes()` helper
+
+**Fixed**
+- Missing `_channel_md_link` import in activity mixin (crash on `/watch` command)
+- Heartbeat dedup now keyed by `(video_id, profile_id)` — prevents cross-profile time tracking suppression
+- PIN comparison guards against `None` stored PIN (previously raised `TypeError`)
+- Channel unallow/unblock callback_data truncated to Telegram's 64-byte limit with prefix-match fallback
+- Session cookie set to `SameSite=Strict`
+- Removed dead imports and unused `YouTubeExtractor.timeout` parameter
+
+**Added**
+- 241 automated tests (pytest): utils, config, video_store, child_store, extractor, callback router, web deps, web integration
+- `REFACTOR.md` documenting the full refactor with metrics and confidence score
+
 ## v1.25.0 - 2026-02-25
 
 **Added**
