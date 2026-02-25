@@ -20,9 +20,10 @@ from telegram.ext import (
 from data.child_store import ChildStore
 from utils import (
     get_today_str, get_day_utc_bounds, get_weekday, parse_time_input,
-    format_time_12h, is_within_schedule, DAY_NAMES, DAY_GROUPS,
+    format_time_12h, is_within_schedule, resolve_setting, DAY_NAMES, DAY_GROUPS,
+    CAT_LABELS,
 )
-from youtube.extractor import format_duration
+from youtube.extractor import format_duration, THUMB_ALLOWED_HOSTS
 
 logger = logging.getLogger(__name__)
 
@@ -433,17 +434,12 @@ class BrainRotGuardBot:
         ])
         keyboard = InlineKeyboardMarkup(buttons)
 
-        _THUMB_HOSTS = {
-            "i.ytimg.com", "i1.ytimg.com", "i2.ytimg.com", "i3.ytimg.com",
-            "i4.ytimg.com", "i9.ytimg.com", "img.youtube.com",
-        }
-
         try:
             # Try to send with thumbnail (only fetch from known YouTube CDN domains)
             thumbnail_url = video.get('thumbnail_url')
             if thumbnail_url:
                 parsed = urlparse(thumbnail_url)
-                if not parsed.hostname or parsed.hostname not in _THUMB_HOSTS:
+                if not parsed.hostname or parsed.hostname not in THUMB_ALLOWED_HOSTS:
                     thumbnail_url = None
             if thumbnail_url:
                 try:
@@ -673,7 +669,7 @@ class BrainRotGuardBot:
         if action in ("setcat_edu", "setcat_fun") and video["status"] == "approved":
             cat = "edu" if action == "setcat_edu" else "fun"
             cs.set_video_category(video_id, cat)
-            cat_label = "Educational" if cat == "edu" else "Entertainment"
+            cat_label = CAT_LABELS.get(cat, "Entertainment")
             _answer_bg(query, f"→ {cat_label}")
             toggle_cat = "edu" if cat == "fun" else "fun"
             toggle_label = "→ Edu" if toggle_cat == "edu" else "→ Fun"
@@ -701,7 +697,7 @@ class BrainRotGuardBot:
             cat = "edu" if action == "approve_edu" else "fun"
             cs.update_status(video_id, "approved")
             cs.set_video_category(video_id, cat)
-            cat_label = "Educational" if cat == "edu" else "Entertainment"
+            cat_label = CAT_LABELS.get(cat, "Entertainment")
             _answer_bg(query, f"Approved ({cat_label})!")
             status_label = f"APPROVED ({cat_label})"
         elif action == "deny" and video['status'] == 'pending':
@@ -732,7 +728,7 @@ class BrainRotGuardBot:
             cid = video.get('channel_id')
             cs.add_channel(channel, "allowed", channel_id=cid, category=cat)
             self._resolve_channel_bg(channel, cid, video_id=video_id, profile_id=profile_id)
-            cat_label = "Educational" if cat == "edu" else "Entertainment"
+            cat_label = CAT_LABELS.get(cat, "Entertainment")
             if video['status'] == 'pending':
                 cs.update_status(video_id, "approved")
                 cs.set_video_category(video_id, cat)
@@ -839,7 +835,7 @@ class BrainRotGuardBot:
 
         channel_link = _channel_md_link(video['channel_name'], video.get('channel_id'))
         yt_link = f"https://www.youtube.com/watch?v={video_id}"
-        cat_label = "Educational" if cat == "edu" else "Entertainment"
+        cat_label = CAT_LABELS.get(cat, "Entertainment")
         result_text = _md(
             f"**AUTO-APPROVED ({cat_label})**\n\n"
             f"**Title:** {video['title']}\n"
@@ -932,19 +928,21 @@ class BrainRotGuardBot:
         else:
             await update.effective_message.reply_text("Failed to create profile.")
 
+    def _find_profile(self, name: str):
+        """Find a profile by display name or id (case-insensitive)."""
+        name_lower = name.lower()
+        for p in self._get_profiles():
+            if p["display_name"].lower() == name_lower or p["id"] == name_lower:
+                return p
+        return None
+
     async def _child_remove(self, update: Update, args: list[str]) -> None:
         """Handle /child remove <name>."""
         if not args:
             await update.effective_message.reply_text("Usage: /child remove <name>")
             return
         name = " ".join(args)
-        # Find profile by name or id
-        profiles = self._get_profiles()
-        target = None
-        for p in profiles:
-            if p["display_name"].lower() == name.lower() or p["id"] == name.lower():
-                target = p
-                break
+        target = self._find_profile(name)
         if not target:
             await update.effective_message.reply_text(f"Profile not found: {name}")
             return
@@ -968,12 +966,7 @@ class BrainRotGuardBot:
             return
         old_name = args[0]
         new_name = " ".join(args[1:])
-        profiles = self._get_profiles()
-        target = None
-        for p in profiles:
-            if p["display_name"].lower() == old_name.lower() or p["id"] == old_name.lower():
-                target = p
-                break
+        target = self._find_profile(old_name)
         if not target:
             await update.effective_message.reply_text(f"Profile not found: {old_name}")
             return
@@ -989,12 +982,7 @@ class BrainRotGuardBot:
             return
         name = args[0]
         new_pin = args[1] if len(args) > 1 else ""
-        profiles = self._get_profiles()
-        target = None
-        for p in profiles:
-            if p["display_name"].lower() == name.lower() or p["id"] == name.lower():
-                target = p
-                break
+        target = self._find_profile(name)
         if not target:
             await update.effective_message.reply_text(f"Profile not found: {name}")
             return
@@ -1757,7 +1745,7 @@ class BrainRotGuardBot:
                     ch_id = cid or ""
                     break
             s.set_channel_videos_category(channel, cat, channel_id=ch_id)
-            cat_label = "Educational" if cat == "edu" else "Entertainment"
+            cat_label = CAT_LABELS.get(cat, "Entertainment")
             if self.on_channel_change:
                 self.on_channel_change(pid)
             await update.effective_message.reply_text(f"**{channel}** → {cat_label}\nExisting videos from this channel updated too.", parse_mode=MD2)
@@ -2072,11 +2060,7 @@ class BrainRotGuardBot:
     def _resolve_setting(self, base_key: str, default: str = "", store=None) -> str:
         """Resolve a setting with per-day override support."""
         s = store or self.video_store
-        day = get_weekday(self._get_tz())
-        day_val = s.get_setting(f"{day}_{base_key}", "")
-        if day_val:
-            return day_val
-        return s.get_setting(base_key, default)
+        return resolve_setting(base_key, s, tz_name=self._get_tz(), default=default)
 
     def _effective_setting(self, day: str, base_key: str, store=None) -> str:
         """Get effective setting for a given day (day override > default)."""
@@ -2535,7 +2519,7 @@ class BrainRotGuardBot:
                                        category: str, day: str = "", store=None) -> None:
         """Handle /time [<day>] edu|fun <minutes|off>."""
         s = store or self.video_store
-        cat_label = "Educational" if category == "edu" else "Entertainment"
+        cat_label = CAT_LABELS.get(category, "Entertainment")
         prefix = f"{day}_" if day else ""
         setting_key = f"{prefix}{category}_limit_minutes"
 
@@ -3044,7 +3028,7 @@ class BrainRotGuardBot:
             minutes = int(parts[3])
             ws.set_setting(f"{category}_limit_minutes", str(minutes))
             self._auto_clear_mode("category", store=ws)
-            cat_label = "Educational" if category == "edu" else "Entertainment"
+            cat_label = CAT_LABELS.get(category, "Entertainment")
             other = "fun" if category == "edu" else "edu"
             other_label = "Entertainment" if category == "edu" else "Educational"
             text = _md(

@@ -21,10 +21,16 @@
             <input type="text" name="q" placeholder="Search or paste a link..." class="header-search-input" {% block search_attrs %}{% endblock %}>
             <button type="submit" class="btn-primary header-search-btn">Search</button>
         </form>
-        {% if child_name and multi_profile %}
+        {% if child_name %}
+        {% if multi_profile %}
         <a href="/switch-profile" class="profile-badge">
             <span class="profile-avatar">{{ child_name[0] }}</span>
         </a>
+        {% else %}
+        <span class="profile-badge">
+            <span class="profile-avatar">{{ child_name[0] }}</span>
+        </span>
+        {% endif %}
         {% endif %}
     </header>
     <div class="search-overlay" onclick="if(event.target===this)this.classList.remove('open')">

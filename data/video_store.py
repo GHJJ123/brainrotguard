@@ -11,13 +11,9 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
 
-logger = logging.getLogger(__name__)
+from youtube.extractor import THUMB_ALLOWED_HOSTS
 
-# Allowlisted thumbnail CDN hostnames (YouTube image servers)
-_THUMB_ALLOWED_HOSTS = frozenset({
-    "i.ytimg.com", "i1.ytimg.com", "i2.ytimg.com", "i3.ytimg.com",
-    "i4.ytimg.com", "i9.ytimg.com", "img.youtube.com",
-})
+logger = logging.getLogger(__name__)
 
 
 def _validate_thumbnail_url(url: Optional[str]) -> Optional[str]:
@@ -26,7 +22,7 @@ def _validate_thumbnail_url(url: Optional[str]) -> Optional[str]:
         return None
     try:
         parsed = urlparse(url)
-        if parsed.scheme == "https" and parsed.hostname in _THUMB_ALLOWED_HOSTS:
+        if parsed.scheme == "https" and parsed.hostname in THUMB_ALLOWED_HOSTS:
             return url
     except Exception:
         pass

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import re
 from typing import Optional
@@ -6,8 +7,8 @@ import yt_dlp
 
 logger = logging.getLogger(__name__)
 
-# Allowlisted YouTube thumbnail CDN hostnames
-_THUMB_ALLOWED_HOSTS = frozenset({
+# Allowlisted YouTube thumbnail CDN hostnames (single source of truth)
+THUMB_ALLOWED_HOSTS = frozenset({
     "i.ytimg.com", "i1.ytimg.com", "i2.ytimg.com", "i3.ytimg.com",
     "i4.ytimg.com", "i9.ytimg.com", "img.youtube.com",
 })
@@ -32,7 +33,7 @@ def _safe_thumbnail(url: Optional[str], video_id: str) -> str:
     if url:
         try:
             parsed = urlparse(url)
-            if parsed.scheme == "https" and parsed.hostname in _THUMB_ALLOWED_HOSTS:
+            if parsed.scheme == "https" and parsed.hostname in THUMB_ALLOWED_HOSTS:
                 return url
         except Exception:
             pass
@@ -52,6 +53,15 @@ def extract_video_id(url_or_id: str) -> Optional[str]:
         return url_or_id
     return None
 
+_YDL_TIMEOUT = 30  # default; overridden by configure_timeout()
+
+
+def configure_timeout(seconds: int):
+    """Set yt-dlp timeout from config."""
+    global _YDL_TIMEOUT
+    _YDL_TIMEOUT = seconds
+
+
 def _ydl_opts() -> dict:
     """Common yt-dlp options - no download, just metadata."""
     return {
@@ -63,18 +73,9 @@ def _ydl_opts() -> dict:
         'socket_timeout': _YDL_TIMEOUT,
     }
 
-_YDL_TIMEOUT = 30  # default; overridden by configure_timeout()
-
-
-def configure_timeout(seconds: int):
-    """Set yt-dlp timeout from config."""
-    global _YDL_TIMEOUT
-    _YDL_TIMEOUT = seconds
-
 
 async def extract_metadata(video_id: str) -> Optional[dict]:
     """Extract metadata for a single YouTube video."""
-    import asyncio
     def _extract():
         try:
             with yt_dlp.YoutubeDL(_ydl_opts()) as ydl:
@@ -101,7 +102,6 @@ async def extract_metadata(video_id: str) -> Optional[dict]:
 
 async def search(query: str, max_results: int = 10) -> list[dict]:
     """Search YouTube via yt-dlp ytsearch."""
-    import asyncio
     def _search():
         try:
             opts = _ydl_opts()
@@ -138,7 +138,6 @@ async def search(query: str, max_results: int = 10) -> list[dict]:
 
 async def resolve_channel_handle(handle: str) -> Optional[dict]:
     """Resolve a @handle to channel name, ID, and handle. Returns dict or None."""
-    import asyncio
     clean = handle.lstrip("@")
     url = f"https://www.youtube.com/@{clean}"
     def _resolve():
@@ -167,7 +166,6 @@ async def resolve_channel_handle(handle: str) -> Optional[dict]:
 
 async def resolve_handle_from_channel_id(channel_id: str) -> Optional[str]:
     """Resolve a channel_id to its @handle. Returns '@handle' string or None."""
-    import asyncio
     def _resolve():
         try:
             opts = _ydl_opts()
@@ -258,7 +256,6 @@ async def fetch_channel_videos(channel_name: str, max_results: int = 10, channel
     If channel_id is provided, fetches directly from the uploads tab.
     Otherwise resolves via search first. Falls back to ytsearch with name filtering.
     """
-    import asyncio
     def _fetch():
         # Try direct channel page approach first
         cid = channel_id or _resolve_channel_id(channel_name)
@@ -344,7 +341,6 @@ def _fetch_from_channel_shorts(channel_id: str, channel_name: str, max_results: 
 
 async def fetch_channel_shorts(channel_name: str, max_results: int = 50, channel_id: Optional[str] = None) -> list[dict]:
     """Fetch recent Shorts from a YouTube channel's /shorts tab."""
-    import asyncio
     if not channel_id:
         return []
     def _fetch():

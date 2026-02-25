@@ -8,6 +8,7 @@ logger = logging.getLogger(__name__)
 
 DAY_NAMES = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 DAY_GROUPS = {"weekdays": DAY_NAMES[:5], "weekend": DAY_NAMES[5:]}
+CAT_LABELS = {"edu": "Educational", "fun": "Entertainment"}
 
 
 def get_weekday(tz_name: str = "") -> str:
@@ -198,3 +199,15 @@ def is_within_schedule(start_str: str, end_str: str, tz_name: str = "") -> tuple
 
     unlock_time = ("at " + format_time_12h(start_str)) if not allowed else ""
     return (allowed, unlock_time)
+
+
+def resolve_setting(base_key: str, store, tz_name: str = "", default: str = "") -> str:
+    """Resolve a setting with per-day override support.
+
+    Checks {day}_{base_key} first; falls back to {base_key}.
+    """
+    day = get_weekday(tz_name)
+    day_val = store.get_setting(f"{day}_{base_key}", "")
+    if day_val:
+        return day_val
+    return store.get_setting(base_key, default)
