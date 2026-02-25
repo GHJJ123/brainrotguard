@@ -6,7 +6,7 @@ Tracking progress across sessions. Each phase = one session.
 
 - [x] **Phase 0**: Test Foundation — pytest setup, tests for utils, config, video_store, child_store, extractor pure functions (170 tests)
 - [x] **Phase 1**: Web DI — Replace module-level globals with `Depends()`, create `web/deps.py` (178 tests)
-- [ ] **Phase 2**: Split `web/app.py` into Routers — domain-focused router modules
+- [x] **Phase 2**: Split `web/app.py` into Routers — domain-focused router modules (178 tests)
 - [ ] **Phase 3a**: Bot — Extract helpers, approval, and channel handlers
 - [ ] **Phase 3b**: Bot — Extract time limits and setup wizard
 - [ ] **Phase 3c**: Bot — Extract remaining handlers (watch, search/filter, logs/stats, profile)

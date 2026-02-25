@@ -14,10 +14,9 @@ from config import load_config, Config
 from data.child_store import ChildStore
 from data.video_store import VideoStore
 from bot.telegram_bot import BrainRotGuardBot
-from web.app import (
-    app as fastapi_app, init_app_state, invalidate_channel_cache,
-    _invalidate_catalog_cache, SecurityHeadersMiddleware, PinAuthMiddleware,
-)
+from web.app import app as fastapi_app
+from web.cache import init_app_state, invalidate_channel_cache, invalidate_catalog_cache
+from web.middleware import SecurityHeadersMiddleware, PinAuthMiddleware
 from youtube.extractor import configure_timeout
 
 logging.basicConfig(
@@ -66,7 +65,7 @@ class BrainRotGuard:
             )
             state = fastapi_app.state
             self.bot.on_channel_change = lambda pid="": invalidate_channel_cache(state, pid)
-            self.bot.on_video_change = lambda: _invalidate_catalog_cache(state)
+            self.bot.on_video_change = lambda: invalidate_catalog_cache(state)
             logger.info("Telegram bot initialized")
 
         # Wire dependencies onto app.state (replaces old setup() call)
