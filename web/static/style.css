@@ -1046,6 +1046,15 @@ main {
         justify-content: center;
         order: 2;
         flex: 1;
+        position: static;
+    }
+    .search-dropdown {
+        position: fixed;
+        left: 20px;
+        right: 20px;
+        top: 60px;
+        width: auto;
+        transform: none;
     }
     .search-toggle {
         display: block;
