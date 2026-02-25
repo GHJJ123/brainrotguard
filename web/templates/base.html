@@ -16,17 +16,24 @@
             <a href="/"><img src="/static/logo.png" alt="BrainRotGuard" class="logo-img"></a>
             <a href="https://github.com/GHJJ123/brainrotguard/blob/main/CHANGELOG.md" target="_blank" rel="noopener" class="version-tag">v{{ app_version }}</a>
         </div>
+        <button type="button" class="search-toggle btn-primary" onclick="var o=document.querySelector('.search-overlay');o.classList.add('open');o.querySelector('input').focus();">Search</button>
         <form action="/search" method="GET" class="header-search">
             <input type="text" name="q" placeholder="Search or paste a link..." class="header-search-input" {% block search_attrs %}{% endblock %}>
             <button type="submit" class="btn-primary header-search-btn">Search</button>
         </form>
         {% if child_name and multi_profile %}
-        <div class="profile-badge">
-            <span class="profile-name">{{ child_name }}</span>
-            <a href="/switch-profile" class="switch-link">Switch</a>
-        </div>
+        <a href="/switch-profile" class="profile-badge">
+            <span class="profile-avatar">{{ child_name[0] }}</span>
+        </a>
         {% endif %}
     </header>
+    <div class="search-overlay" onclick="if(event.target===this)this.classList.remove('open')">
+        <form action="/search" method="GET" class="search-overlay-bar">
+            <input type="text" name="q" placeholder="Search or paste a link..." class="search-overlay-input">
+            <button type="submit" class="btn-primary search-overlay-go">Go</button>
+            <button type="button" class="search-overlay-close" onclick="this.closest('.search-overlay').classList.remove('open')">&times;</button>
+        </form>
+    </div>
     <main>
         {% block content %}{% endblock %}
     </main>

@@ -1,4 +1,12 @@
 # Changelog
+## v1.24.2 - 2026-02-25
+
+**Changed**
+- Mobile header: search bar replaced with Search button that opens a floating overlay
+- Profile avatar shown as rounded-square initial badge in header (all screen sizes)
+- Desktop header: search bar centered between logo and profile avatar
+- Search results no longer include YouTube channel/playlist entries (fixes broken thumbnails)
+
 ## v1.24.1 - 2026-02-24
 
 **Fixed**
