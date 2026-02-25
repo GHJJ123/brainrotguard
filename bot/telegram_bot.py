@@ -917,7 +917,7 @@ class BrainRotGuardBot:
             return
         if self.video_store.create_profile(pid, name, pin=pin):
             pin_msg = " with PIN" if pin else " (no PIN)"
-            await update.message.reply_text(f"Created profile: **{name}**{pin_msg}", parse_mode=MD2)
+            await update.message.reply_text(_md(f"Created profile: **{name}**{pin_msg}"), parse_mode=MD2)
         else:
             await update.message.reply_text("Failed to create profile.")
 
@@ -945,7 +945,7 @@ class BrainRotGuardBot:
             ),
         ]])
         await update.message.reply_text(
-            f"Delete **{target['display_name']}**? This removes all videos, channels, watch history, and settings.",
+            _md(f"Delete **{target['display_name']}**? This removes all videos, channels, watch history, and settings."),
             parse_mode=MD2,
             reply_markup=keyboard,
         )
@@ -967,7 +967,7 @@ class BrainRotGuardBot:
             await update.message.reply_text(f"Profile not found: {old_name}")
             return
         if self.video_store.update_profile(target["id"], display_name=new_name):
-            await update.message.reply_text(f"Renamed: {target['display_name']} → **{new_name}**", parse_mode=MD2)
+            await update.message.reply_text(_md(f"Renamed: {target['display_name']} → **{new_name}**"), parse_mode=MD2)
         else:
             await update.message.reply_text("Failed to rename profile.")
 
@@ -989,9 +989,9 @@ class BrainRotGuardBot:
             return
         if self.video_store.update_profile(target["id"], pin=new_pin):
             if new_pin:
-                await update.message.reply_text(f"PIN set for **{target['display_name']}**.", parse_mode=MD2)
+                await update.message.reply_text(_md(f"PIN set for **{target['display_name']}**."), parse_mode=MD2)
             else:
-                await update.message.reply_text(f"PIN removed for **{target['display_name']}**.", parse_mode=MD2)
+                await update.message.reply_text(_md(f"PIN removed for **{target['display_name']}**."), parse_mode=MD2)
         else:
             await update.message.reply_text("Failed to update PIN.")
 
