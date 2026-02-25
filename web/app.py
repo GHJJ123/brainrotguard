@@ -724,7 +724,8 @@ def _get_time_limit_info(store=None) -> dict | None:
     if not s:
         return None
     limit_str = _resolve_setting("daily_limit_minutes", "", store=s)
-    if not limit_str and wl_config:
+    profile_id = getattr(s, "profile_id", "default")
+    if not limit_str and wl_config and profile_id == "default":
         limit_min = wl_config.daily_limit_minutes
     else:
         limit_min = int(limit_str) if limit_str else 0
