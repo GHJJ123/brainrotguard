@@ -1,7 +1,5 @@
 """Tests for YouTubeExtractor class and YouTubeExtractorProtocol."""
 
-from unittest.mock import AsyncMock
-
 import pytest
 from youtube.extractor import YouTubeExtractor, YouTubeExtractorProtocol
 
@@ -12,9 +10,16 @@ class TestYouTubeExtractorProtocol:
     def test_class_satisfies_protocol(self):
         assert isinstance(YouTubeExtractor(), YouTubeExtractorProtocol)
 
-    def test_mock_satisfies_protocol(self):
-        mock = AsyncMock(spec=YouTubeExtractor)
-        assert isinstance(mock, YouTubeExtractorProtocol)
+    def test_class_has_all_protocol_methods(self):
+        import inspect
+        protocol_methods = {
+            name for name, _ in inspect.getmembers(
+                YouTubeExtractorProtocol, predicate=inspect.isfunction
+            ) if not name.startswith("_")
+        }
+        for method in protocol_methods:
+            assert hasattr(YouTubeExtractor, method), f"Missing: {method}"
+            assert callable(getattr(YouTubeExtractor, method))
 
 
 class TestYouTubeExtractorHasAllMethods:

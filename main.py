@@ -136,7 +136,7 @@ class BrainRotGuard:
             logger.info(f"Pruned {w_pruned} watch_log and {s_pruned} search_log entries")
 
         # Periodic backfill of missing channel_id / handle on channels + videos
-        asyncio.create_task(self._backfill_loop())
+        self._backfill_task = asyncio.create_task(self._backfill_loop())
 
         stats = self.video_store.get_stats()
         logger.info(
@@ -222,6 +222,8 @@ class BrainRotGuard:
     async def stop(self) -> None:
         """Stop all components."""
         self.running = False
+        if hasattr(self, '_backfill_task'):
+            self._backfill_task.cancel()
         if self.bot:
             await self.bot.stop()
         if self.video_store:

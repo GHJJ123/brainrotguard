@@ -46,7 +46,7 @@ The 7.8% increase in total source lines is entirely from structural overhead (im
 - `test_utils.py` — 251 lines covering parse_time_input, format helpers
 - `test_config.py` — 156 lines covering env var expansion, defaults, validation
 - `test_video_store.py` — 351 lines covering SQLite CRUD, categories, time tracking
-- `test_child_store.py` — 113 lines covering search history, cleanup
+- `test_child_store.py` — 113 lines covering settings delegation, video delegation, channel ops, watch tracking, __getattr__
 - `test_extractor_pure.py` — 102 lines covering metadata parsing, search result formatting
 - `test_extractor_class.py` — 47 lines covering YouTubeExtractor class + Protocol
 - `test_callback_router.py` — 245 lines covering declarative route matching, prefix/exact dispatch

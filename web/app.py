@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from slowapi.errors import RateLimitExceeded
 
-from web.shared import templates, limiter, static_dir, register_filters
+from web.shared import limiter, static_dir, register_filters
 from web.cache import channel_cache_loop
 
 from web.routers.auth import router as auth_router

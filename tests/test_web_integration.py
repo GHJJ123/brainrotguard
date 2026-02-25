@@ -183,10 +183,8 @@ class TestLoginFlow:
             "profile_id": profile_id,
             "csrf_token": csrf,
         }, follow_redirects=False)
-        # Wrong pin: re-renders login page (200) with error
-        if resp.status_code == 200:
-            # Page should indicate error
-            assert resp.text  # just verify we got content back
+        assert resp.status_code == 200
+        assert "Wrong PIN" in resp.text
 
     def test_correct_pin_redirects_home(self, client):
         resp = client.get("/login")
@@ -256,12 +254,20 @@ class TestRequestFlow:
         assert "/pending/" in loc or "/watch/" in loc
 
     def test_request_invalid_video_id(self, auth_client):
+        # Get a valid CSRF token so we're testing video ID validation, not CSRF rejection
+        search_resp = auth_client.get("/search?q=test")
+        match = re.search(r'name="csrf_token"\s+value="([^"]+)"', search_resp.text)
+        csrf = match.group(1) if match else ""
+
         resp = auth_client.post(
             "/request",
-            data={"video_id": "bad!", "csrf_token": "x"},
+            data={"video_id": "bad!", "csrf_token": csrf},
             follow_redirects=False,
         )
         assert resp.status_code in (302, 303)
+        # Verify bad video was NOT stored
+        resp2 = auth_client.get("/api/status/bad!", follow_redirects=True)
+        assert resp2.status_code != 200 or resp2.json().get("status") != "pending"
 
 
 # ---------------------------------------------------------------------------

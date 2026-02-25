@@ -3,7 +3,7 @@
 import os
 import pytest
 
-from config import Config, WebConfig, TelegramConfig, YouTubeConfig, DatabaseConfig, WatchLimitsConfig
+
 from data.video_store import VideoStore
 from data.child_store import ChildStore
 
@@ -22,20 +22,6 @@ def child_store(video_store):
     """ChildStore wrapping the test VideoStore with 'default' profile."""
     return ChildStore(video_store, "default")
 
-
-@pytest.fixture
-def sample_config(tmp_path):
-    """Minimal Config with safe defaults for testing."""
-    return Config(
-        web=WebConfig(host="127.0.0.1", port=9999, pin="1234"),
-        telegram=TelegramConfig(bot_token="fake:token", admin_chat_id="12345"),
-        youtube=YouTubeConfig(search_max_results=5, ydl_timeout=10),
-        database=DatabaseConfig(path=str(tmp_path / "test.db")),
-        watch_limits=WatchLimitsConfig(
-            daily_limit_minutes=60,
-            timezone="America/New_York",
-        ),
-    )
 
 
 @pytest.fixture
