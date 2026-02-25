@@ -110,6 +110,12 @@ class BrainRotGuardBot:
         """Get a ChildStore for a specific profile."""
         return ChildStore(self.video_store, profile_id)
 
+    def _wizard_store(self, chat_id: int) -> 'ChildStore':
+        """Get the ChildStore for an active wizard, based on stored profile_id."""
+        state = self._pending_wizard.get(chat_id, {})
+        pid = state.get("profile_id", "default")
+        return self._child_store(pid)
+
     def _get_profiles(self) -> list[dict]:
         """Get all profiles."""
         return self.video_store.get_profiles()
@@ -1067,51 +1073,56 @@ class BrainRotGuardBot:
         """Toggle Shorts display on/off or show status."""
         if not await self._require_admin(update):
             return
-        args = context.args
-        if args and args[0].lower() in ("on", "off"):
-            enabled = args[0].lower() == "on"
-            self.video_store.set_setting("shorts_enabled", str(enabled).lower())
-            if self.on_channel_change:
-                self.on_channel_change()
-            if enabled:
-                await update.message.reply_text(_md(
-                    "**Shorts enabled**\n\n"
-                    "- Shorts row appears on the homepage below videos\n"
-                    "- Shorts from allowlisted channels are fetched on next cache refresh\n"
-                    "- Shorts still count toward category time budgets (edu/fun)\n"
-                    "- Shorts hidden from search results remain hidden"
-                ), parse_mode=MD2)
+
+        async def _inner(update, context, cs, profile):
+            args = context.args
+            is_default = cs.profile_id == "default"
+            if args and args[0].lower() in ("on", "off"):
+                enabled = args[0].lower() == "on"
+                cs.set_setting("shorts_enabled", str(enabled).lower())
+                if self.on_channel_change:
+                    self.on_channel_change()
+                if enabled:
+                    await update.message.reply_text(_md(
+                        "**Shorts enabled**\n\n"
+                        "- Shorts row appears on the homepage below videos\n"
+                        "- Shorts from allowlisted channels are fetched on next cache refresh\n"
+                        "- Shorts still count toward category time budgets (edu/fun)\n"
+                        "- Shorts hidden from search results remain hidden"
+                    ), parse_mode=MD2)
+                else:
+                    await update.message.reply_text(_md(
+                        "**Shorts disabled**\n\n"
+                        "- Shorts row removed from homepage\n"
+                        "- Shorts hidden from catalog, search results, and channel filters\n"
+                        "- Existing approved Shorts stay in the database\n"
+                        "- Use `/shorts on` to re-enable anytime"
+                    ), parse_mode=MD2)
             else:
-                await update.message.reply_text(_md(
-                    "**Shorts disabled**\n\n"
-                    "- Shorts row removed from homepage\n"
-                    "- Shorts hidden from catalog, search results, and channel filters\n"
-                    "- Existing approved Shorts stay in the database\n"
-                    "- Use `/shorts on` to re-enable anytime"
-                ), parse_mode=MD2)
-        else:
-            db_val = self.video_store.get_setting("shorts_enabled", "")
-            if db_val:
-                current = db_val.lower() == "true"
-            elif self.config and hasattr(self.config.youtube, 'shorts_enabled'):
-                current = self.config.youtube.shorts_enabled
-            else:
-                current = False
-            if current:
-                await update.message.reply_text(_md(
-                    "**Shorts: enabled**\n\n"
-                    "Shorts appear in a dedicated row on the homepage and are "
-                    "fetched from allowlisted channels. They count toward "
-                    "edu/fun time budgets like regular videos.\n\n"
-                    "`/shorts off` — hide Shorts everywhere"
-                ), parse_mode=MD2)
-            else:
-                await update.message.reply_text(_md(
-                    "**Shorts: disabled**\n\n"
-                    "Shorts are hidden from the homepage, catalog, and search results. "
-                    "No Shorts are fetched from channels.\n\n"
-                    "`/shorts on` — show Shorts in a dedicated row"
-                ), parse_mode=MD2)
+                db_val = cs.get_setting("shorts_enabled", "")
+                if db_val:
+                    current = db_val.lower() == "true"
+                elif is_default and self.config and hasattr(self.config.youtube, 'shorts_enabled'):
+                    current = self.config.youtube.shorts_enabled
+                else:
+                    current = False
+                if current:
+                    await update.message.reply_text(_md(
+                        "**Shorts: enabled**\n\n"
+                        "Shorts appear in a dedicated row on the homepage and are "
+                        "fetched from allowlisted channels. They count toward "
+                        "edu/fun time budgets like regular videos.\n\n"
+                        "`/shorts off` — hide Shorts everywhere"
+                    ), parse_mode=MD2)
+                else:
+                    await update.message.reply_text(_md(
+                        "**Shorts: disabled**\n\n"
+                        "Shorts are hidden from the homepage, catalog, and search results. "
+                        "No Shorts are fetched from channels.\n\n"
+                        "`/shorts on` — show Shorts in a dedicated row"
+                    ), parse_mode=MD2)
+
+        await self._with_child_context(update, context, _inner)
 
     _PENDING_PAGE_SIZE = 5
 
@@ -1267,138 +1278,141 @@ class BrainRotGuardBot:
     async def _cmd_watch(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not self._check_admin(update):
             return
-        # Parse days arg: default today, support "yesterday", int days
-        days = 0
-        if context.args:
-            arg = context.args[0].lower()
-            if arg == "yesterday":
-                days = 1
-            elif arg.isdigit():
-                days = min(int(arg), 365)
 
-        tz = self._get_tz()
-        from datetime import timedelta
-        import datetime as _dt
-        from zoneinfo import ZoneInfo
-        tz_info = ZoneInfo(tz) if tz else None
+        async def _inner(update, context, cs, profile):
+            # Parse days arg: default today, support "yesterday", int days
+            days = 0
+            if context.args:
+                arg = context.args[0].lower()
+                if arg == "yesterday":
+                    days = 1
+                elif arg.isdigit():
+                    days = min(int(arg), 365)
 
-        if days == 0:
-            # Single day: today
+            tz = self._get_tz()
+            from datetime import timedelta
+            import datetime as _dt
+            from zoneinfo import ZoneInfo
+            tz_info = ZoneInfo(tz) if tz else None
+
+            if days == 0:
+                today = get_today_str(tz)
+                dates = [today]
+                header = "Today's Watch Activity"
+            elif days == 1:
+                yesterday = (_dt.datetime.now(tz_info) - timedelta(days=1)).strftime("%Y-%m-%d")
+                dates = [yesterday]
+                header = "Yesterday's Watch Activity"
+            else:
+                dates = [
+                    (_dt.datetime.now(tz_info) - timedelta(days=i)).strftime("%Y-%m-%d")
+                    for i in range(days)
+                ]
+                header = f"Watch Activity (last {days} days)"
+
+            lines = [f"**{header}**\n"]
+
+            # Time budget (only for today)
             today = get_today_str(tz)
-            dates = [today]
-            header = "Today's Watch Activity"
-        elif days == 1:
-            yesterday = (_dt.datetime.now(tz_info) - timedelta(days=1)).strftime("%Y-%m-%d")
-            dates = [yesterday]
-            header = "Yesterday's Watch Activity"
-        else:
-            dates = [
-                (_dt.datetime.now(tz_info) - timedelta(days=i)).strftime("%Y-%m-%d")
-                for i in range(days)
-            ]
-            header = f"Watch Activity (last {days} days)"
+            is_default = cs.profile_id == "default"
+            if today in dates:
+                limit_str = self._resolve_setting("daily_limit_minutes", store=cs)
+                if not limit_str and is_default and self.config:
+                    limit_min = self.config.watch_limits.daily_limit_minutes
+                else:
+                    limit_min = int(limit_str) if limit_str else 0
+                bounds = get_day_utc_bounds(today, self._get_tz())
+                used = cs.get_daily_watch_minutes(today, utc_bounds=bounds)
 
-        lines = [f"**{header}**\n"]
+                bonus = 0
+                bonus_date = cs.get_setting("daily_bonus_date", "")
+                if bonus_date == today:
+                    bonus = int(cs.get_setting("daily_bonus_minutes", "0") or "0")
 
-        # Time budget (only for today)
-        today = get_today_str(tz)
-        if today in dates:
-            limit_str = self._resolve_setting("daily_limit_minutes")
-            if not limit_str and self.config:
-                limit_min = self.config.watch_limits.daily_limit_minutes
-            else:
-                limit_min = int(limit_str) if limit_str else 0
-            bounds = get_day_utc_bounds(today, self._get_tz())
-            used = self.video_store.get_daily_watch_minutes(today, utc_bounds=bounds)
+                if limit_min == 0:
+                    lines.append(f"**Watch limit:** OFF")
+                    lines.append(f"**Watched today:** {int(used)} min")
+                else:
+                    effective = limit_min + bonus
+                    remaining = max(0, effective - used)
+                    pct = min(1.0, used / effective) if effective > 0 else 0
+                    lines.append(f"**Daily limit:** {limit_min} min")
+                    if bonus > 0:
+                        lines.append(f"**Bonus today:** +{bonus} min")
+                    lines.append(f"**Used:** {int(used)} min \u00b7 **Remaining:** {int(remaining)} min")
+                    lines.append(f"`{self._progress_bar(pct)}` {int(pct * 100)}%")
+                lines.append("")
 
-            bonus = 0
-            bonus_date = self.video_store.get_setting("daily_bonus_date", "")
-            if bonus_date == today:
-                bonus = int(self.video_store.get_setting("daily_bonus_minutes", "0") or "0")
-
-            if limit_min == 0:
-                lines.append(f"**Watch limit:** OFF")
-                lines.append(f"**Watched today:** {int(used)} min")
-            else:
-                effective = limit_min + bonus
-                remaining = max(0, effective - used)
-                pct = min(1.0, used / effective) if effective > 0 else 0
-                lines.append(f"**Daily limit:** {limit_min} min")
-                if bonus > 0:
-                    lines.append(f"**Bonus today:** +{bonus} min")
-                lines.append(f"**Used:** {int(used)} min \u00b7 **Remaining:** {int(remaining)} min")
-                lines.append(f"`{self._progress_bar(pct)}` {int(pct * 100)}%")
-            lines.append("")
-
-        # Pre-fetch all breakdowns
-        all_breakdowns: dict[str, list[dict]] = {}
-        daily_totals: dict[str, float] = {}
-        for date_str in dates:
-            bd = self.video_store.get_daily_watch_breakdown(date_str, utc_bounds=get_day_utc_bounds(date_str, self._get_tz()))
-            all_breakdowns[date_str] = bd
-            daily_totals[date_str] = sum(v['minutes'] for v in bd) if bd else 0
-
-        # Multi-day summary chart
-        if len(dates) > 1:
-            max_min = max(daily_totals.values()) if daily_totals else 1
-            if max_min == 0:
-                max_min = 1
-            grand_total = sum(daily_totals.values())
-            lines.append(f"**Overview** \u2014 {int(grand_total)} min total")
-            bar_width = 10
+            # Pre-fetch all breakdowns
+            all_breakdowns: dict[str, list[dict]] = {}
+            daily_totals: dict[str, float] = {}
             for date_str in dates:
-                total = daily_totals[date_str]
-                frac = total / max_min
-                bar = self._progress_bar(frac, bar_width)
-                dt = _dt.datetime.strptime(date_str, "%Y-%m-%d")
-                day_label = dt.strftime("%b %d")
-                total_str = f"{int(total)}m" if total >= 1 else "\u2014"
-                lines.append(f"`{day_label}  {bar}` {total_str}")
-            lines.append("")
+                bd = cs.get_daily_watch_breakdown(date_str, utc_bounds=get_day_utc_bounds(date_str, self._get_tz()))
+                all_breakdowns[date_str] = bd
+                daily_totals[date_str] = sum(v['minutes'] for v in bd) if bd else 0
 
-        # Per-day breakdown (detailed view only for single-day)
-        if len(dates) == 1:
-            breakdown = all_breakdowns[dates[0]]
-            if not breakdown:
-                lines.append("_No videos watched._")
-            else:
-                # Group by category (uncategorized treated as fun)
-                by_cat: dict = {}
-                for v in breakdown:
-                    cat = v.get('category') or 'fun'
-                    by_cat.setdefault(cat, []).append(v)
+            # Multi-day summary chart
+            if len(dates) > 1:
+                max_min = max(daily_totals.values()) if daily_totals else 1
+                if max_min == 0:
+                    max_min = 1
+                grand_total = sum(daily_totals.values())
+                lines.append(f"**Overview** \u2014 {int(grand_total)} min total")
+                bar_width = 10
+                for date_str in dates:
+                    total = daily_totals[date_str]
+                    frac = total / max_min
+                    bar = self._progress_bar(frac, bar_width)
+                    dt = _dt.datetime.strptime(date_str, "%Y-%m-%d")
+                    day_label = dt.strftime("%b %d")
+                    total_str = f"{int(total)}m" if total >= 1 else "\u2014"
+                    lines.append(f"`{day_label}  {bar}` {total_str}")
+                lines.append("")
 
-                for cat, cat_label in [("edu", "Educational"), ("fun", "Entertainment")]:
-                    vids = by_cat.get(cat, [])
-                    if not vids:
-                        continue
-                    cat_total = sum(v['minutes'] for v in vids)
-                    cat_limit_str = self._resolve_setting(f"{cat}_limit_minutes")
-                    cat_limit = int(cat_limit_str) if cat_limit_str else 0
-                    if cat_limit > 0:
-                        lines.append(f"\n**{cat_label}** \u2014 {int(cat_total)}/{cat_limit} min")
-                        pct = min(1.0, cat_total / cat_limit) if cat_limit > 0 else 0
-                        lines.append(f"`{self._progress_bar(pct)}` {int(pct * 100)}%")
-                    else:
-                        lines.append(f"\n**{cat_label}** \u2014 {int(cat_total)} min (no limit)")
+            # Per-day breakdown (detailed view only for single-day)
+            if len(dates) == 1:
+                breakdown = all_breakdowns[dates[0]]
+                if not breakdown:
+                    lines.append("_No videos watched._")
+                else:
+                    by_cat: dict = {}
+                    for v in breakdown:
+                        cat = v.get('category') or 'fun'
+                        by_cat.setdefault(cat, []).append(v)
 
-                    for v in vids:
-                        title = v['title'][:40]
-                        ch_link = _channel_md_link(v['channel_name'], v.get('channel_id'))
-                        watched_min = int(v['minutes'])
-                        vid_dur = v.get('duration')
-                        if vid_dur and vid_dur > 0:
-                            dur_min = vid_dur // 60
-                            pct = min(100, int(v['minutes'] / (vid_dur / 60) * 100)) if vid_dur > 0 else 0
-                            lines.append(f"\u2022 **{title}**")
-                            lines.append(f"  {ch_link} \u00b7 {watched_min}m / {dur_min}m ({pct}%)")
+                    for cat, cat_label in [("edu", "Educational"), ("fun", "Entertainment")]:
+                        vids = by_cat.get(cat, [])
+                        if not vids:
+                            continue
+                        cat_total = sum(v['minutes'] for v in vids)
+                        cat_limit_str = self._resolve_setting(f"{cat}_limit_minutes", store=cs)
+                        cat_limit = int(cat_limit_str) if cat_limit_str else 0
+                        if cat_limit > 0:
+                            lines.append(f"\n**{cat_label}** \u2014 {int(cat_total)}/{cat_limit} min")
+                            pct = min(1.0, cat_total / cat_limit) if cat_limit > 0 else 0
+                            lines.append(f"`{self._progress_bar(pct)}` {int(pct * 100)}%")
                         else:
-                            lines.append(f"\u2022 **{title}**")
-                            lines.append(f"  {ch_link} \u00b7 {watched_min}m watched")
+                            lines.append(f"\n**{cat_label}** \u2014 {int(cat_total)} min (no limit)")
 
-        await update.message.reply_text(
-            _md("\n".join(lines)), parse_mode=MD2, disable_web_page_preview=True,
-        )
+                        for v in vids:
+                            title = v['title'][:40]
+                            ch_link = _channel_md_link(v['channel_name'], v.get('channel_id'))
+                            watched_min = int(v['minutes'])
+                            vid_dur = v.get('duration')
+                            if vid_dur and vid_dur > 0:
+                                dur_min = vid_dur // 60
+                                pct = min(100, int(v['minutes'] / (vid_dur / 60) * 100)) if vid_dur > 0 else 0
+                                lines.append(f"\u2022 **{title}**")
+                                lines.append(f"  {ch_link} \u00b7 {watched_min}m / {dur_min}m ({pct}%)")
+                            else:
+                                lines.append(f"\u2022 **{title}**")
+                                lines.append(f"  {ch_link} \u00b7 {watched_min}m watched")
+
+            await update.message.reply_text(
+                _md("\n".join(lines)), parse_mode=MD2, disable_web_page_preview=True,
+            )
+
+        await self._with_child_context(update, context, _inner)
 
     async def _cmd_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not self._check_admin(update):
@@ -1987,46 +2001,53 @@ class BrainRotGuardBot:
     _OVERRIDE_KEYS = ("schedule_start", "schedule_end", "edu_limit_minutes",
                       "fun_limit_minutes", "daily_limit_minutes")
 
-    def _resolve_setting(self, base_key: str, default: str = "") -> str:
+    def _resolve_setting(self, base_key: str, default: str = "", store=None) -> str:
         """Resolve a setting with per-day override support."""
+        s = store or self.video_store
         day = get_weekday(self._get_tz())
-        day_val = self.video_store.get_setting(f"{day}_{base_key}", "")
+        day_val = s.get_setting(f"{day}_{base_key}", "")
         if day_val:
             return day_val
-        return self.video_store.get_setting(base_key, default)
+        return s.get_setting(base_key, default)
 
-    def _effective_setting(self, day: str, base_key: str) -> str:
+    def _effective_setting(self, day: str, base_key: str, store=None) -> str:
         """Get effective setting for a given day (day override > default)."""
-        day_val = self.video_store.get_setting(f"{day}_{base_key}", "")
-        return day_val if day_val else self.video_store.get_setting(base_key, "")
+        s = store or self.video_store
+        day_val = s.get_setting(f"{day}_{base_key}", "")
+        return day_val if day_val else s.get_setting(base_key, "")
 
-    def _has_any_day_overrides(self) -> bool:
+    def _has_any_day_overrides(self, store=None) -> bool:
         """Check if any per-day overrides exist."""
+        s = store or self.video_store
         for day in DAY_NAMES:
             for key in self._OVERRIDE_KEYS:
-                if self.video_store.get_setting(f"{day}_{key}", ""):
+                if s.get_setting(f"{day}_{key}", ""):
                     return True
         return False
 
-    def _get_day_overrides(self, day: str) -> dict[str, str]:
+    def _get_day_overrides(self, day: str, store=None) -> dict[str, str]:
         """Get all override settings for a specific day."""
+        s = store or self.video_store
         result = {}
         for key in self._OVERRIDE_KEYS:
-            val = self.video_store.get_setting(f"{day}_{key}", "")
+            val = s.get_setting(f"{day}_{key}", "")
             if val:
                 result[key] = val
         return result
 
-    def _get_limit_mode(self) -> str:
+    def _get_limit_mode(self, store=None) -> str:
         """Detect current limit mode: 'category', 'simple', or 'none'."""
-        edu = self.video_store.get_setting("edu_limit_minutes", "")
-        fun = self.video_store.get_setting("fun_limit_minutes", "")
-        flat = self.video_store.get_setting("daily_limit_minutes", "")
+        s = store or self.video_store
+        edu = s.get_setting("edu_limit_minutes", "")
+        fun = s.get_setting("fun_limit_minutes", "")
+        flat = s.get_setting("daily_limit_minutes", "")
         if (edu and int(edu) > 0) or (fun and int(fun) > 0):
             return "category"
         if flat and int(flat) > 0:
             return "simple"
-        if self.config:
+        # Config fallback only for default profile
+        is_default = not hasattr(s, 'profile_id') or s.profile_id == "default"
+        if is_default and self.config:
             wl = self.config.watch_limits
             if getattr(wl, "edu_limit_minutes", 0) or getattr(wl, "fun_limit_minutes", 0):
                 return "category"
@@ -2034,90 +2055,96 @@ class BrainRotGuardBot:
                 return "simple"
         return "none"
 
-    def _auto_clear_mode(self, new_mode: str, day: str = "") -> None:
+    def _auto_clear_mode(self, new_mode: str, day: str = "", store=None) -> None:
         """Clear conflicting limit settings when switching modes.
 
         new_mode='simple': clears edu + fun limits.
         new_mode='category': clears daily flat limit.
         """
+        s = store or self.video_store
         prefix = f"{day}_" if day else ""
         if new_mode == "simple":
-            self.video_store.set_setting(f"{prefix}edu_limit_minutes", "0")
-            self.video_store.set_setting(f"{prefix}fun_limit_minutes", "0")
+            s.set_setting(f"{prefix}edu_limit_minutes", "0")
+            s.set_setting(f"{prefix}fun_limit_minutes", "0")
         elif new_mode == "category":
-            self.video_store.set_setting(f"{prefix}daily_limit_minutes", "0")
+            s.set_setting(f"{prefix}daily_limit_minutes", "0")
 
     async def _cmd_timelimit(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not self._check_admin(update):
             return
-        if context.args:
-            arg = context.args[0].lower()
 
-            # /time <day> ... — per-day override
-            if arg in DAY_NAMES:
-                await self._time_day(update, arg, context.args[1:])
-                return
+        async def _inner(update, context, cs, profile):
+            args = context.args
+            if args:
+                arg = args[0].lower()
 
-            # /time setup — guided wizard
-            if arg == "setup":
-                await self._time_setup_start(update)
-                return
+                # /time <day> ... — per-day override
+                if arg in DAY_NAMES:
+                    await self._time_day(update, arg, args[1:], store=cs)
+                    return
 
-            # /time start <time|off>
-            if arg == "start":
-                await self._time_schedule(update, context.args[1:], "schedule_start")
-                return
-            # /time stop <time|off>
-            if arg == "stop":
-                await self._time_schedule(update, context.args[1:], "schedule_end")
-                return
+                # /time setup — guided wizard
+                if arg == "setup":
+                    await self._time_setup_start(update, store=cs)
+                    return
 
-            # /time add <minutes>
-            if arg == "add":
-                await self._time_add_bonus(update, context.args[1:])
-                return
+                # /time start <time|off>
+                if arg == "start":
+                    await self._time_schedule(update, args[1:], "schedule_start", store=cs)
+                    return
+                # /time stop <time|off>
+                if arg == "stop":
+                    await self._time_schedule(update, args[1:], "schedule_end", store=cs)
+                    return
 
-            # /time edu|fun — category limits
-            if arg == "edu":
-                await self._time_set_category_limit(update, context.args[1:], "edu")
-                return
-            if arg == "fun":
-                await self._time_set_category_limit(update, context.args[1:], "fun")
-                return
+                # /time add <minutes>
+                if arg == "add":
+                    await self._time_add_bonus(update, args[1:], store=cs)
+                    return
 
-            # /time limit <min> — explicit flat limit
-            if arg == "limit":
-                await self._time_set_flat_limit(update, context.args[1:])
-                return
+                # /time edu|fun — category limits
+                if arg == "edu":
+                    await self._time_set_category_limit(update, args[1:], "edu", store=cs)
+                    return
+                if arg == "fun":
+                    await self._time_set_category_limit(update, args[1:], "fun", store=cs)
+                    return
 
-            if arg == "off":
-                self.video_store.set_setting("daily_limit_minutes", "0")
-                await update.message.reply_text("Watch time limit disabled. Videos can be watched without a daily cap.")
-                return
-            elif arg.isdigit():
-                await self._time_set_flat_limit(update, [arg])
-                return
-            else:
-                await update.message.reply_text(
-                    "Usage: /time [minutes|off]\n"
-                    "       /time setup\n"
-                    "       /time start|stop <time|off>\n"
-                    "       /time add <minutes>\n"
-                    "       /time edu|fun <minutes|off>\n"
-                    "       /time <day> [start|stop|edu|fun|limit|off|copy]"
-                )
-                return
+                # /time limit <min> — explicit flat limit
+                if arg == "limit":
+                    await self._time_set_flat_limit(update, args[1:], store=cs)
+                    return
 
-        # Show current status
-        await self._time_show_status(update)
+                if arg == "off":
+                    cs.set_setting("daily_limit_minutes", "0")
+                    await update.message.reply_text("Watch time limit disabled. Videos can be watched without a daily cap.")
+                    return
+                elif arg.isdigit():
+                    await self._time_set_flat_limit(update, [arg], store=cs)
+                    return
+                else:
+                    await update.message.reply_text(
+                        "Usage: /time [minutes|off]\n"
+                        "       /time setup\n"
+                        "       /time start|stop <time|off>\n"
+                        "       /time add <minutes>\n"
+                        "       /time edu|fun <minutes|off>\n"
+                        "       /time <day> [start|stop|edu|fun|limit|off|copy]"
+                    )
+                    return
+
+            # Show current status
+            await self._time_show_status(update, store=cs)
+
+        await self._with_child_context(update, context, _inner)
 
     # --- /time status display ---
 
-    def _format_day_summary(self, day: str, is_today: bool = False) -> str:
+    def _format_day_summary(self, day: str, is_today: bool = False, store=None) -> str:
         """Format a single day's effective settings as a compact line."""
         label = day[:3].capitalize()
-        sched_start = self._effective_setting(day, "schedule_start")
-        sched_end = self._effective_setting(day, "schedule_end")
+        sched_start = self._effective_setting(day, "schedule_start", store=store)
+        sched_end = self._effective_setting(day, "schedule_end", store=store)
 
         # Schedule part — use ASCII hyphen for consistent monospace width
         if sched_start or sched_end:
@@ -2128,9 +2155,9 @@ class BrainRotGuardBot:
             sched = "open"
 
         # Limits part
-        edu_str = self._effective_setting(day, "edu_limit_minutes")
-        fun_str = self._effective_setting(day, "fun_limit_minutes")
-        flat_str = self._effective_setting(day, "daily_limit_minutes")
+        edu_str = self._effective_setting(day, "edu_limit_minutes", store=store)
+        fun_str = self._effective_setting(day, "fun_limit_minutes", store=store)
+        flat_str = self._effective_setting(day, "daily_limit_minutes", store=store)
         edu = int(edu_str) if edu_str else 0
         fun = int(fun_str) if fun_str else 0
         flat = int(flat_str) if flat_str else 0
@@ -2148,30 +2175,32 @@ class BrainRotGuardBot:
             limits = "-"
 
         marker = " \u25c0" if is_today else ""
-        has_override = bool(self._get_day_overrides(day))
+        has_override = bool(self._get_day_overrides(day, store=store))
         override_mark = "*" if has_override else " "
         # Pad schedule to 9 chars for alignment on mobile
         sched_padded = sched.ljust(9)
         return f"`{override_mark}{label} {sched_padded} {limits}`{marker}"
 
-    async def _time_show_status(self, update: Update) -> None:
+    async def _time_show_status(self, update: Update, store=None) -> None:
         """Show current time settings with today's status and 7-day view."""
+        s = store or self.video_store
         tz = self._get_tz()
         today_day = get_weekday(tz)
         today = get_today_str(tz)
         bounds = get_day_utc_bounds(today, tz)
-        used = self.video_store.get_daily_watch_minutes(today, utc_bounds=bounds)
+        used = s.get_daily_watch_minutes(today, utc_bounds=bounds)
 
         # Resolve today's effective settings
-        sched_start = self._resolve_setting("schedule_start")
-        sched_end = self._resolve_setting("schedule_end")
-        edu_limit_str = self._resolve_setting("edu_limit_minutes")
-        fun_limit_str = self._resolve_setting("fun_limit_minutes")
-        flat_limit_str = self._resolve_setting("daily_limit_minutes")
+        sched_start = self._resolve_setting("schedule_start", store=s)
+        sched_end = self._resolve_setting("schedule_end", store=s)
+        edu_limit_str = self._resolve_setting("edu_limit_minutes", store=s)
+        fun_limit_str = self._resolve_setting("fun_limit_minutes", store=s)
+        flat_limit_str = self._resolve_setting("daily_limit_minutes", store=s)
         edu_limit = int(edu_limit_str) if edu_limit_str else 0
         fun_limit = int(fun_limit_str) if fun_limit_str else 0
         flat_limit = int(flat_limit_str) if flat_limit_str else 0
-        if not flat_limit and self.config:
+        is_default = not hasattr(s, 'profile_id') or s.profile_id == "default"
+        if not flat_limit_str and is_default and self.config:
             flat_limit = getattr(self.config.watch_limits, "daily_limit_minutes", 0)
 
         # Schedule status
@@ -2192,13 +2221,13 @@ class BrainRotGuardBot:
 
         # Bonus
         bonus = 0
-        bonus_date = self.video_store.get_setting("daily_bonus_date", "")
+        bonus_date = s.get_setting("daily_bonus_date", "")
         if bonus_date == today:
-            bonus = int(self.video_store.get_setting("daily_bonus_minutes", "0") or "0")
+            bonus = int(s.get_setting("daily_bonus_minutes", "0") or "0")
 
         # Category mode
         if edu_limit > 0 or fun_limit > 0:
-            cat_usage = self.video_store.get_daily_watch_by_category(today, utc_bounds=bounds)
+            cat_usage = s.get_daily_watch_by_category(today, utc_bounds=bounds)
             edu_used = cat_usage.get("edu", 0.0)
             fun_used = cat_usage.get("fun", 0.0) + cat_usage.get(None, 0.0)
             total_limit = edu_limit + fun_limit
@@ -2239,17 +2268,17 @@ class BrainRotGuardBot:
             lines.append(f"`{self._progress_bar(pct)}` {int(used)}/{effective} min ({int(pct * 100)}%)")
         else:
             lines.append(f"No limits set \u2014 {int(used)} min watched")
-            mode = self._get_limit_mode()
+            mode = self._get_limit_mode(store=s)
             if mode == "none":
                 lines.append("_Use /time setup to configure limits._")
 
         # 7-day view
-        has_overrides = self._has_any_day_overrides()
+        has_overrides = self._has_any_day_overrides(store=s)
         any_limits = edu_limit > 0 or fun_limit > 0 or flat_limit > 0
         if has_overrides or any_limits:
             lines.append(f"\n\U0001f4cb **Week**")
             for d in DAY_NAMES:
-                lines.append(self._format_day_summary(d, is_today=(d == today_day)))
+                lines.append(self._format_day_summary(d, is_today=(d == today_day), store=s))
             if not has_overrides:
                 lines.append("_All days: same schedule_")
         lines.append("")
@@ -2258,34 +2287,35 @@ class BrainRotGuardBot:
 
     # --- Per-day commands ---
 
-    async def _time_day(self, update: Update, day: str, args: list[str]) -> None:
+    async def _time_day(self, update: Update, day: str, args: list[str], store=None) -> None:
         """Dispatch /time <day> subcommands."""
+        s = store or self.video_store
         if not args:
-            await self._time_day_show(update, day)
+            await self._time_day_show(update, day, store=s)
             return
         sub = args[0].lower()
         prefix = f"{day}_"
 
         if sub == "start":
-            await self._time_schedule(update, args[1:], f"{prefix}schedule_start", day=day)
+            await self._time_schedule(update, args[1:], f"{prefix}schedule_start", day=day, store=s)
         elif sub == "stop":
-            await self._time_schedule(update, args[1:], f"{prefix}schedule_end", day=day)
+            await self._time_schedule(update, args[1:], f"{prefix}schedule_end", day=day, store=s)
         elif sub == "edu":
-            await self._time_set_category_limit(update, args[1:], "edu", day=day)
+            await self._time_set_category_limit(update, args[1:], "edu", day=day, store=s)
         elif sub == "fun":
-            await self._time_set_category_limit(update, args[1:], "fun", day=day)
+            await self._time_set_category_limit(update, args[1:], "fun", day=day, store=s)
         elif sub == "limit":
-            await self._time_set_flat_limit(update, args[1:], day=day)
+            await self._time_set_flat_limit(update, args[1:], day=day, store=s)
         elif sub == "off":
             # Clear all overrides for this day
             for key in self._OVERRIDE_KEYS:
-                self.video_store.set_setting(f"{prefix}{key}", "")
+                s.set_setting(f"{prefix}{key}", "")
             label = self._DAY_LABELS[day]
             await update.message.reply_text(f"{label} overrides cleared — default settings will apply.")
         elif sub == "copy":
-            await self._time_day_copy(update, day, args[1:])
+            await self._time_day_copy(update, day, args[1:], store=s)
         elif sub.isdigit():
-            await self._time_set_flat_limit(update, [sub], day=day)
+            await self._time_set_flat_limit(update, [sub], day=day, store=s)
         else:
             label = self._DAY_LABELS[day]
             await update.message.reply_text(
@@ -2293,27 +2323,28 @@ class BrainRotGuardBot:
                 f"       /time {day} copy <days|weekdays|weekend|all>"
             )
 
-    async def _time_day_show(self, update: Update, day: str) -> None:
+    async def _time_day_show(self, update: Update, day: str, store=None) -> None:
         """Show effective settings for a specific day."""
+        s = store or self.video_store
         label = self._DAY_LABELS[day]
-        overrides = self._get_day_overrides(day)
+        overrides = self._get_day_overrides(day, store=s)
 
         lines = [f"**{label}**\n"]
 
         # Schedule
-        sched_start = self._effective_setting(day, "schedule_start")
-        sched_end = self._effective_setting(day, "schedule_end")
+        sched_start = self._effective_setting(day, "schedule_start", store=s)
+        sched_end = self._effective_setting(day, "schedule_end", store=s)
         if sched_start or sched_end:
-            s = format_time_12h(sched_start) if sched_start else "midnight"
-            e = format_time_12h(sched_end) if sched_end else "midnight"
-            lines.append(f"**Schedule:** {s} \u2013 {e}")
+            s_disp = format_time_12h(sched_start) if sched_start else "midnight"
+            e_disp = format_time_12h(sched_end) if sched_end else "midnight"
+            lines.append(f"**Schedule:** {s_disp} \u2013 {e_disp}")
         else:
             lines.append("**Schedule:** not set")
 
         # Limits
-        edu_str = self._effective_setting(day, "edu_limit_minutes")
-        fun_str = self._effective_setting(day, "fun_limit_minutes")
-        flat_str = self._effective_setting(day, "daily_limit_minutes")
+        edu_str = self._effective_setting(day, "edu_limit_minutes", store=s)
+        fun_str = self._effective_setting(day, "fun_limit_minutes", store=s)
+        flat_str = self._effective_setting(day, "daily_limit_minutes", store=s)
         edu = int(edu_str) if edu_str else 0
         fun = int(fun_str) if fun_str else 0
         flat = int(flat_str) if flat_str else 0
@@ -2336,8 +2367,9 @@ class BrainRotGuardBot:
 
         await update.message.reply_text(_md("\n".join(lines)), parse_mode=MD2)
 
-    async def _time_day_copy(self, update: Update, src_day: str, args: list[str]) -> None:
+    async def _time_day_copy(self, update: Update, src_day: str, args: list[str], store=None) -> None:
         """Handle /time <day> copy <targets>."""
+        s = store or self.video_store
         if not args:
             await update.message.reply_text(
                 f"Usage: /time {src_day} copy <day|weekdays|weekend|all>"
@@ -2364,15 +2396,15 @@ class BrainRotGuardBot:
             await update.message.reply_text("No valid days. Use day names (mon, tue...), weekdays, weekend, or all.")
             return
 
-        src_overrides = self._get_day_overrides(src_day)
+        src_overrides = self._get_day_overrides(src_day, store=s)
 
         for target in targets:
             # Clear existing overrides on target
             for key in self._OVERRIDE_KEYS:
-                self.video_store.set_setting(f"{target}_{key}", "")
+                s.set_setting(f"{target}_{key}", "")
             # Copy source overrides
             for key, val in src_overrides.items():
-                self.video_store.set_setting(f"{target}_{key}", val)
+                s.set_setting(f"{target}_{key}", val)
 
         src_label = self._DAY_LABELS[src_day]
         target_labels = ", ".join(self._DAY_LABELS[t][:3] for t in targets)
@@ -2383,8 +2415,9 @@ class BrainRotGuardBot:
 
     # --- Flat limit (simple mode) ---
 
-    async def _time_set_flat_limit(self, update: Update, args: list[str], day: str = "") -> None:
+    async def _time_set_flat_limit(self, update: Update, args: list[str], day: str = "", store=None) -> None:
         """Handle /time [<day>] limit|<N> with mode switch warning."""
+        s = store or self.video_store
         if not args or not args[0].isdigit():
             await update.message.reply_text("Usage: /time [<day>] limit <minutes>")
             return
@@ -2392,10 +2425,10 @@ class BrainRotGuardBot:
 
         # Mode switch check (only for default, not per-day)
         if not day:
-            mode = self._get_limit_mode()
+            mode = self._get_limit_mode(store=s)
             if mode == "category":
-                edu = self.video_store.get_setting("edu_limit_minutes", "")
-                fun = self.video_store.get_setting("fun_limit_minutes", "")
+                edu = s.get_setting("edu_limit_minutes", "")
+                fun = s.get_setting("fun_limit_minutes", "")
                 edu_val = int(edu) if edu else 0
                 fun_val = int(fun) if fun else 0
                 text = _md(
@@ -2403,10 +2436,12 @@ class BrainRotGuardBot:
                     f"Switching to a simple limit replaces category budgets "
                     f"with a single daily cap."
                 )
+                # Store profile_id in callback for mode switch
+                pid = s.profile_id if hasattr(s, 'profile_id') else "default"
                 keyboard = InlineKeyboardMarkup([[
                     InlineKeyboardButton(
                         f"Switch to {minutes} min flat",
-                        callback_data=f"switch_confirm:simple:{minutes}",
+                        callback_data=f"switch_confirm:{pid}:simple:{minutes}",
                     ),
                     InlineKeyboardButton(
                         "Keep categories",
@@ -2417,8 +2452,8 @@ class BrainRotGuardBot:
                 return
 
         prefix = f"{day}_" if day else ""
-        self.video_store.set_setting(f"{prefix}daily_limit_minutes", str(minutes))
-        self._auto_clear_mode("simple", day=day)
+        s.set_setting(f"{prefix}daily_limit_minutes", str(minutes))
+        self._auto_clear_mode("simple", day=day, store=s)
 
         if day:
             label = self._DAY_LABELS[day]
@@ -2429,14 +2464,15 @@ class BrainRotGuardBot:
     # --- Category limits ---
 
     async def _time_set_category_limit(self, update: Update, args: list[str],
-                                       category: str, day: str = "") -> None:
+                                       category: str, day: str = "", store=None) -> None:
         """Handle /time [<day>] edu|fun <minutes|off>."""
+        s = store or self.video_store
         cat_label = "Educational" if category == "edu" else "Entertainment"
         prefix = f"{day}_" if day else ""
         setting_key = f"{prefix}{category}_limit_minutes"
 
         if not args:
-            current = self.video_store.get_setting(setting_key, "")
+            current = s.get_setting(setting_key, "")
             limit = int(current) if current else 0
             if day:
                 label = self._DAY_LABELS[day]
@@ -2445,7 +2481,7 @@ class BrainRotGuardBot:
                     if current:
                         await update.message.reply_text(f"{label} {cat_label}: OFF (override)")
                     else:
-                        effective = self.video_store.get_setting(f"{category}_limit_minutes", "")
+                        effective = s.get_setting(f"{category}_limit_minutes", "")
                         eff_val = int(effective) if effective else 0
                         if eff_val:
                             await update.message.reply_text(f"{label} {cat_label}: {eff_val} min (from default)")
@@ -2465,11 +2501,11 @@ class BrainRotGuardBot:
         if value in ("off", "0"):
             if day:
                 # Day override: "off" clears the override (falls back to default)
-                self.video_store.set_setting(setting_key, "")
+                s.set_setting(setting_key, "")
                 label = self._DAY_LABELS[day]
                 await update.message.reply_text(f"{label} {cat_label} override cleared — default settings will apply.")
             else:
-                self.video_store.set_setting(setting_key, "0")
+                s.set_setting(setting_key, "0")
                 await update.message.reply_text(f"{cat_label} limit disabled — no daily cap.")
             return
 
@@ -2481,19 +2517,20 @@ class BrainRotGuardBot:
 
         # Mode switch check (only for default, not per-day)
         if not day:
-            mode = self._get_limit_mode()
+            mode = self._get_limit_mode(store=s)
             if mode == "simple":
-                flat = self.video_store.get_setting("daily_limit_minutes", "")
+                flat = s.get_setting("daily_limit_minutes", "")
                 flat_val = int(flat) if flat else 0
                 text = _md(
                     f"\u26a0\ufe0f You have a simple limit of {flat_val} min.\n\n"
                     f"Switching to category mode replaces this with separate "
                     f"edu and fun budgets."
                 )
+                pid = s.profile_id if hasattr(s, 'profile_id') else "default"
                 keyboard = InlineKeyboardMarkup([[
                     InlineKeyboardButton(
                         "Set up categories",
-                        callback_data=f"switch_confirm:category:{category}:{minutes}",
+                        callback_data=f"switch_confirm:{pid}:category:{category}:{minutes}",
                     ),
                     InlineKeyboardButton(
                         "Keep simple limit",
@@ -2503,8 +2540,8 @@ class BrainRotGuardBot:
                 await update.message.reply_text(text, parse_mode=MD2, reply_markup=keyboard)
                 return
 
-        self.video_store.set_setting(setting_key, str(minutes))
-        self._auto_clear_mode("category", day=day)
+        s.set_setting(setting_key, str(minutes))
+        self._auto_clear_mode("category", day=day, store=s)
 
         if day:
             label = self._DAY_LABELS[day]
@@ -2515,20 +2552,21 @@ class BrainRotGuardBot:
     # --- Schedule ---
 
     async def _time_schedule(self, update: Update, args: list[str],
-                             setting_key: str, day: str = "") -> None:
+                             setting_key: str, day: str = "", store=None) -> None:
         """Handle /time [<day>] start|stop subcommands."""
+        s = store or self.video_store
         is_start = setting_key.endswith("schedule_start")
         label = "Start" if is_start else "Stop"
         day_label = f"{self._DAY_LABELS[day]} " if day else ""
 
         if not args:
-            current = self.video_store.get_setting(setting_key, "")
+            current = s.get_setting(setting_key, "")
             if current:
                 await update.message.reply_text(f"{day_label}{label} time: {format_time_12h(current)}")
             elif day:
                 # Show effective (default fallback)
                 base = "schedule_start" if is_start else "schedule_end"
-                default = self.video_store.get_setting(base, "")
+                default = s.get_setting(base, "")
                 if default:
                     await update.message.reply_text(
                         f"{day_label}{label} time: {format_time_12h(default)} (from default)"
@@ -2541,7 +2579,7 @@ class BrainRotGuardBot:
 
         value = args[0].lower()
         if value == "off":
-            self.video_store.set_setting(setting_key, "")
+            s.set_setting(setting_key, "")
             if day:
                 await update.message.reply_text(f"{day_label}{label} time override cleared.")
             else:
@@ -2555,15 +2593,16 @@ class BrainRotGuardBot:
             )
             return
 
-        self.video_store.set_setting(setting_key, parsed)
+        s.set_setting(setting_key, parsed)
         await update.message.reply_text(
             f"{day_label}{label} time set to {format_time_12h(parsed)}"
         )
 
     # --- Bonus ---
 
-    async def _time_add_bonus(self, update: Update, args: list[str]) -> None:
+    async def _time_add_bonus(self, update: Update, args: list[str], store=None) -> None:
         """Handle /time add <minutes> — grant bonus screen time for today only."""
+        s = store or self.video_store
         if not args or not args[0].isdigit():
             await update.message.reply_text("Usage: /time add <minutes>")
             return
@@ -2572,22 +2611,26 @@ class BrainRotGuardBot:
             await update.message.reply_text("Bonus minutes must be a positive number.")
             return
         today = get_today_str(self._get_tz())
-        bonus_date = self.video_store.get_setting("daily_bonus_date", "")
+        bonus_date = s.get_setting("daily_bonus_date", "")
         if bonus_date == today:
-            existing = int(self.video_store.get_setting("daily_bonus_minutes", "0") or "0")
+            existing = int(s.get_setting("daily_bonus_minutes", "0") or "0")
         else:
             existing = 0
         new_bonus = existing + add_min
-        self.video_store.set_setting("daily_bonus_minutes", str(new_bonus))
-        self.video_store.set_setting("daily_bonus_date", today)
+        s.set_setting("daily_bonus_minutes", str(new_bonus))
+        s.set_setting("daily_bonus_date", today)
         await update.message.reply_text(
             f"Added {add_min} bonus minutes for today ({new_bonus} total). Expires at midnight."
         )
 
     # --- Guided limit setup wizard ---
 
-    async def _time_setup_start(self, update: Update) -> None:
+    async def _time_setup_start(self, update: Update, store=None) -> None:
         """Send top-level setup menu with Limits / Schedule choices."""
+        # Store profile_id for wizard callbacks
+        chat_id = update.effective_chat.id
+        pid = store.profile_id if store and hasattr(store, 'profile_id') else "default"
+        self._pending_wizard[chat_id] = {"step": "setup_top", "profile_id": pid}
         text = _md(
             "\u23f0 **Time Setup**\n\n"
             "What would you like to configure?\n\n"
@@ -2652,11 +2695,12 @@ class BrainRotGuardBot:
         ]])
         await _edit_msg(query, text, keyboard)
 
-    def _setup_sched_day_grid(self) -> tuple[str, InlineKeyboardMarkup]:
+    def _setup_sched_day_grid(self, store=None) -> tuple[str, InlineKeyboardMarkup]:
         """Build day-grid text and keyboard."""
+        s = store or self.video_store
         # Show default schedule if set
-        start = self.video_store.get_setting("schedule_start", "")
-        end = self.video_store.get_setting("schedule_end", "")
+        start = s.get_setting("schedule_start", "")
+        end = s.get_setting("schedule_end", "")
         if start or end:
             start_disp = format_time_12h(start) if start else "not set"
             end_disp = format_time_12h(end) if end else "not set"
@@ -2671,8 +2715,8 @@ class BrainRotGuardBot:
         row1, row2 = [], []
         for day in DAY_NAMES:
             has_override = (
-                self.video_store.get_setting(f"{day}_schedule_start", "") or
-                self.video_store.get_setting(f"{day}_schedule_end", "")
+                s.get_setting(f"{day}_schedule_start", "") or
+                s.get_setting(f"{day}_schedule_end", "")
             )
             label = self._DAY_LABELS[day][:3]
             if has_override:
@@ -2688,22 +2732,26 @@ class BrainRotGuardBot:
 
     async def _cb_setup_sched_start(self, query, value: str) -> None:
         """Handle default start-time selection."""
+        chat_id = query.message.chat_id
+        ws = self._wizard_store(chat_id)
         if value == "custom":
             await _edit_msg(query, _md("Reply with the start time (e.g. 8am, 08:00):"))
-            chat_id = query.message.chat_id
-            self._pending_wizard[chat_id] = {"step": "setup_sched_start"}
+            pid = self._pending_wizard.get(chat_id, {}).get("profile_id", "default")
+            self._pending_wizard[chat_id] = {"step": "setup_sched_start", "profile_id": pid}
             return
-        self.video_store.set_setting("schedule_start", value)
+        ws.set_setting("schedule_start", value)
         await self._setup_sched_stop_menu(query, format_time_12h(value))
 
     async def _cb_setup_sched_stop(self, query, value: str) -> None:
         """Handle default stop-time selection — goes to done summary."""
+        chat_id = query.message.chat_id
+        ws = self._wizard_store(chat_id)
         if value == "custom":
             await _edit_msg(query, _md("Reply with the stop time (e.g. 8pm, 20:00):"))
-            chat_id = query.message.chat_id
-            self._pending_wizard[chat_id] = {"step": "setup_sched_stop"}
+            pid = self._pending_wizard.get(chat_id, {}).get("profile_id", "default")
+            self._pending_wizard[chat_id] = {"step": "setup_sched_stop", "profile_id": pid}
             return
-        self.video_store.set_setting("schedule_end", value)
+        ws.set_setting("schedule_end", value)
         await self._cb_setup_sched_done(query)
 
     async def _cb_setup_sched_apply(self, query, choice: str) -> None:
@@ -2711,22 +2759,24 @@ class BrainRotGuardBot:
         if choice == "all":
             await self._setup_sched_start_menu(query)
         elif choice == "custom":
-            text, keyboard = self._setup_sched_day_grid()
+            ws = self._wizard_store(query.message.chat_id)
+            text, keyboard = self._setup_sched_day_grid(store=ws)
             await _edit_msg(query, text, keyboard)
 
     async def _cb_setup_sched_day(self, query, day: str) -> None:
         """Show per-day start-time picker."""
         if day not in DAY_NAMES:
             return
+        ws = self._wizard_store(query.message.chat_id)
         label = self._DAY_LABELS[day]
-        start = self._effective_setting(day, "schedule_start")
-        end = self._effective_setting(day, "schedule_end")
+        start = self._effective_setting(day, "schedule_start", store=ws)
+        end = self._effective_setting(day, "schedule_end", store=ws)
         start_disp = format_time_12h(start) if start else "not set"
         end_disp = format_time_12h(end) if end else "not set"
         # Check if this day has its own overrides
         has_own = (
-            self.video_store.get_setting(f"{day}_schedule_start", "") or
-            self.video_store.get_setting(f"{day}_schedule_end", "")
+            ws.get_setting(f"{day}_schedule_start", "") or
+            ws.get_setting(f"{day}_schedule_end", "")
         )
         source = "" if has_own else " (default)"
         text = _md(
@@ -2746,13 +2796,15 @@ class BrainRotGuardBot:
         """Handle per-day start-time selection."""
         if day not in DAY_NAMES:
             return
+        chat_id = query.message.chat_id
+        ws = self._wizard_store(chat_id)
         if value == "custom":
             label = self._DAY_LABELS[day]
             await _edit_msg(query, _md(f"Reply with start time for {label} (e.g. 9am, 09:00):"))
-            chat_id = query.message.chat_id
-            self._pending_wizard[chat_id] = {"step": f"setup_daystart:{day}"}
+            pid = self._pending_wizard.get(chat_id, {}).get("profile_id", "default")
+            self._pending_wizard[chat_id] = {"step": f"setup_daystart:{day}", "profile_id": pid}
             return
-        self.video_store.set_setting(f"{day}_schedule_start", value)
+        ws.set_setting(f"{day}_schedule_start", value)
         label = self._DAY_LABELS[day]
         text = _md(
             f"{label} start: {format_time_12h(value)} \u2713\n"
@@ -2770,20 +2822,23 @@ class BrainRotGuardBot:
         """Handle per-day stop-time selection."""
         if day not in DAY_NAMES:
             return
+        chat_id = query.message.chat_id
+        ws = self._wizard_store(chat_id)
         if value == "custom":
             label = self._DAY_LABELS[day]
             await _edit_msg(query, _md(f"Reply with stop time for {label} (e.g. 9pm, 21:00):"))
-            chat_id = query.message.chat_id
-            self._pending_wizard[chat_id] = {"step": f"setup_daystop:{day}"}
+            pid = self._pending_wizard.get(chat_id, {}).get("profile_id", "default")
+            self._pending_wizard[chat_id] = {"step": f"setup_daystop:{day}", "profile_id": pid}
             return
-        self.video_store.set_setting(f"{day}_schedule_end", value)
-        text, keyboard = self._setup_sched_day_grid()
+        ws.set_setting(f"{day}_schedule_end", value)
+        text, keyboard = self._setup_sched_day_grid(store=ws)
         await _edit_msg(query, text, keyboard)
 
     async def _cb_setup_sched_done(self, query) -> None:
         """Final summary when schedule wizard completes."""
-        start = self.video_store.get_setting("schedule_start", "")
-        end = self.video_store.get_setting("schedule_end", "")
+        ws = self._wizard_store(query.message.chat_id)
+        start = ws.get_setting("schedule_start", "")
+        end = ws.get_setting("schedule_end", "")
         start_disp = format_time_12h(start) if start else "not set"
         end_disp = format_time_12h(end) if end else "not set"
         lines = [
@@ -2792,8 +2847,8 @@ class BrainRotGuardBot:
         ]
         # List per-day overrides
         for day in DAY_NAMES:
-            ds = self.video_store.get_setting(f"{day}_schedule_start", "")
-            de = self.video_store.get_setting(f"{day}_schedule_end", "")
+            ds = ws.get_setting(f"{day}_schedule_start", "")
+            de = ws.get_setting(f"{day}_schedule_end", "")
             if ds or de:
                 label = self._DAY_LABELS[day][:3]
                 ds_disp = format_time_12h(ds) if ds else start_disp
@@ -2832,14 +2887,16 @@ class BrainRotGuardBot:
 
     async def _cb_setup_simple(self, query, value: str) -> None:
         """Handle simple limit selection."""
+        chat_id = query.message.chat_id
+        ws = self._wizard_store(chat_id)
         if value == "custom":
             await _edit_msg(query, "Reply with the number of minutes:")
-            chat_id = query.message.chat_id
-            self._pending_wizard[chat_id] = {"step": "setup_simple"}
+            pid = self._pending_wizard.get(chat_id, {}).get("profile_id", "default")
+            self._pending_wizard[chat_id] = {"step": "setup_simple", "profile_id": pid}
             return
         minutes = int(value)
-        self.video_store.set_setting("daily_limit_minutes", str(minutes))
-        self._auto_clear_mode("simple")
+        ws.set_setting("daily_limit_minutes", str(minutes))
+        self._auto_clear_mode("simple", store=ws)
         text = _md(
             f"\u2713 **Simple limit set**\n"
             f"  Daily cap: {minutes} min/day\n\n"
@@ -2850,14 +2907,16 @@ class BrainRotGuardBot:
 
     async def _cb_setup_edu(self, query, value: str) -> None:
         """Handle edu limit selection in wizard."""
+        chat_id = query.message.chat_id
+        ws = self._wizard_store(chat_id)
         if value == "custom":
             await _edit_msg(query, "Reply with the number of minutes for **educational** limit:")
-            chat_id = query.message.chat_id
-            self._pending_wizard[chat_id] = {"step": "setup_edu"}
+            pid = self._pending_wizard.get(chat_id, {}).get("profile_id", "default")
+            self._pending_wizard[chat_id] = {"step": "setup_edu", "profile_id": pid}
             return
         minutes = int(value)
-        self.video_store.set_setting("edu_limit_minutes", str(minutes))
-        self._auto_clear_mode("category")
+        ws.set_setting("edu_limit_minutes", str(minutes))
+        self._auto_clear_mode("category", store=ws)
         text = _md(
             f"Educational: {minutes} min \u2713\n"
             f"Now set **entertainment** limit:"
@@ -2872,15 +2931,17 @@ class BrainRotGuardBot:
 
     async def _cb_setup_fun(self, query, value: str) -> None:
         """Handle fun limit selection in wizard."""
+        chat_id = query.message.chat_id
+        ws = self._wizard_store(chat_id)
         if value == "custom":
             await _edit_msg(query, "Reply with the number of minutes for **entertainment** limit:")
-            chat_id = query.message.chat_id
-            self._pending_wizard[chat_id] = {"step": "setup_fun"}
+            pid = self._pending_wizard.get(chat_id, {}).get("profile_id", "default")
+            self._pending_wizard[chat_id] = {"step": "setup_fun", "profile_id": pid}
             return
         minutes = int(value)
-        self.video_store.set_setting("fun_limit_minutes", str(minutes))
-        self._auto_clear_mode("category")
-        edu = int(self.video_store.get_setting("edu_limit_minutes", "0") or "0")
+        ws.set_setting("fun_limit_minutes", str(minutes))
+        self._auto_clear_mode("category", store=ws)
+        edu = int(ws.get_setting("edu_limit_minutes", "0") or "0")
         total = edu + minutes
         text = _md(
             f"\u2713 **Category limits set**\n"
@@ -2899,19 +2960,22 @@ class BrainRotGuardBot:
             return
 
         parts = choice.split(":")
-        if parts[0] == "simple" and len(parts) == 2 and parts[1].isdigit():
-            # Switch to simple mode with given value
-            minutes = int(parts[1])
-            self.video_store.set_setting("daily_limit_minutes", str(minutes))
-            self._auto_clear_mode("simple")
+        # Format: {pid}:simple:{minutes} or {pid}:category:{cat}:{minutes}
+        if len(parts) >= 3 and parts[1] == "simple" and parts[2].isdigit():
+            pid = parts[0]
+            ws = self._child_store(pid)
+            minutes = int(parts[2])
+            ws.set_setting("daily_limit_minutes", str(minutes))
+            self._auto_clear_mode("simple", store=ws)
             text = _md(f"\u2713 Switched to simple limit: {minutes} min/day")
             await _edit_msg(query, text)
-        elif parts[0] == "category" and len(parts) == 3 and parts[2].isdigit():
-            # Switch to category: set the requested category, clear flat
-            category = parts[1]
-            minutes = int(parts[2])
-            self.video_store.set_setting(f"{category}_limit_minutes", str(minutes))
-            self._auto_clear_mode("category")
+        elif len(parts) >= 4 and parts[1] == "category" and parts[3].isdigit():
+            pid = parts[0]
+            ws = self._child_store(pid)
+            category = parts[2]
+            minutes = int(parts[3])
+            ws.set_setting(f"{category}_limit_minutes", str(minutes))
+            self._auto_clear_mode("category", store=ws)
             cat_label = "Educational" if category == "edu" else "Entertainment"
             other = "fun" if category == "edu" else "edu"
             other_label = "Entertainment" if category == "edu" else "Educational"
@@ -2934,6 +2998,7 @@ class BrainRotGuardBot:
             return  # No wizard active
         text = update.message.text.strip()
         step = state["step"]
+        ws = self._wizard_store(chat_id)
 
         # Schedule wizard steps expect time input, not minutes
         if step.startswith("setup_sched_") or step.startswith("setup_daystart:") or step.startswith("setup_daystop:"):
@@ -2946,7 +3011,7 @@ class BrainRotGuardBot:
             del self._pending_wizard[chat_id]
 
             if step == "setup_sched_start":
-                self.video_store.set_setting("schedule_start", parsed)
+                ws.set_setting("schedule_start", parsed)
                 # Show stop-time picker (as new message since we can't edit)
                 stop_text = _md(
                     f"Start: {format_time_12h(parsed)} \u2713\n"
@@ -2960,8 +3025,8 @@ class BrainRotGuardBot:
                 ]])
                 await update.message.reply_text(stop_text, parse_mode=MD2, reply_markup=keyboard)
             elif step == "setup_sched_stop":
-                self.video_store.set_setting("schedule_end", parsed)
-                start = self.video_store.get_setting("schedule_start", "")
+                ws.set_setting("schedule_end", parsed)
+                start = ws.get_setting("schedule_start", "")
                 start_disp = format_time_12h(start) if start else "not set"
                 end_disp = format_time_12h(parsed)
                 lines = [
@@ -2972,7 +3037,7 @@ class BrainRotGuardBot:
                 await update.message.reply_text(_md("\n".join(lines)), parse_mode=MD2)
             elif step.startswith("setup_daystart:"):
                 day = step.split(":", 1)[1]
-                self.video_store.set_setting(f"{day}_schedule_start", parsed)
+                ws.set_setting(f"{day}_schedule_start", parsed)
                 label = self._DAY_LABELS[day]
                 stop_text = _md(
                     f"{label} start: {format_time_12h(parsed)} \u2713\n"
@@ -2987,8 +3052,8 @@ class BrainRotGuardBot:
                 await update.message.reply_text(stop_text, parse_mode=MD2, reply_markup=keyboard)
             elif step.startswith("setup_daystop:"):
                 day = step.split(":", 1)[1]
-                self.video_store.set_setting(f"{day}_schedule_end", parsed)
-                grid_text, keyboard = self._setup_sched_day_grid()
+                ws.set_setting(f"{day}_schedule_end", parsed)
+                grid_text, keyboard = self._setup_sched_day_grid(store=ws)
                 await update.message.reply_text(grid_text, parse_mode=MD2, reply_markup=keyboard)
             return
 
@@ -3000,16 +3065,16 @@ class BrainRotGuardBot:
         del self._pending_wizard[chat_id]
 
         if step == "setup_simple":
-            self.video_store.set_setting("daily_limit_minutes", str(minutes))
-            self._auto_clear_mode("simple")
+            ws.set_setting("daily_limit_minutes", str(minutes))
+            self._auto_clear_mode("simple", store=ws)
             await update.message.reply_text(_md(
                 f"\u2713 **Simple limit set**\n"
                 f"  Daily cap: {minutes} min/day\n\n"
                 f"Use `/time <day> limit <min>` to customize specific days."
             ), parse_mode=MD2)
         elif step == "setup_edu":
-            self.video_store.set_setting("edu_limit_minutes", str(minutes))
-            self._auto_clear_mode("category")
+            ws.set_setting("edu_limit_minutes", str(minutes))
+            self._auto_clear_mode("category", store=ws)
             keyboard = InlineKeyboardMarkup([[
                 InlineKeyboardButton("30 min", callback_data="setup_fun:30"),
                 InlineKeyboardButton("60 min", callback_data="setup_fun:60"),
@@ -3021,9 +3086,9 @@ class BrainRotGuardBot:
                 f"Now set **entertainment** limit:"
             ), parse_mode=MD2, reply_markup=keyboard)
         elif step == "setup_fun":
-            self.video_store.set_setting("fun_limit_minutes", str(minutes))
-            self._auto_clear_mode("category")
-            edu = int(self.video_store.get_setting("edu_limit_minutes", "0") or "0")
+            ws.set_setting("fun_limit_minutes", str(minutes))
+            self._auto_clear_mode("category", store=ws)
+            edu = int(ws.get_setting("edu_limit_minutes", "0") or "0")
             total = edu + minutes
             await update.message.reply_text(_md(
                 f"\u2713 **Category limits set**\n"
