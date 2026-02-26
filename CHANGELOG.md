@@ -1,4 +1,13 @@
 # Changelog
+## v1.26.4 - 2026-02-25
+
+**Fixed**
+- Container volume permissions on Unraid/NAS (entrypoint chown + gosu for mounted `/app/db`)
+
+**Added**
+- Unraid install instructions in README and setup guide (CA search + manual template download)
+- `TemplateURL` in Unraid template for Community Apps discovery
+
 ## v1.26.3 - 2026-02-25
 
 **Changed**

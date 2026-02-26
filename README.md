@@ -133,7 +133,12 @@ docker pull ghcr.io/ghjj123/brainrotguard:latest
 ```
 See the [full setup guide](docs/setup.md#using-the-pre-built-docker-image) for compose file details.
 
-**Unraid:** Add the [template repository](docs/setup.md#installing-on-unraid) in Unraid's Docker tab for a guided install — no command line needed.
+**Unraid:** Search for **BrainRotGuard** in Community Applications, or download the template manually:
+```bash
+wget -O /boot/config/plugins/dockerMan/templates-user/my-brainrotguard.xml \
+  https://raw.githubusercontent.com/GHJJ123/brainrotguard/main/unraid-template.xml
+```
+See the [full Unraid setup guide](docs/setup.md#installing-on-unraid) for details.
 
 **Important:** You'll also want to [block YouTube at the DNS level](docs/setup.md#step-5-block-youtube-on-the-kids-devices) on the kid's devices — otherwise they can just open youtube.com directly.
 
