@@ -1,4 +1,13 @@
 # Changelog
+## v1.26.6 - 2026-02-25
+
+**Changed**
+- Emoji icons on all Telegram inline buttons (approve, deny, allow/block channel, revoke, category toggle)
+- Default daily time limit changed from 120 to 0 (unlimited)
+
+**Fixed**
+- Mobile search dropdown CSS cascade bug causing horizontal viewport overflow
+
 ## v1.26.5 - 2026-02-25
 
 **Fixed**

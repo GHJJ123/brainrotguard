@@ -63,27 +63,27 @@ class ApprovalMixin:
         # Format: action:profile_id:video_id (profile_id max ~20 chars)
         pid = profile_id
         buttons = [
-            [InlineKeyboardButton("Watch on YouTube", url=yt_link)],
+            [InlineKeyboardButton("▶️ Watch on YouTube", url=yt_link)],
         ]
         # If cross-child approved, show auto-approve button
         if other and len(profiles) > 1:
             buttons.append([
-                InlineKeyboardButton("Auto-approve", callback_data=f"autoapprove:{pid}:{video_id}"),
+                InlineKeyboardButton("⚡ Auto-approve", callback_data=f"autoapprove:{pid}:{video_id}"),
             ])
         buttons.extend([
             [
-                InlineKeyboardButton("Approve (Edu)", callback_data=f"approve_edu:{pid}:{video_id}"),
-                InlineKeyboardButton("Approve (Fun)", callback_data=f"approve_fun:{pid}:{video_id}"),
+                InlineKeyboardButton("📚 Approve Edu", callback_data=f"approve_edu:{pid}:{video_id}"),
+                InlineKeyboardButton("🎮 Approve Fun", callback_data=f"approve_fun:{pid}:{video_id}"),
             ],
             [
-                InlineKeyboardButton("Deny", callback_data=f"deny:{pid}:{video_id}"),
+                InlineKeyboardButton("🚫 Deny", callback_data=f"deny:{pid}:{video_id}"),
             ],
             [
-                InlineKeyboardButton("Allow Ch (Edu)", callback_data=f"allowchan_edu:{pid}:{video_id}"),
-                InlineKeyboardButton("Allow Ch (Fun)", callback_data=f"allowchan_fun:{pid}:{video_id}"),
+                InlineKeyboardButton("📚 Allow Ch Edu", callback_data=f"allowchan_edu:{pid}:{video_id}"),
+                InlineKeyboardButton("🎮 Allow Ch Fun", callback_data=f"allowchan_fun:{pid}:{video_id}"),
             ],
             [
-                InlineKeyboardButton("Block Channel", callback_data=f"blockchan:{pid}:{video_id}"),
+                InlineKeyboardButton("🔒 Block Channel", callback_data=f"blockchan:{pid}:{video_id}"),
             ],
         ])
         keyboard = InlineKeyboardMarkup(buttons)
@@ -179,7 +179,7 @@ class ApprovalMixin:
             f"[Watch on YouTube]({yt_link})"
         )
         reply_markup = InlineKeyboardMarkup([[
-            InlineKeyboardButton("Revoke", callback_data=f"revoke:{profile_id}:{video_id}"),
+            InlineKeyboardButton("↩️ Revoke", callback_data=f"revoke:{profile_id}:{video_id}"),
         ]])
         try:
             await query.edit_message_caption(caption=result_text, reply_markup=reply_markup, parse_mode=MD2)
@@ -227,9 +227,9 @@ class ApprovalMixin:
             cat_label = CAT_LABELS.get(cat, "Entertainment")
             _answer_bg(query, f"\u2192 {cat_label}")
             toggle_cat = "edu" if cat == "fun" else "fun"
-            toggle_label = "\u2192 Edu" if toggle_cat == "edu" else "\u2192 Fun"
+            toggle_label = "📚 \u2192 Edu" if toggle_cat == "edu" else "🎮 \u2192 Fun"
             reply_markup = InlineKeyboardMarkup([[
-                InlineKeyboardButton("Revoke", callback_data=f"revoke:{profile_id}:{video_id}"),
+                InlineKeyboardButton("↩️ Revoke", callback_data=f"revoke:{profile_id}:{video_id}"),
                 InlineKeyboardButton(toggle_label, callback_data=f"setcat_{toggle_cat}:{profile_id}:{video_id}"),
             ]])
             try:
@@ -326,9 +326,9 @@ class ApprovalMixin:
             video = cs.get_video(video_id)
             cur_cat = video.get("category", "fun") if video else "fun"
             toggle_cat = "edu" if cur_cat == "fun" else "fun"
-            toggle_label = "\u2192 Edu" if toggle_cat == "edu" else "\u2192 Fun"
+            toggle_label = "📚 \u2192 Edu" if toggle_cat == "edu" else "🎮 \u2192 Fun"
             reply_markup = InlineKeyboardMarkup([[
-                InlineKeyboardButton("Revoke", callback_data=f"revoke:{profile_id}:{video_id}"),
+                InlineKeyboardButton("↩️ Revoke", callback_data=f"revoke:{profile_id}:{video_id}"),
                 InlineKeyboardButton(toggle_label, callback_data=f"setcat_{toggle_cat}:{profile_id}:{video_id}"),
             ]])
         else:

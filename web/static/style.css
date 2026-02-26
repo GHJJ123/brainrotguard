@@ -1046,15 +1046,6 @@ main {
         justify-content: center;
         order: 2;
         flex: 1;
-        position: static;
-    }
-    .search-dropdown {
-        position: fixed;
-        left: 20px;
-        right: 20px;
-        top: 60px;
-        width: auto;
-        transform: none;
     }
     .search-toggle {
         display: block;
@@ -1842,7 +1833,7 @@ main {
     }
 }
 
-/* === Search Dropdown (mobile) === */
+/* === Search Dropdown === */
 .search-dropdown-wrap {
     position: relative;
     flex-shrink: 0;
@@ -1862,6 +1853,21 @@ main {
     padding: 16px;
     z-index: 150;
     animation: avatar-dd-in 0.15s ease-out;
+}
+
+/* Mobile: override dropdown positioning AFTER base styles so cascade wins */
+@media (max-width: 768px) {
+    .search-dropdown-wrap {
+        position: static;
+    }
+    .search-dropdown {
+        position: fixed;
+        left: 20px;
+        right: 20px;
+        top: 60px;
+        width: auto;
+        transform: none;
+    }
 }
 
 .search-dropdown.open {

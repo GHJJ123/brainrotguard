@@ -74,7 +74,7 @@ class DatabaseConfig:
 @dataclass
 class WatchLimitsConfig:
     """Watch time limits configuration."""
-    daily_limit_minutes: int = 120
+    daily_limit_minutes: int = 0
     timezone: str = "America/New_York"
     notify_on_limit: bool = True
 
@@ -140,7 +140,7 @@ class Config:
                 path=os.environ.get("BRG_DB_PATH", "db/videos.db"),
             ),
             watch_limits=WatchLimitsConfig(
-                daily_limit_minutes=int(os.environ.get("BRG_DAILY_LIMIT_MINUTES", "120")),
+                daily_limit_minutes=int(os.environ.get("BRG_DAILY_LIMIT_MINUTES", "0")),
                 timezone=os.environ.get("BRG_TIMEZONE", "America/New_York"),
                 notify_on_limit=os.environ.get("BRG_NOTIFY_ON_LIMIT", "true").lower() == "true",
             ),
