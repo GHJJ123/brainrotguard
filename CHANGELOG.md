@@ -5,9 +5,6 @@
 - Removed standalone `/help` web page — command reference consolidated into [docs/telegram-commands.md](docs/telegram-commands.md)
 - Reorganized telegram-commands.md: `/setup` wizard promoted to top as recommended entry point, added contextual notes throughout
 
-**Added**
-- `TODO.md` with light mode / per-profile theming exploration notes
-
 ## v1.27.5 - 2026-02-26
 
 **Added**
