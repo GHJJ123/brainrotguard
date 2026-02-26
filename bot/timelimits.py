@@ -708,40 +708,84 @@ class TimeLimitMixin:
         chat_id = update.effective_chat.id
         pid = store.profile_id if store and hasattr(store, 'profile_id') else "default"
         self._pending_wizard[chat_id] = {"step": "setup_top", "profile_id": pid}
+        text, keyboard = self._render_setup_top()
+        await update.effective_message.reply_text(text, parse_mode=MD2, reply_markup=keyboard)
+
+    def _render_setup_top(self) -> tuple[str, InlineKeyboardMarkup]:
+        """Build the top-level Limits / Schedule menu."""
         text = _md(
             "\u23f0 **Time Setup**\n\n"
             "What would you like to configure?\n\n"
-            "**Limits** — daily screen time budgets\n"
-            "**Schedule** — when videos are available"
+            "**Limits** \u2014 daily screen time budgets\n"
+            "**Schedule** \u2014 when videos are available"
         )
         keyboard = InlineKeyboardMarkup([[
             InlineKeyboardButton("Limits", callback_data="setup_top:limits"),
             InlineKeyboardButton("Schedule", callback_data="setup_top:schedule"),
         ]])
-        await update.effective_message.reply_text(text, parse_mode=MD2, reply_markup=keyboard)
+        return text, keyboard
+
+    def _render_setup_mode(self) -> tuple[str, InlineKeyboardMarkup]:
+        """Build the Simple / Category mode choice."""
+        text = _md(
+            "\u23f0 **Time Limit Setup**\n\n"
+            "How would you like to manage screen time?\n\n"
+            "**Simple** \u2014 one daily cap for all videos.\n"
+            "**Category** \u2014 separate edu + fun budgets (total = edu + fun)."
+        )
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("Simple Limit", callback_data="setup_mode:simple"),
+                InlineKeyboardButton("Category Limits", callback_data="setup_mode:category"),
+            ],
+            [InlineKeyboardButton("\u2190 Back", callback_data="setup_back:top")],
+        ])
+        return text, keyboard
+
+    def _render_setup_sched_apply(self) -> tuple[str, InlineKeyboardMarkup]:
+        """Build the Same for all / Customize by day choice."""
+        text = _md(
+            "Same schedule every day, or different times for specific days?"
+        )
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("Same for all days", callback_data="setup_sched_apply:all"),
+                InlineKeyboardButton("Customize by day", callback_data="setup_sched_apply:custom"),
+            ],
+            [InlineKeyboardButton("\u2190 Back", callback_data="setup_back:top")],
+        ])
+        return text, keyboard
 
     async def _cb_setup_top(self, query, choice: str) -> None:
         """Route top-level setup choice to limits or schedule wizard."""
         if choice == "limits":
-            text = _md(
-                "\u23f0 **Time Limit Setup**\n\n"
-                "How would you like to manage screen time?\n\n"
-                "**Simple** \u2014 one daily cap for all videos.\n"
-                "**Category** \u2014 separate edu + fun budgets (total = edu + fun)."
-            )
-            keyboard = InlineKeyboardMarkup([[
-                InlineKeyboardButton("Simple Limit", callback_data="setup_mode:simple"),
-                InlineKeyboardButton("Category Limits", callback_data="setup_mode:category"),
-            ]])
+            text, keyboard = self._render_setup_mode()
             await _edit_msg(query, text, keyboard)
         elif choice == "schedule":
-            text = _md(
-                "Same schedule every day, or different times for specific days?"
-            )
-            keyboard = InlineKeyboardMarkup([[
-                InlineKeyboardButton("Same for all days", callback_data="setup_sched_apply:all"),
-                InlineKeyboardButton("Customize by day", callback_data="setup_sched_apply:custom"),
-            ]])
+            text, keyboard = self._render_setup_sched_apply()
+            await _edit_msg(query, text, keyboard)
+
+    async def _cb_setup_back(self, query, target: str) -> None:
+        """Handle back navigation within the time setup wizard."""
+        chat_id = query.message.chat_id
+        if target == "top":
+            text, keyboard = self._render_setup_top()
+            await _edit_msg(query, text, keyboard)
+        elif target == "mode":
+            text, keyboard = self._render_setup_mode()
+            await _edit_msg(query, text, keyboard)
+        elif target == "edu":
+            # Re-render edu presets
+            text, keyboard = self._render_setup_edu()
+            await _edit_msg(query, text, keyboard)
+        elif target == "sched_apply":
+            text, keyboard = self._render_setup_sched_apply()
+            await _edit_msg(query, text, keyboard)
+        elif target == "sched_start":
+            await self._setup_sched_start_menu(query)
+        elif target == "day_grid":
+            ws = self._wizard_store(chat_id)
+            text, keyboard = self._setup_sched_day_grid(store=ws)
             await _edit_msg(query, text, keyboard)
 
     # --- Schedule wizard helpers ---
@@ -749,12 +793,15 @@ class TimeLimitMixin:
     async def _setup_sched_start_menu(self, query, prefix: str = "setup_sched_start") -> None:
         """Show start-time presets."""
         text = _md("Set when watching is allowed to begin:")
-        keyboard = InlineKeyboardMarkup([[
-            InlineKeyboardButton("7 AM", callback_data=f"{prefix}:07:00"),
-            InlineKeyboardButton("8 AM", callback_data=f"{prefix}:08:00"),
-            InlineKeyboardButton("9 AM", callback_data=f"{prefix}:09:00"),
-            InlineKeyboardButton("Custom", callback_data=f"{prefix}:custom"),
-        ]])
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("7 AM", callback_data=f"{prefix}:07:00"),
+                InlineKeyboardButton("8 AM", callback_data=f"{prefix}:08:00"),
+                InlineKeyboardButton("9 AM", callback_data=f"{prefix}:09:00"),
+                InlineKeyboardButton("Custom", callback_data=f"{prefix}:custom"),
+            ],
+            [InlineKeyboardButton("\u2190 Back", callback_data="setup_back:sched_apply")],
+        ])
         await _edit_msg(query, text, keyboard)
 
     async def _setup_sched_stop_menu(self, query, start_display: str,
@@ -764,12 +811,15 @@ class TimeLimitMixin:
             f"Start: {start_display} \u2713\n"
             f"Now set when watching must stop:"
         )
-        keyboard = InlineKeyboardMarkup([[
-            InlineKeyboardButton("7 PM", callback_data=f"{prefix}:19:00"),
-            InlineKeyboardButton("8 PM", callback_data=f"{prefix}:20:00"),
-            InlineKeyboardButton("9 PM", callback_data=f"{prefix}:21:00"),
-            InlineKeyboardButton("Custom", callback_data=f"{prefix}:custom"),
-        ]])
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("7 PM", callback_data=f"{prefix}:19:00"),
+                InlineKeyboardButton("8 PM", callback_data=f"{prefix}:20:00"),
+                InlineKeyboardButton("9 PM", callback_data=f"{prefix}:21:00"),
+                InlineKeyboardButton("Custom", callback_data=f"{prefix}:custom"),
+            ],
+            [InlineKeyboardButton("\u2190 Back", callback_data="setup_back:sched_start")],
+        ])
         await _edit_msg(query, text, keyboard)
 
     def _setup_sched_day_grid(self, store=None) -> tuple[str, InlineKeyboardMarkup]:
@@ -803,8 +853,11 @@ class TimeLimitMixin:
                 row1.append(btn)
             else:
                 row2.append(btn)
-        done_row = [InlineKeyboardButton("Done \u2713", callback_data="setup_sched_done")]
-        keyboard = InlineKeyboardMarkup([row1, row2, done_row])
+        bottom_row = [
+            InlineKeyboardButton("\u2190 Back", callback_data="setup_back:sched_apply"),
+            InlineKeyboardButton("Done \u2713", callback_data="setup_sched_done"),
+        ]
+        keyboard = InlineKeyboardMarkup([row1, row2, bottom_row])
         return text, keyboard
 
     async def _cb_setup_sched_start(self, query, value: str) -> None:
@@ -869,12 +922,15 @@ class TimeLimitMixin:
             f"Set start time for {label}:"
         )
         # Offer presets near the current default
-        keyboard = InlineKeyboardMarkup([[
-            InlineKeyboardButton("8 AM", callback_data=f"setup_daystart:{day}:08:00"),
-            InlineKeyboardButton("9 AM", callback_data=f"setup_daystart:{day}:09:00"),
-            InlineKeyboardButton("10 AM", callback_data=f"setup_daystart:{day}:10:00"),
-            InlineKeyboardButton("Custom", callback_data=f"setup_daystart:{day}:custom"),
-        ]])
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("8 AM", callback_data=f"setup_daystart:{day}:08:00"),
+                InlineKeyboardButton("9 AM", callback_data=f"setup_daystart:{day}:09:00"),
+                InlineKeyboardButton("10 AM", callback_data=f"setup_daystart:{day}:10:00"),
+                InlineKeyboardButton("Custom", callback_data=f"setup_daystart:{day}:custom"),
+            ],
+            [InlineKeyboardButton("\u2190 Back", callback_data="setup_back:day_grid")],
+        ])
         await _edit_msg(query, text, keyboard)
 
     async def _cb_setup_daystart(self, query, day: str, value: str) -> None:
@@ -899,12 +955,15 @@ class TimeLimitMixin:
             f"{label} start: {format_time_12h(value)} \u2713\n"
             f"Set stop time for {label}:"
         )
-        keyboard = InlineKeyboardMarkup([[
-            InlineKeyboardButton("8 PM", callback_data=f"setup_daystop:{day}:20:00"),
-            InlineKeyboardButton("9 PM", callback_data=f"setup_daystop:{day}:21:00"),
-            InlineKeyboardButton("10 PM", callback_data=f"setup_daystop:{day}:22:00"),
-            InlineKeyboardButton("Custom", callback_data=f"setup_daystop:{day}:custom"),
-        ]])
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("8 PM", callback_data=f"setup_daystop:{day}:20:00"),
+                InlineKeyboardButton("9 PM", callback_data=f"setup_daystop:{day}:21:00"),
+                InlineKeyboardButton("10 PM", callback_data=f"setup_daystop:{day}:22:00"),
+                InlineKeyboardButton("Custom", callback_data=f"setup_daystop:{day}:custom"),
+            ],
+            [InlineKeyboardButton("\u2190 Back", callback_data="setup_back:day_grid")],
+        ])
         await _edit_msg(query, text, keyboard)
 
     async def _cb_setup_daystop(self, query, day: str, value: str) -> None:
@@ -952,6 +1011,24 @@ class TimeLimitMixin:
         await _edit_msg(query, _md("\n".join(lines)))
         await self._maybe_onboard_return(chat_id)
 
+    def _render_setup_edu(self) -> tuple[str, InlineKeyboardMarkup]:
+        """Build the edu preset picker."""
+        text = _md(
+            "Category mode gives separate budgets for educational and "
+            "entertainment videos. Total screen time = edu + fun.\n\n"
+            "Set **educational** limit:"
+        )
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("60 min", callback_data="setup_edu:60"),
+                InlineKeyboardButton("90 min", callback_data="setup_edu:90"),
+                InlineKeyboardButton("120 min", callback_data="setup_edu:120"),
+                InlineKeyboardButton("Custom", callback_data="setup_edu:custom"),
+            ],
+            [InlineKeyboardButton("\u2190 Back", callback_data="setup_back:mode")],
+        ])
+        return text, keyboard
+
     async def _cb_setup_mode(self, query, mode: str) -> None:
         """Handle mode choice from wizard."""
         if mode == "simple":
@@ -959,25 +1036,18 @@ class TimeLimitMixin:
                 "Set a daily screen time limit. All videos share one pool.\n\n"
                 "Pick a preset or reply with a custom number:"
             )
-            keyboard = InlineKeyboardMarkup([[
-                InlineKeyboardButton("60 min", callback_data="setup_simple:60"),
-                InlineKeyboardButton("90 min", callback_data="setup_simple:90"),
-                InlineKeyboardButton("120 min", callback_data="setup_simple:120"),
-                InlineKeyboardButton("Custom", callback_data="setup_simple:custom"),
-            ]])
+            keyboard = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton("60 min", callback_data="setup_simple:60"),
+                    InlineKeyboardButton("90 min", callback_data="setup_simple:90"),
+                    InlineKeyboardButton("120 min", callback_data="setup_simple:120"),
+                    InlineKeyboardButton("Custom", callback_data="setup_simple:custom"),
+                ],
+                [InlineKeyboardButton("\u2190 Back", callback_data="setup_back:mode")],
+            ])
             await _edit_msg(query, text, keyboard)
         elif mode == "category":
-            text = _md(
-                "Category mode gives separate budgets for educational and "
-                "entertainment videos. Total screen time = edu + fun.\n\n"
-                "Set **educational** limit:"
-            )
-            keyboard = InlineKeyboardMarkup([[
-                InlineKeyboardButton("60 min", callback_data="setup_edu:60"),
-                InlineKeyboardButton("90 min", callback_data="setup_edu:90"),
-                InlineKeyboardButton("120 min", callback_data="setup_edu:120"),
-                InlineKeyboardButton("Custom", callback_data="setup_edu:custom"),
-            ]])
+            text, keyboard = self._render_setup_edu()
             await _edit_msg(query, text, keyboard)
 
     async def _cb_setup_simple(self, query, value: str) -> None:
@@ -1027,12 +1097,15 @@ class TimeLimitMixin:
             f"Educational: {minutes} min \u2713\n"
             f"Now set **entertainment** limit:"
         )
-        keyboard = InlineKeyboardMarkup([[
-            InlineKeyboardButton("30 min", callback_data="setup_fun:30"),
-            InlineKeyboardButton("60 min", callback_data="setup_fun:60"),
-            InlineKeyboardButton("90 min", callback_data="setup_fun:90"),
-            InlineKeyboardButton("Custom", callback_data="setup_fun:custom"),
-        ]])
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("30 min", callback_data="setup_fun:30"),
+                InlineKeyboardButton("60 min", callback_data="setup_fun:60"),
+                InlineKeyboardButton("90 min", callback_data="setup_fun:90"),
+                InlineKeyboardButton("Custom", callback_data="setup_fun:custom"),
+            ],
+            [InlineKeyboardButton("\u2190 Back", callback_data="setup_back:edu")],
+        ])
         await _edit_msg(query, text, keyboard)
 
     async def _cb_setup_fun(self, query, value: str) -> None:
@@ -1202,12 +1275,15 @@ class TimeLimitMixin:
         elif step == "setup_edu":
             ws.set_setting("edu_limit_minutes", str(minutes))
             self._auto_clear_mode("category", store=ws)
-            keyboard = InlineKeyboardMarkup([[
-                InlineKeyboardButton("30 min", callback_data="setup_fun:30"),
-                InlineKeyboardButton("60 min", callback_data="setup_fun:60"),
-                InlineKeyboardButton("90 min", callback_data="setup_fun:90"),
-                InlineKeyboardButton("Custom", callback_data="setup_fun:custom"),
-            ]])
+            keyboard = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton("30 min", callback_data="setup_fun:30"),
+                    InlineKeyboardButton("60 min", callback_data="setup_fun:60"),
+                    InlineKeyboardButton("90 min", callback_data="setup_fun:90"),
+                    InlineKeyboardButton("Custom", callback_data="setup_fun:custom"),
+                ],
+                [InlineKeyboardButton("\u2190 Back", callback_data="setup_back:edu")],
+            ])
             await update.effective_message.reply_text(_md(
                 f"Educational: {minutes} min \u2713\n"
                 f"Now set **entertainment** limit:"

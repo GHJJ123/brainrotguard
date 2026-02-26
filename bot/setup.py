@@ -346,10 +346,13 @@ class SetupMixin:
             "**Limits** \u2014 daily screen time budgets\n"
             "**Schedule** \u2014 when videos are available"
         )
-        keyboard = InlineKeyboardMarkup([[
-            InlineKeyboardButton("Limits", callback_data="setup_top:limits"),
-            InlineKeyboardButton("Schedule", callback_data="setup_top:schedule"),
-        ]])
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("Limits", callback_data="setup_top:limits"),
+                InlineKeyboardButton("Schedule", callback_data="setup_top:schedule"),
+            ],
+            [InlineKeyboardButton("\u2190 Back", callback_data="onboard_time_back")],
+        ])
         await _edit_msg(query, text, keyboard)
 
     async def _cb_onboard_time_back(self, query) -> None:

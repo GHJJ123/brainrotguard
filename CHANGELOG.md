@@ -1,4 +1,9 @@
 # Changelog
+## v1.27.2 - 2026-02-25
+
+**Added**
+- Back buttons on every step of the `/time setup` wizard for easy navigation
+
 ## v1.27.1 - 2026-02-25
 
 **Changed**
