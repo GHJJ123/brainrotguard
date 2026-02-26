@@ -191,7 +191,7 @@ function checkNearEnd() {
     if (!player || !player.getDuration || !player.getCurrentTime) return;
     var duration = player.getDuration();
     var current = player.getCurrentTime();
-    if (duration > 0 && current > 0 && (duration - current) <= 15) {
+    if (duration > 0 && current > 0 && (duration - current) <= 3) {
         clearInterval(endCheckInterval);
         endCheckInterval = null;
         showEndOverlay();
@@ -271,8 +271,9 @@ function updateTimeDisplay() {
 
 function timesUp() {
     isPlaying = false;
-    clearInterval(heartbeatInterval);
-    clearInterval(countdownInterval);
+    clearInterval(heartbeatInterval); heartbeatInterval = null;
+    clearInterval(countdownInterval); countdownInterval = null;
+    clearInterval(endCheckInterval); endCheckInterval = null;
     if (player && player.pauseVideo) player.pauseVideo();
     var overlay = document.getElementById('time-overlay');
     if (overlay) overlay.style.display = 'flex';
