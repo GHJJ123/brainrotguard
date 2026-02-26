@@ -162,7 +162,7 @@ Download the template XML to your Unraid flash drive, then use it from the Add C
 
 1. Open an Unraid terminal (or SSH in) and run:
    ```bash
-   wget -O /boot/config/plugins/dockerMan/templates-user/brainrotguard.xml \
+   wget -O /boot/config/plugins/dockerMan/templates-user/my-brainrotguard.xml \
      https://raw.githubusercontent.com/GHJJ123/brainrotguard/main/unraid-template.xml
    ```
 2. Go to **Docker** > **Add Container**
