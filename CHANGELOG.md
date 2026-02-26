@@ -1,4 +1,16 @@
 # Changelog
+## v1.26.3 - 2026-02-25
+
+**Changed**
+- Redesigned logo and favicon (new shield+brain icon, PNG favicons replace SVG)
+- Search bar hidden on login screen
+- Dockerfile supports env-only configuration (no config.yaml required)
+
+**Added**
+- Unraid Community Apps template (`unraid-template.xml`)
+- 512x512 square icon for Unraid/app stores
+- Updated demo video and screenshots
+
 ## v1.26.2 - 2026-02-25
 
 **Fixed**
