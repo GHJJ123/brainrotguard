@@ -1,4 +1,9 @@
 # Changelog
+## v1.26.5 - 2026-02-25
+
+**Fixed**
+- Mobile search input no longer triggers iOS Safari auto-zoom (font-size 14px → 16px)
+
 ## v1.26.4 - 2026-02-25
 
 **Fixed**
