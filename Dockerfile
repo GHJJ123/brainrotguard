@@ -10,4 +10,4 @@ COPY . .
 RUN useradd -r -m -s /bin/false appuser && mkdir -p /app/db && chown -R appuser:appuser /app
 USER appuser
 
-CMD ["python", "main.py", "-c", "/app/config.yaml", "-v"]
+CMD ["sh", "-c", "if [ -f /app/config.yaml ]; then exec python main.py -c /app/config.yaml -v; else exec python main.py -v; fi"]
