@@ -63,6 +63,12 @@ class BrainRotGuardBot(SetupMixin, ApprovalMixin, ChannelMixin, TimeLimitMixin, 
         profiles = self._get_profiles()
         return profiles[0] if len(profiles) == 1 else None
 
+    def _ctx_label(self, profile: dict) -> str:
+        """Return ' — Name' suffix for multi-child headers, empty for single-child."""
+        if len(self._get_profiles()) > 1:
+            return f" \u2014 {profile['display_name']}"
+        return ""
+
     async def _with_child_context(self, update: Update, context, handler_fn,
                                    allow_all: bool = False) -> None:
         """Route a child-scoped command through profile selection.
@@ -340,6 +346,7 @@ class BrainRotGuardBot(SetupMixin, ApprovalMixin, ChannelMixin, TimeLimitMixin, 
         CallbackRoute("unblock",         "_cb_channel_remove",      min_parts=3, answer=None, rejoin_from=2),
 
         # Setup hub (onboard)
+        CallbackRoute("onboard_done",           "_cb_onboard_done",            min_parts=1, answer=None),
         CallbackRoute("onboard_children",       "_cb_onboard_children",        min_parts=1, answer=None),
         CallbackRoute("onboard_child_rename",   "_cb_onboard_child_rename",    min_parts=1, answer=None),
         CallbackRoute("onboard_child_add",      "_cb_onboard_child_add",       min_parts=1, answer=None),

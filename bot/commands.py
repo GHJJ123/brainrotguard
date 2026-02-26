@@ -213,6 +213,7 @@ class CommandsMixin:
 
         async def _inner(update, context, cs, profile):
             args = context.args
+            ctx = self._ctx_label(profile)
             is_default = cs.profile_id == "default"
             if args and args[0].lower() in ("on", "off"):
                 enabled = args[0].lower() == "on"
@@ -221,7 +222,7 @@ class CommandsMixin:
                     self.on_channel_change()
                 if enabled:
                     await update.effective_message.reply_text(_md(
-                        "**Shorts enabled**\n\n"
+                        f"**Shorts enabled{ctx}**\n\n"
                         "- Shorts row appears on the homepage below videos\n"
                         "- Shorts from allowlisted channels are fetched on next cache refresh\n"
                         "- Shorts still count toward category time budgets (edu/fun)\n"
@@ -229,7 +230,7 @@ class CommandsMixin:
                     ), parse_mode=MD2)
                 else:
                     await update.effective_message.reply_text(_md(
-                        "**Shorts disabled**\n\n"
+                        f"**Shorts disabled{ctx}**\n\n"
                         "- Shorts row removed from homepage\n"
                         "- Shorts hidden from catalog, search results, and channel filters\n"
                         "- Existing approved Shorts stay in the database\n"
@@ -245,7 +246,7 @@ class CommandsMixin:
                     current = False
                 if current:
                     await update.effective_message.reply_text(_md(
-                        "**Shorts: enabled**\n\n"
+                        f"**Shorts: enabled{ctx}**\n\n"
                         "Shorts appear in a dedicated row on the homepage and are "
                         "fetched from allowlisted channels. They count toward "
                         "edu/fun time budgets like regular videos.\n\n"
@@ -253,7 +254,7 @@ class CommandsMixin:
                     ), parse_mode=MD2)
                 else:
                     await update.effective_message.reply_text(_md(
-                        "**Shorts: disabled**\n\n"
+                        f"**Shorts: disabled{ctx}**\n\n"
                         "Shorts are hidden from the homepage, catalog, and search results. "
                         "No Shorts are fetched from channels.\n\n"
                         "`/shorts on` — show Shorts in a dedicated row"
@@ -287,7 +288,8 @@ class CommandsMixin:
         page_items = pending[start:end]
         total_pages = (total + ps - 1) // ps
 
-        header = f"**Pending Requests ({total})**"
+        ctx = self._ctx_label({"display_name": self._profile_name(profile_id)}) if len(self._get_profiles()) > 1 else ""
+        header = f"**Pending Requests{ctx} ({total})**"
         if total_pages > 1:
             header += f" \u00b7 pg {page + 1}/{total_pages}"
         lines = [header, ""]
@@ -356,10 +358,11 @@ class CommandsMixin:
         end = (page + 1) * ps
         total_pages = (total + ps - 1) // ps
 
+        ctx = self._ctx_label({"display_name": self._profile_name(profile_id)}) if len(self._get_profiles()) > 1 else ""
         if search:
-            header = f"\U0001f50d **\"{search}\" ({total} result{'s' if total != 1 else ''})**"
+            header = f"\U0001f50d **\"{search}\"{ctx} ({total} result{'s' if total != 1 else ''})**"
         else:
-            header = f"\U0001f4cb **Approved ({total})**"
+            header = f"\U0001f4cb **Approved{ctx} ({total})**"
         if total_pages > 1:
             header += f" \u00b7 pg {page + 1}/{total_pages}"
         lines = [header, ""]
@@ -440,9 +443,10 @@ class CommandsMixin:
             return
 
         async def _inner(update, context, cs, profile):
+            ctx = self._ctx_label(profile)
             stats = cs.get_stats()
             await update.effective_message.reply_text(_md(
-                f"**BrainRotGuard Stats**\n\n"
+                f"**Stats{ctx}**\n\n"
                 f"**Total videos:** {stats['total']}\n"
                 f"**Pending:** {stats['pending']}\n"
                 f"**Approved:** {stats['approved']}\n"

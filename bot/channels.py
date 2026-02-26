@@ -64,7 +64,7 @@ class ChannelMixin:
         )
 
     def _render_starter_message(self, page: int = 0, store=None, profile_id: str = "default",
-                                onboard: bool = False) -> tuple[str, InlineKeyboardMarkup | None]:
+                                onboard: bool = False, onboard_name: str = "") -> tuple[str, InlineKeyboardMarkup | None]:
         """Build starter channels message with per-channel Import buttons and pagination."""
         s = store or self.video_store
         existing = s.get_channel_handles_set()
@@ -74,7 +74,10 @@ class ChannelMixin:
         end = min(start + ps, total)
         total_pages = (total + ps - 1) // ps
 
-        header = f"**Starter Channels** ({total})"
+        if onboard_name:
+            header = f"**Starter Channels for {onboard_name}** ({total})"
+        else:
+            header = f"**Starter Channels** ({total})"
         if total_pages > 1:
             header += f" \u00b7 pg {page + 1}/{total_pages}"
         lines = [header, ""]
@@ -116,7 +119,8 @@ class ChannelMixin:
         _answer_bg(query)
         cs = self._child_store(profile_id)
         onboard = self._is_onboard_active(query.message.chat_id)
-        text, markup = self._render_starter_message(page, store=cs, profile_id=profile_id, onboard=onboard)
+        name = self._profile_name(profile_id) if onboard else ""
+        text, markup = self._render_starter_message(page, store=cs, profile_id=profile_id, onboard=onboard, onboard_name=name)
         await _edit_msg(query, text, markup, disable_preview=True)
 
     async def _cb_starter_import(self, query, profile_id: str, idx: int) -> None:
@@ -157,7 +161,8 @@ class ChannelMixin:
         # Re-render the message immediately
         page = idx // self._STARTER_PAGE_SIZE
         onboard = self._is_onboard_active(query.message.chat_id)
-        text, markup = self._render_starter_message(page, store=cs, profile_id=profile_id, onboard=onboard)
+        name = self._profile_name(profile_id) if onboard else ""
+        text, markup = self._render_starter_message(page, store=cs, profile_id=profile_id, onboard=onboard, onboard_name=name)
         await _edit_msg(query, text, markup, disable_preview=True)
 
     # --- Allow / block / remove ---
@@ -291,7 +296,8 @@ class ChannelMixin:
         edu_count = sum(1 for _, _, _, cat in allowed + blocked if cat == "edu")
         fun_count = sum(1 for _, _, _, cat in allowed + blocked if cat == "fun")
         uncat = total - edu_count - fun_count
-        lines = [f"**Channels** ({total})\n"]
+        ctx = self._ctx_label({"display_name": self._profile_name(profile_id)}) if len(self._get_profiles()) > 1 else ""
+        lines = [f"**Channels{ctx}** ({total})\n"]
         if allowed:
             lines.append(f"Allowed: {len(allowed)}")
         if blocked:

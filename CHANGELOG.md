@@ -1,4 +1,11 @@
 # Changelog
+## v1.27.1 - 2026-02-25
+
+**Changed**
+- Child name context now shown in all command headers (`/pending`, `/approved`, `/stats`, `/watch`, `/logs`, `/search`, `/time`, `/shorts`)
+- Multi-child context labels added to setup hub sub-menus (Time, Channels, Shorts) to show which child is being configured
+- Starter channels setup now displays child name context for clarity in multi-child environments
+
 ## v1.27.0 - 2026-02-25
 
 **Added**

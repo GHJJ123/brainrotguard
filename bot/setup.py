@@ -99,6 +99,7 @@ class SetupMixin:
                 InlineKeyboardButton("\U0001f4fa Channels", callback_data="onboard_channels"),
                 InlineKeyboardButton("\U0001f3ac Shorts", callback_data="onboard_shorts"),
             ],
+            [InlineKeyboardButton("\u2705 Done", callback_data="onboard_done")],
         ])
         return _md(text), keyboard
 
@@ -128,6 +129,21 @@ class SetupMixin:
             "step": "onboard_hub",
             "hub_message_id": query.message.message_id,
         }
+
+    async def _cb_onboard_done(self, query) -> None:
+        """Remove hub buttons, clean up wizard state."""
+        _answer_bg(query)
+        chat_id = query.message.chat_id
+        self._pending_wizard.pop(chat_id, None)
+        try:
+            await query.edit_message_reply_markup(reply_markup=None)
+        except Exception:
+            pass
+
+    def _profile_name(self, profile_id: str) -> str:
+        """Resolve a profile_id to its display name."""
+        p = self.video_store.get_profile(profile_id)
+        return p["display_name"] if p else profile_id
 
     # --- Children section ---
 
@@ -245,8 +261,11 @@ class SetupMixin:
     async def _cb_onboard_channels_sel(self, query, profile_id: str) -> None:
         """Select profile for channels — render starter browser."""
         _answer_bg(query)
+        name = self._profile_name(profile_id)
         cs = self._child_store(profile_id)
-        text, markup = self._render_starter_message(store=cs, profile_id=profile_id, onboard=True)
+        text, markup = self._render_starter_message(
+            store=cs, profile_id=profile_id, onboard=True, onboard_name=name,
+        )
         await _edit_msg(query, text, markup, disable_preview=True)
 
     async def _cb_onboard_channels_back(self, query) -> None:
@@ -314,7 +333,7 @@ class SetupMixin:
         _answer_bg(query)
         chat_id = query.message.chat_id
         hub_mid = self._pending_wizard.get(chat_id, {}).get("hub_message_id")
-        cs = self._child_store(profile_id)
+        name = self._profile_name(profile_id)
         self._pending_wizard[chat_id] = {
             "step": "setup_top",
             "profile_id": profile_id,
@@ -322,7 +341,7 @@ class SetupMixin:
             "hub_message_id": hub_mid,
         }
         text = _md(
-            "\u23f0 **Time Setup**\n\n"
+            f"\u23f0 **Time Setup for {name}**\n\n"
             "What would you like to configure?\n\n"
             "**Limits** \u2014 daily screen time budgets\n"
             "**Schedule** \u2014 when videos are available"
@@ -350,10 +369,13 @@ class SetupMixin:
 
     # --- Shorts section ---
 
-    def _build_shorts_submenu(self, selected_profile_id: str = "") -> tuple[str, InlineKeyboardMarkup]:
+    def _build_shorts_submenu(self, selected_profile_id: str = "", selected_name: str = "") -> tuple[str, InlineKeyboardMarkup]:
         """Render shorts sub-menu with per-profile status."""
         profiles = self._get_profiles()
-        lines = ["**YouTube Shorts** (under 60s)\n"]
+        if selected_name:
+            lines = [f"**YouTube Shorts for {selected_name}** (under 60s)\n"]
+        else:
+            lines = ["**YouTube Shorts** (under 60s)\n"]
         for p in profiles:
             cs = self._child_store(p["id"])
             db_val = cs.get_setting("shorts_enabled", "")
@@ -403,7 +425,8 @@ class SetupMixin:
     async def _cb_onboard_shorts_select(self, query, profile_id: str) -> None:
         """Select profile for shorts toggle (multi-child)."""
         _answer_bg(query)
-        text, markup = self._build_shorts_submenu(selected_profile_id=profile_id)
+        name = self._profile_name(profile_id)
+        text, markup = self._build_shorts_submenu(selected_profile_id=profile_id, selected_name=name)
         await _edit_msg(query, text, markup)
 
     async def _cb_onboard_shorts_toggle(self, query, profile_id: str, choice: str) -> None:

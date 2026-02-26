@@ -37,20 +37,21 @@ class ActivityMixin:
             from zoneinfo import ZoneInfo
             tz_info = ZoneInfo(tz) if tz else None
 
+            ctx = self._ctx_label(profile)
             if days == 0:
                 today = get_today_str(tz)
                 dates = [today]
-                header = "Today's Watch Activity"
+                header = f"Today's Watch Activity{ctx}"
             elif days == 1:
                 yesterday = (_dt.datetime.now(tz_info) - timedelta(days=1)).strftime("%Y-%m-%d")
                 dates = [yesterday]
-                header = "Yesterday's Watch Activity"
+                header = f"Yesterday's Watch Activity{ctx}"
             else:
                 dates = [
                     (_dt.datetime.now(tz_info) - timedelta(days=i)).strftime("%Y-%m-%d")
                     for i in range(days)
                 ]
-                header = f"Watch Activity (last {days} days)"
+                header = f"Watch Activity (last {days} days){ctx}"
 
             lines = [f"**{header}**\n"]
 
@@ -188,7 +189,8 @@ class ActivityMixin:
 
         period = "Today" if days == 1 else f"Last {days} days"
         status_icon = {"approved": "\u2713", "denied": "\u2717", "pending": "?"}
-        header = f"\U0001f4cb **Activity ({period}) \u2014 {total} videos**"
+        ctx = self._ctx_label({"display_name": self._profile_name(profile_id)}) if len(self._get_profiles()) > 1 else ""
+        header = f"\U0001f4cb **Activity ({period}){ctx} \u2014 {total} videos**"
         if total_pages > 1:
             header += f" \u00b7 pg {page + 1}/{total_pages}"
         lines = [header, "", "```"]
@@ -261,7 +263,8 @@ class ActivityMixin:
         total_pages = (total + ps - 1) // ps
 
         period = "Today" if days == 1 else f"Last {days} days"
-        header = f"\U0001f50d **Search History ({period})**"
+        ctx = self._ctx_label({"display_name": self._profile_name(profile_id)}) if len(self._get_profiles()) > 1 else ""
+        header = f"\U0001f50d **Search History ({period}){ctx}**"
         if total_pages > 1:
             header += f" \u00b7 pg {page + 1}/{total_pages}"
         lines = [header, "", "```"]

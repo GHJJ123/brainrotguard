@@ -286,7 +286,9 @@ class TimeLimitMixin:
             s_display = e_display = ""
 
         day_label = self._DAY_LABELS[today_day]
-        lines = [f"\u23f0 **Today ({day_label[:3]})** \u2014 {status}\n"]
+        pid = getattr(s, 'profile_id', 'default')
+        ctx = self._ctx_label({"display_name": self._profile_name(pid)}) if len(self._get_profiles()) > 1 else ""
+        lines = [f"\u23f0 **Today ({day_label[:3]}){ctx}** \u2014 {status}\n"]
 
         if s_display:
             lines.append(f"Schedule: {s_display} \u2013 {e_display}")
