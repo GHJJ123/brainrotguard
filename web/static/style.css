@@ -1876,7 +1876,7 @@ main {
 .search-dd-input {
     flex: 1;
     padding: 10px 14px;
-    font-size: 14px;
+    font-size: 16px;
     border: none;
     border-radius: var(--radius-btn);
     background: var(--border-subtle);
