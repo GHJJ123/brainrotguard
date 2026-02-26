@@ -152,45 +152,78 @@ docker compose -f docker-compose.example.yml up -d
 
 ## Installing on Unraid
 
-BrainRotGuard has an Unraid template for guided installation through the Docker tab.
+### Option A: Community Apps (Recommended)
 
-### Add the Template Repository
+If BrainRotGuard is available in Community Applications, search for **BrainRotGuard** in the **Apps** tab and click **Install**. The template will pre-fill all the fields — just enter your Telegram bot token and chat ID.
 
-1. In the Unraid web UI, go to **Docker** > **Add Container** > **Template Repositories**
-2. Add this URL:
+### Option B: Template File
+
+Download the template XML to your Unraid flash drive, then use it from the Add Container dropdown:
+
+1. Open an Unraid terminal (or SSH in) and run:
+   ```bash
+   wget -O /boot/config/plugins/dockerMan/templates-user/brainrotguard.xml \
+     https://raw.githubusercontent.com/GHJJ123/brainrotguard/main/unraid-template.xml
    ```
-   https://raw.githubusercontent.com/GHJJ123/brainrotguard/main/unraid-template.xml
-   ```
-3. Click **Save**
+2. Go to **Docker** > **Add Container**
+3. In the **Template** dropdown, select **BrainRotGuard**
+4. Fill in your **Telegram Bot Token** and **Admin Chat ID**
+5. Click **Apply**
 
-### Create the Container
+### Option C: Manual Install
+
+If you prefer to set up each field yourself:
 
 1. Go to **Docker** > **Add Container**
-2. Select **BrainRotGuard** from the template dropdown
-3. Fill in the required fields:
+2. Fill in the top-level fields:
 
-   | Field | What to put |
-   |-------|------------|
-   | **Telegram Bot Token** | The token from [@BotFather](https://core.telegram.org/bots#how-do-i-create-a-bot) |
-   | **Telegram Admin Chat ID** | Your numeric chat ID ([how to find it](#step-2-get-your-chat-id)) |
+   | Field | Value |
+   |-------|-------|
+   | **Name** | `BrainRotGuard` |
+   | **Repository** | `ghcr.io/ghjj123/brainrotguard:latest` |
+   | **Icon URL** | `https://raw.githubusercontent.com/GHJJ123/brainrotguard/main/web/static/brg-icon-512.png` |
+   | **WebUI** | `http://[IP]:[PORT:8080]` |
+   | **Network Type** | Bridge |
 
-4. Optional fields (click **Show more settings** if needed):
+3. Click **Add another Path, Port, Variable, Label or Device** to add each of the following:
 
-   | Field | What it does | Default |
-   |-------|-------------|---------|
-   | **PIN Code** | Protect the web UI with a PIN | No PIN |
-   | **Base URL** | LAN address for Telegram deep links (e.g. `http://192.168.1.50:8080`) | Auto-detected |
-   | **Daily Watch Limit** | Daily screen time limit in minutes (0 = unlimited) | 120 |
-   | **Timezone** | For daily resets and scheduled access windows | America/New_York |
-   | **Config File** | Mount a custom `config.yaml` for advanced settings | Not needed |
+   **Port:**
 
-5. Click **Apply**
+   | Field | Value |
+   |-------|-------|
+   | Config Type | Port |
+   | Name | `Web UI Port` |
+   | Container Port | `8080` |
+   | Host Port | `8080` |
+
+   **Path (database volume):**
+
+   | Field | Value |
+   |-------|-------|
+   | Config Type | Path |
+   | Name | `Database` |
+   | Container Path | `/app/db` |
+   | Host Path | `/mnt/user/appdata/brainrotguard/db` |
+   | Access Mode | Read/Write |
+
+   **Variables (add each one separately):**
+
+   | Name | Key | Value | Required |
+   |------|-----|-------|----------|
+   | Telegram Bot Token | `BRG_BOT_TOKEN` | Your token from [@BotFather](https://core.telegram.org/bots#how-do-i-create-a-bot) | Yes |
+   | Telegram Admin Chat ID | `BRG_ADMIN_CHAT_ID` | Your numeric chat ID ([how to find it](#step-2-get-your-chat-id)) | Yes |
+   | PIN Code | `BRG_PIN` | PIN to protect the web UI (leave empty to skip) | No |
+   | Base URL | `BRG_BASE_URL` | LAN address for Telegram links (e.g. `http://192.168.1.50:8080`) | No |
+   | Daily Watch Limit | `BRG_DAILY_LIMIT_MINUTES` | Minutes per day, 0 = unlimited (default: 120) | No |
+   | Timezone | `BRG_TIMEZONE` | e.g. `America/New_York`, `Europe/London` | No |
+
+4. Click **Apply**
 
 The container will pull the image and start. Open `http://<your-unraid-ip>:8080` on the kid's tablet.
 
 ### Updating
 
-Unraid handles updates automatically when a new image is pushed. You'll see an update notification in the Docker tab — click **Apply Update** to pull the latest version.
+When a new image is pushed, Unraid shows an update notification in the Docker tab. Click the container icon and select **Update** to pull the latest version.
 
 ## Running Without Docker
 
