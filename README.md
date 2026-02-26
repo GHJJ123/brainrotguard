@@ -51,7 +51,7 @@ Works on any screen size — desktop, tablet, and phone:
 
 Kid searches, requests a video, parent approves via Telegram, video plays:
 
-https://github.com/user-attachments/assets/7dd53337-82f6-405a-aad2-9ef654dbb24b
+https://github.com/user-attachments/assets/e36eeb48-bb28-4edd-8d8e-10d2fd30d002
 
 ### Why I Built This
 
