@@ -1,4 +1,16 @@
 # Changelog
+## v1.27.4 - 2026-02-26
+
+**Added**
+- YouTube link sandbox: iframe `sandbox` attribute blocks all navigation to youtube.com (logo, title, channel, "Watch on YouTube" links)
+- Pause overlay: full-coverage overlay with play button when video is paused, hiding YouTube's recommended video strip
+- Early end-of-video overlay: covers the player with 15 seconds remaining to hide YouTube's recommended videos grid
+- Replay icon on end overlay (circular arrow button matching pause overlay style)
+- Custom fullscreen: our fullscreen wraps the video + overlays together, so pause/end overlays work in fullscreen too (YouTube's native fullscreen is disabled by sandbox)
+
+**Changed**
+- Removed `autofocus` from homepage search bar to prevent tablet keyboard from popping up on load
+
 ## v1.27.3 - 2026-02-25
 
 **Changed**

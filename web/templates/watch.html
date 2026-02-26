@@ -19,6 +19,7 @@
     <div class="video-player">
         <div class="video-wrapper">
             <div id="ytplayer"></div>
+            <button id="fs-toggle" class="fs-toggle" onclick="toggleFullscreen()" aria-label="Fullscreen"></button>
         </div>
     </div>
 
@@ -67,40 +68,71 @@ var hasTimeLimit = {{ 'true' if time_info else 'false' }};
 var videoId = {{ video.video_id | tojson }};
 var countdownInterval = null;
 
+function toggleFullscreen() {
+    var wrapper = document.querySelector('.video-wrapper');
+    if (!wrapper) return;
+    var fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+    if (fsEl) {
+        (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    } else {
+        var rfs = wrapper.requestFullscreen || wrapper.webkitRequestFullscreen;
+        if (rfs) rfs.call(wrapper).catch(function() {});
+    }
+}
+
+document.addEventListener('fullscreenchange', updateFsButton);
+document.addEventListener('webkitfullscreenchange', updateFsButton);
+function updateFsButton() {
+    var btn = document.getElementById('fs-toggle');
+    if (btn) btn.classList.toggle('fs-exit', !!(document.fullscreenElement || document.webkitFullscreenElement));
+}
+
+// Replace placeholder div with sandboxed iframe before YT API loads
+(function() {
+    var placeholder = document.getElementById('ytplayer');
+    var iframe = document.createElement('iframe');
+    iframe.id = 'ytplayer';
+    iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin');
+    iframe.setAttribute('allowfullscreen', '');
+    iframe.src = 'https://www.youtube-nocookie.com/embed/' + videoId
+        + '?enablejsapi=1&autoplay=0&rel=0&modestbranding=1'
+        + '&origin=' + encodeURIComponent(window.location.origin);
+    placeholder.parentNode.replaceChild(iframe, placeholder);
+})();
+
 function onYouTubeIframeAPIReady() {
     player = new YT.Player('ytplayer', {
-        videoId: videoId,
-        host: 'https://www.youtube-nocookie.com',
-        playerVars: {
-            'autoplay': 0,
-            'rel': 0,
-            'modestbranding': 1
-        },
         events: {
             'onStateChange': onPlayerStateChange
         }
     });
 }
 
+var endCheckInterval = null;
+
 function onPlayerStateChange(event) {
     if (event.data === YT.PlayerState.PLAYING) {
         isPlaying = true;
+        hidePauseOverlay();
         if (!heartbeatInterval) {
             heartbeatInterval = setInterval(sendHeartbeat, 15000);
         }
         if (hasTimeLimit && !countdownInterval) {
             countdownInterval = setInterval(tickCountdown, 1000);
         }
+        if (!endCheckInterval) {
+            endCheckInterval = setInterval(checkNearEnd, 1000);
+        }
     } else if (event.data === YT.PlayerState.ENDED) {
-        // Cover the player immediately so YouTube's suggested video
-        // overlay is never visible. DNS blocking would prevent those
-        // videos from loading anyway, but this keeps the UI clean.
         isPlaying = false;
+        hidePauseOverlay();
         if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null; }
+        if (endCheckInterval) { clearInterval(endCheckInterval); endCheckInterval = null; }
         if (playSeconds > 0) { sendHeartbeat(); }
         showEndOverlay();
-    } else {
+    } else if (event.data === YT.PlayerState.PAUSED) {
         isPlaying = false;
+        showPauseOverlay();
         if (countdownInterval) {
             clearInterval(countdownInterval);
             countdownInterval = null;
@@ -108,6 +140,61 @@ function onPlayerStateChange(event) {
         if (playSeconds > 0) {
             sendHeartbeat();
         }
+    } else {
+        isPlaying = false;
+        if (countdownInterval) {
+            clearInterval(countdownInterval);
+            countdownInterval = null;
+        }
+        if (endCheckInterval) {
+            clearInterval(endCheckInterval);
+            endCheckInterval = null;
+        }
+        if (playSeconds > 0) {
+            sendHeartbeat();
+        }
+    }
+}
+
+function showPauseOverlay() {
+    var existing = document.getElementById('pause-overlay');
+    if (existing) { existing.style.display = 'flex'; return; }
+    var overlay = document.createElement('div');
+    overlay.id = 'pause-overlay';
+    overlay.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(26,26,46,0.85);display:flex;align-items:center;justify-content:center;z-index:10;border-radius:8px;cursor:pointer;';
+    var btn = document.createElement('div');
+    btn.style.cssText = 'width:72px;height:72px;background:rgba(231,76,111,0.9);border-radius:50%;display:flex;align-items:center;justify-content:center;';
+    var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('width', '32');
+    svg.setAttribute('height', '32');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    var tri = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+    tri.setAttribute('points', '8,5 19,12 8,19');
+    tri.setAttribute('fill', 'white');
+    svg.appendChild(tri);
+    btn.appendChild(svg);
+    overlay.appendChild(btn);
+    overlay.onclick = function() {
+        overlay.style.display = 'none';
+        if (player && player.playVideo) player.playVideo();
+    };
+    var wrapper = document.querySelector('.video-wrapper');
+    if (wrapper) wrapper.appendChild(overlay);
+}
+
+function hidePauseOverlay() {
+    var el = document.getElementById('pause-overlay');
+    if (el) el.style.display = 'none';
+}
+
+function checkNearEnd() {
+    if (!player || !player.getDuration || !player.getCurrentTime) return;
+    var duration = player.getDuration();
+    var current = player.getCurrentTime();
+    if (duration > 0 && current > 0 && (duration - current) <= 15) {
+        clearInterval(endCheckInterval);
+        endCheckInterval = null;
+        showEndOverlay();
     }
 }
 
@@ -116,15 +203,32 @@ function showEndOverlay() {
     if (existing) { existing.style.display = 'flex'; return; }
     var overlay = document.createElement('div');
     overlay.id = 'end-overlay';
-    overlay.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;background:#1a1a2e;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;border-radius:8px;';
+    overlay.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;background:#1a1a2e;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;border-radius:8px;gap:16px;';
     var msg = document.createElement('p');
     msg.textContent = 'Video finished';
-    msg.style.cssText = 'color:#ccc;font-size:1.2em;margin-bottom:1em;';
+    msg.style.cssText = 'color:#ccc;font-size:1.2em;margin:0;';
+    var btn = document.createElement('div');
+    btn.style.cssText = 'width:72px;height:72px;background:rgba(231,76,111,0.9);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;';
+    var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('width', '32');
+    svg.setAttribute('height', '32');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'white');
+    // Replay/rewind icon: circular arrow
+    var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', 'M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z');
+    svg.appendChild(path);
+    btn.appendChild(svg);
+    btn.onclick = function() {
+        overlay.style.display = 'none';
+        if (player && player.seekTo) { player.seekTo(0, true); player.playVideo(); }
+    };
     var link = document.createElement('a');
     link.href = '/';
     link.textContent = 'Back to Library';
-    link.style.cssText = 'color:#e74c6f;font-size:1.1em;text-decoration:none;';
+    link.style.cssText = 'color:#888;font-size:1em;text-decoration:none;';
     overlay.appendChild(msg);
+    overlay.appendChild(btn);
     overlay.appendChild(link);
     var wrapper = document.querySelector('.video-wrapper');
     if (wrapper) { wrapper.style.position = 'relative'; wrapper.appendChild(overlay); }
