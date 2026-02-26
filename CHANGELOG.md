@@ -1,4 +1,9 @@
 # Changelog
+## v1.27.3 - 2026-02-25
+
+**Changed**
+- `/time setup` wizard: context-aware navigation — back goes to setup hub when launched from onboarding, shows Done button when standalone
+
 ## v1.27.2 - 2026-02-25
 
 **Added**

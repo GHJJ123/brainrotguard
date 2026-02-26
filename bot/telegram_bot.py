@@ -364,6 +364,7 @@ class BrainRotGuardBot(SetupMixin, ApprovalMixin, ChannelMixin, TimeLimitMixin, 
         CallbackRoute("onboard_shorts_back",     "_cb_onboard_shorts_back",    min_parts=1, answer=None),
 
         # Time limit wizard
+        CallbackRoute("setup_done",         "_cb_setup_done",         min_parts=1, answer=""),
         CallbackRoute("setup_back",         "_cb_setup_back",         min_parts=2, answer=""),
         CallbackRoute("setup_top",          "_cb_setup_top",          min_parts=2, answer=""),
         CallbackRoute("setup_sched_start",  "_cb_setup_sched_start",  min_parts=2, answer="", rejoin_from=1),

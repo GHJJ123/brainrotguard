@@ -711,7 +711,7 @@ class TimeLimitMixin:
         text, keyboard = self._render_setup_top()
         await update.effective_message.reply_text(text, parse_mode=MD2, reply_markup=keyboard)
 
-    def _render_setup_top(self) -> tuple[str, InlineKeyboardMarkup]:
+    def _render_setup_top(self, onboard: bool = False) -> tuple[str, InlineKeyboardMarkup]:
         """Build the top-level Limits / Schedule menu."""
         text = _md(
             "\u23f0 **Time Setup**\n\n"
@@ -719,10 +719,15 @@ class TimeLimitMixin:
             "**Limits** \u2014 daily screen time budgets\n"
             "**Schedule** \u2014 when videos are available"
         )
-        keyboard = InlineKeyboardMarkup([[
+        rows = [[
             InlineKeyboardButton("Limits", callback_data="setup_top:limits"),
             InlineKeyboardButton("Schedule", callback_data="setup_top:schedule"),
-        ]])
+        ]]
+        if onboard:
+            rows.append([InlineKeyboardButton("\u2190 Back", callback_data="onboard_time_back")])
+        else:
+            rows.append([InlineKeyboardButton("\u2705 Done", callback_data="setup_done")])
+        keyboard = InlineKeyboardMarkup(rows)
         return text, keyboard
 
     def _render_setup_mode(self) -> tuple[str, InlineKeyboardMarkup]:
@@ -765,12 +770,27 @@ class TimeLimitMixin:
             text, keyboard = self._render_setup_sched_apply()
             await _edit_msg(query, text, keyboard)
 
+    async def _cb_setup_done(self, query) -> None:
+        """Dismiss the time setup wizard (standalone mode)."""
+        chat_id = query.message.chat_id
+        self._pending_wizard.pop(chat_id, None)
+        try:
+            await query.edit_message_reply_markup(reply_markup=None)
+        except Exception:
+            pass
+
     async def _cb_setup_back(self, query, target: str) -> None:
         """Handle back navigation within the time setup wizard."""
         chat_id = query.message.chat_id
         if target == "top":
-            text, keyboard = self._render_setup_top()
-            await _edit_msg(query, text, keyboard)
+            state = self._pending_wizard.get(chat_id, {})
+            if state.get("onboard_return"):
+                # Return to hub
+                await self._edit_hub(query)
+            else:
+                # Standalone — re-render top with Done button
+                text, keyboard = self._render_setup_top(onboard=False)
+                await _edit_msg(query, text, keyboard)
         elif target == "mode":
             text, keyboard = self._render_setup_mode()
             await _edit_msg(query, text, keyboard)
