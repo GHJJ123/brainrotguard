@@ -78,7 +78,12 @@ class CommandsMixin:
         if existing:
             await update.effective_message.reply_text(f"Profile ID conflict with '{existing['display_name']}' — try a different name.")
             return
-        if self.video_store.create_profile(pid, name, pin=pin):
+        import random
+        from web.helpers import AVATAR_ICONS, AVATAR_COLORS
+        if self.video_store.create_profile(
+            pid, name, pin=pin,
+            icon=random.choice(AVATAR_ICONS), color=random.choice(AVATAR_COLORS),
+        ):
             pin_msg = " with PIN" if pin else " (no PIN)"
             await update.effective_message.reply_text(_md(f"Created profile: **{name}**{pin_msg}"), parse_mode=MD2)
         else:

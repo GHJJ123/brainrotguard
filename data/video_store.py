@@ -276,13 +276,15 @@ class VideoStore:
             row = cursor.fetchone()
             return dict(row) if row else None
 
-    def create_profile(self, profile_id: str, display_name: str, pin: str = "") -> bool:
+    def create_profile(self, profile_id: str, display_name: str, pin: str = "",
+                       icon: str = "", color: str = "") -> bool:
         """Create a new profile. Returns True if created."""
         with self._lock:
             try:
                 self.conn.execute(
-                    "INSERT INTO profiles (id, display_name, pin) VALUES (?, ?, ?)",
-                    (profile_id, display_name, pin),
+                    "INSERT INTO profiles (id, display_name, pin, avatar_icon, avatar_color)"
+                    " VALUES (?, ?, ?, ?, ?)",
+                    (profile_id, display_name, pin, icon or None, color or None),
                 )
                 self.conn.commit()
                 return True

@@ -4,6 +4,7 @@
 import argparse
 import asyncio
 import logging
+import random
 import signal
 import os
 from pathlib import Path
@@ -41,8 +42,12 @@ class BrainRotGuard:
         if profiles:
             return  # Profiles already exist
 
+        from web.helpers import AVATAR_ICONS, AVATAR_COLORS
         pin = self.config.web.pin if self.config.web else ""
-        self.video_store.create_profile("default", "Default", pin=pin)
+        self.video_store.create_profile(
+            "default", "Default", pin=pin,
+            icon=random.choice(AVATAR_ICONS), color=random.choice(AVATAR_COLORS),
+        )
         logger.info("Created default profile (PIN: %s)", "set" if pin else "none")
 
     async def setup(self) -> None:
