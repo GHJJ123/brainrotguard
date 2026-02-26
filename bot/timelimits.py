@@ -811,8 +811,12 @@ class TimeLimitMixin:
         ws = self._wizard_store(chat_id)
         if value == "custom":
             await _edit_msg(query, _md("Reply with the start time (e.g. 8am, 08:00):"))
-            pid = self._pending_wizard.get(chat_id, {}).get("profile_id", "default")
-            self._pending_wizard[chat_id] = {"step": "setup_sched_start", "profile_id": pid}
+            state = self._pending_wizard.get(chat_id, {})
+            pid = state.get("profile_id", "default")
+            new_state = {"step": "setup_sched_start", "profile_id": pid}
+            if state.get("onboard_return"):
+                new_state["onboard_return"] = True
+            self._pending_wizard[chat_id] = new_state
             return
         ws.set_setting("schedule_start", value)
         await self._setup_sched_stop_menu(query, format_time_12h(value))
@@ -823,8 +827,12 @@ class TimeLimitMixin:
         ws = self._wizard_store(chat_id)
         if value == "custom":
             await _edit_msg(query, _md("Reply with the stop time (e.g. 8pm, 20:00):"))
-            pid = self._pending_wizard.get(chat_id, {}).get("profile_id", "default")
-            self._pending_wizard[chat_id] = {"step": "setup_sched_stop", "profile_id": pid}
+            state = self._pending_wizard.get(chat_id, {})
+            pid = state.get("profile_id", "default")
+            new_state = {"step": "setup_sched_stop", "profile_id": pid}
+            if state.get("onboard_return"):
+                new_state["onboard_return"] = True
+            self._pending_wizard[chat_id] = new_state
             return
         ws.set_setting("schedule_end", value)
         await self._cb_setup_sched_done(query)
@@ -876,8 +884,12 @@ class TimeLimitMixin:
         if value == "custom":
             label = self._DAY_LABELS[day]
             await _edit_msg(query, _md(f"Reply with start time for {label} (e.g. 9am, 09:00):"))
-            pid = self._pending_wizard.get(chat_id, {}).get("profile_id", "default")
-            self._pending_wizard[chat_id] = {"step": f"setup_daystart:{day}", "profile_id": pid}
+            state = self._pending_wizard.get(chat_id, {})
+            pid = state.get("profile_id", "default")
+            new_state = {"step": f"setup_daystart:{day}", "profile_id": pid}
+            if state.get("onboard_return"):
+                new_state["onboard_return"] = True
+            self._pending_wizard[chat_id] = new_state
             return
         ws.set_setting(f"{day}_schedule_start", value)
         label = self._DAY_LABELS[day]
@@ -902,8 +914,12 @@ class TimeLimitMixin:
         if value == "custom":
             label = self._DAY_LABELS[day]
             await _edit_msg(query, _md(f"Reply with stop time for {label} (e.g. 9pm, 21:00):"))
-            pid = self._pending_wizard.get(chat_id, {}).get("profile_id", "default")
-            self._pending_wizard[chat_id] = {"step": f"setup_daystop:{day}", "profile_id": pid}
+            state = self._pending_wizard.get(chat_id, {})
+            pid = state.get("profile_id", "default")
+            new_state = {"step": f"setup_daystop:{day}", "profile_id": pid}
+            if state.get("onboard_return"):
+                new_state["onboard_return"] = True
+            self._pending_wizard[chat_id] = new_state
             return
         ws.set_setting(f"{day}_schedule_end", value)
         text, keyboard = self._setup_sched_day_grid(store=ws)
@@ -911,7 +927,8 @@ class TimeLimitMixin:
 
     async def _cb_setup_sched_done(self, query) -> None:
         """Final summary when schedule wizard completes."""
-        ws = self._wizard_store(query.message.chat_id)
+        chat_id = query.message.chat_id
+        ws = self._wizard_store(chat_id)
         start = ws.get_setting("schedule_start", "")
         end = ws.get_setting("schedule_end", "")
         start_disp = format_time_12h(start) if start else "not set"
@@ -931,6 +948,7 @@ class TimeLimitMixin:
                 lines.append(f"{label}: {ds_disp} \u2013 {de_disp}")
         lines.append(f"\nUse `/time <day> start|stop` to adjust later.")
         await _edit_msg(query, _md("\n".join(lines)))
+        await self._maybe_onboard_return(chat_id)
 
     async def _cb_setup_mode(self, query, mode: str) -> None:
         """Handle mode choice from wizard."""
@@ -966,8 +984,13 @@ class TimeLimitMixin:
         ws = self._wizard_store(chat_id)
         if value == "custom":
             await _edit_msg(query, "Reply with the number of minutes:")
-            pid = self._pending_wizard.get(chat_id, {}).get("profile_id", "default")
-            self._pending_wizard[chat_id] = {"step": "setup_simple", "profile_id": pid}
+            state = self._pending_wizard.get(chat_id, {})
+            pid = state.get("profile_id", "default")
+            onboard = state.get("onboard_return", False)
+            new_state = {"step": "setup_simple", "profile_id": pid}
+            if onboard:
+                new_state["onboard_return"] = True
+            self._pending_wizard[chat_id] = new_state
             return
         minutes = int(value)
         ws.set_setting("daily_limit_minutes", str(minutes))
@@ -979,6 +1002,7 @@ class TimeLimitMixin:
             f"customize specific days."
         )
         await _edit_msg(query, text)
+        await self._maybe_onboard_return(chat_id)
 
     async def _cb_setup_edu(self, query, value: str) -> None:
         """Handle edu limit selection in wizard."""
@@ -986,8 +1010,13 @@ class TimeLimitMixin:
         ws = self._wizard_store(chat_id)
         if value == "custom":
             await _edit_msg(query, "Reply with the number of minutes for **educational** limit:")
-            pid = self._pending_wizard.get(chat_id, {}).get("profile_id", "default")
-            self._pending_wizard[chat_id] = {"step": "setup_edu", "profile_id": pid}
+            state = self._pending_wizard.get(chat_id, {})
+            pid = state.get("profile_id", "default")
+            onboard = state.get("onboard_return", False)
+            new_state = {"step": "setup_edu", "profile_id": pid}
+            if onboard:
+                new_state["onboard_return"] = True
+            self._pending_wizard[chat_id] = new_state
             return
         minutes = int(value)
         ws.set_setting("edu_limit_minutes", str(minutes))
@@ -1010,8 +1039,13 @@ class TimeLimitMixin:
         ws = self._wizard_store(chat_id)
         if value == "custom":
             await _edit_msg(query, "Reply with the number of minutes for **entertainment** limit:")
-            pid = self._pending_wizard.get(chat_id, {}).get("profile_id", "default")
-            self._pending_wizard[chat_id] = {"step": "setup_fun", "profile_id": pid}
+            state = self._pending_wizard.get(chat_id, {})
+            pid = state.get("profile_id", "default")
+            onboard = state.get("onboard_return", False)
+            new_state = {"step": "setup_fun", "profile_id": pid}
+            if onboard:
+                new_state["onboard_return"] = True
+            self._pending_wizard[chat_id] = new_state
             return
         minutes = int(value)
         ws.set_setting("fun_limit_minutes", str(minutes))
@@ -1027,6 +1061,7 @@ class TimeLimitMixin:
             f"customize specific days."
         )
         await _edit_msg(query, text)
+        await self._maybe_onboard_return(chat_id)
 
     async def _cb_switch_confirm(self, query, choice: str) -> None:
         """Handle mode switch confirmation callback."""
@@ -1071,8 +1106,17 @@ class TimeLimitMixin:
         state = self._pending_wizard.get(chat_id)
         if not state:
             return  # No wizard active
-        text = update.message.text.strip()
+
+        # Route onboard_* steps to SetupMixin
         step = state["step"]
+        if step.startswith("onboard_"):
+            if await self._handle_onboard_reply(update, state):
+                return
+            # Unhandled onboard step (e.g. onboard_hub, onboard_child_pin_prompt)
+            # — ignore text input, these steps expect button presses only
+            return
+
+        text = update.message.text.strip()
         ws = self._wizard_store(chat_id)
 
         # Schedule wizard steps expect time input, not minutes
@@ -1083,6 +1127,7 @@ class TimeLimitMixin:
                     "Invalid time. Examples: 8am, 08:00, 2000, 8:00PM"
                 )
                 return
+            onboard = state.get("onboard_return", False)
             del self._pending_wizard[chat_id]
 
             if step == "setup_sched_start":
@@ -1110,6 +1155,8 @@ class TimeLimitMixin:
                     f"\nUse `/time <day> start|stop` to adjust later.",
                 ]
                 await update.effective_message.reply_text(_md("\n".join(lines)), parse_mode=MD2)
+                if onboard:
+                    await self._send_onboard_time_return(chat_id)
             elif step.startswith("setup_daystart:"):
                 day = step.split(":", 1)[1]
                 ws.set_setting(f"{day}_schedule_start", parsed)
@@ -1136,6 +1183,7 @@ class TimeLimitMixin:
         if not text.isdigit() or int(text) <= 0:
             await update.effective_message.reply_text("Please reply with a positive number of minutes.")
             return
+        onboard = state.get("onboard_return", False)
         minutes = int(text)
         del self._pending_wizard[chat_id]
 
@@ -1147,6 +1195,8 @@ class TimeLimitMixin:
                 f"  Daily cap: {minutes} min/day\n\n"
                 f"Use `/time <day> limit <min>` to customize specific days."
             ), parse_mode=MD2)
+            if onboard:
+                await self._send_onboard_time_return(chat_id)
         elif step == "setup_edu":
             ws.set_setting("edu_limit_minutes", str(minutes))
             self._auto_clear_mode("category", store=ws)
@@ -1172,3 +1222,5 @@ class TimeLimitMixin:
                 f"  Total: {total} min/day\n\n"
                 f"Use `/time <day> edu|fun <min>` to customize specific days."
             ), parse_mode=MD2)
+            if onboard:
+                await self._send_onboard_time_return(chat_id)

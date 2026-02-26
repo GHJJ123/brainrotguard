@@ -156,30 +156,10 @@ class CommandsMixin:
             await update.effective_message.reply_text("Failed to update PIN.")
 
     async def _cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Welcome message on first /start contact."""
+        """Send the setup hub."""
         if not await self._require_admin(update):
             return
-        text, markup = self._build_welcome_message()
-        await update.effective_message.reply_text(text, parse_mode=MD2, reply_markup=markup)
-
-    def _build_welcome_message(self) -> tuple[str, InlineKeyboardMarkup | None]:
-        """Build the welcome message with optional starter channels prompt."""
-        from version import __version__
-        msg = (
-            f"**BrainRotGuard v{__version__}**\n\n"
-            "YouTube approval system for kids. Your child searches and "
-            "requests videos through the web UI — you approve or deny "
-            "them right here in Telegram.\n\n"
-            "Use `/help` to see all available commands."
-        )
-        markup = None
-        if self._starter_channels:
-            msg += "\n\nWould you like to browse starter channels to get started?"
-            markup = InlineKeyboardMarkup([[
-                InlineKeyboardButton("Yes, show me", callback_data="starter_prompt:yes"),
-                InlineKeyboardButton("No thanks", callback_data="starter_prompt:no"),
-            ]])
-        return _md(msg), markup
+        await self._send_setup_hub(update)
 
     async def _cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not await self._require_admin(update):
@@ -220,6 +200,8 @@ class CommandsMixin:
             "`/child` - List child profiles\n"
             "`/child add <name> [pin]`\n"
             "`/child remove|rename|pin <name>`\n\n"
+            "**Setup:**\n"
+            "`/setup` - Interactive setup hub\n\n"
             f"{help_link}"
             "☕ [Buy me a coffee](https://ko-fi.com/coffee4jj)"
         ), parse_mode=MD2, disable_web_page_preview=True)

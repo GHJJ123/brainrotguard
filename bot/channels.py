@@ -63,7 +63,8 @@ class ChannelMixin:
             text, parse_mode=MD2, reply_markup=markup, disable_web_page_preview=True,
         )
 
-    def _render_starter_message(self, page: int = 0, store=None, profile_id: str = "default") -> tuple[str, InlineKeyboardMarkup | None]:
+    def _render_starter_message(self, page: int = 0, store=None, profile_id: str = "default",
+                                onboard: bool = False) -> tuple[str, InlineKeyboardMarkup | None]:
         """Build starter channels message with per-channel Import buttons and pagination."""
         s = store or self.video_store
         existing = s.get_channel_handles_set()
@@ -100,14 +101,22 @@ class ChannelMixin:
         nav = _nav_row(page, total, ps, f"starter_page:{profile_id}")
         if nav:
             buttons.append(nav)
+        if onboard:
+            buttons.append([InlineKeyboardButton("\u2190 Back to Setup", callback_data="onboard_chan_back")])
         markup = InlineKeyboardMarkup(buttons) if buttons else None
         return _md("\n".join(lines)), markup
+
+    def _is_onboard_active(self, chat_id: int) -> bool:
+        """Check if the setup hub onboard wizard is active for this chat."""
+        state = self._pending_wizard.get(chat_id, {})
+        return state.get("step", "").startswith("onboard_") or state.get("hub_message_id") is not None
 
     async def _cb_starter_page(self, query, profile_id: str, page: int) -> None:
         """Handle starter channels pagination."""
         _answer_bg(query)
         cs = self._child_store(profile_id)
-        text, markup = self._render_starter_message(page, store=cs, profile_id=profile_id)
+        onboard = self._is_onboard_active(query.message.chat_id)
+        text, markup = self._render_starter_message(page, store=cs, profile_id=profile_id, onboard=onboard)
         await _edit_msg(query, text, markup, disable_preview=True)
 
     async def _cb_starter_import(self, query, profile_id: str, idx: int) -> None:
@@ -147,7 +156,8 @@ class ChannelMixin:
 
         # Re-render the message immediately
         page = idx // self._STARTER_PAGE_SIZE
-        text, markup = self._render_starter_message(page, store=cs, profile_id=profile_id)
+        onboard = self._is_onboard_active(query.message.chat_id)
+        text, markup = self._render_starter_message(page, store=cs, profile_id=profile_id, onboard=onboard)
         await _edit_msg(query, text, markup, disable_preview=True)
 
     # --- Allow / block / remove ---

@@ -74,7 +74,8 @@ Once BrainRotGuard is running, these commands are available in your Telegram cha
 |---------|-------------|
 | `/shorts [on\|off]` | Enable or disable YouTube Shorts playback |
 | `/changelog` | Show what's new in the latest version |
-| `/start` | Welcome message explaining bot purpose and starter channels |
+| `/start` | Setup hub — interactive setup wizard with children, time, channels, shorts |
+| `/setup` | Alias for `/start` — same setup hub |
 
 ## Approval Flow
 

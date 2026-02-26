@@ -23,13 +23,14 @@ from bot.activity import ActivityMixin
 from bot.approval import ApprovalMixin
 from bot.channels import ChannelMixin
 from bot.commands import CommandsMixin
+from bot.setup import SetupMixin
 from bot.timelimits import TimeLimitMixin
 from data.child_store import ChildStore
 
 logger = logging.getLogger(__name__)
 
 
-class BrainRotGuardBot(ApprovalMixin, ChannelMixin, TimeLimitMixin, CommandsMixin, ActivityMixin):
+class BrainRotGuardBot(SetupMixin, ApprovalMixin, ChannelMixin, TimeLimitMixin, CommandsMixin, ActivityMixin):
     """Telegram bot for parent video approval."""
 
     def __init__(self, bot_token: str, admin_chat_id: str, video_store, config=None,
@@ -185,6 +186,7 @@ class BrainRotGuardBot(ApprovalMixin, ChannelMixin, TimeLimitMixin, CommandsMixi
         self._app.add_handler(CommandHandler("changelog", self._cmd_changelog))
         self._app.add_handler(CommandHandler("shorts", self._cmd_shorts))
         self._app.add_handler(CommandHandler("child", self._cmd_child))
+        self._app.add_handler(CommandHandler("setup", self._cmd_setup))
         self._app.add_handler(MessageHandler(
             filters.Regex(r'^/revoke_[a-zA-Z0-9_]{11}$'), self._cmd_revoke,
         ))
@@ -198,17 +200,22 @@ class BrainRotGuardBot(ApprovalMixin, ChannelMixin, TimeLimitMixin, CommandsMixi
         await self._app.updater.start_polling(drop_pending_updates=True)
         logger.info("BrainRotGuard bot started")
 
-        # First-run: send welcome with starter prompt if channel list is empty
-        if self._starter_channels and not self.video_store.get_channel_handles_set():
+        # First-run: send setup hub if channel list is empty
+        if not self.video_store.get_channel_handles_set():
             try:
-                text, markup = self._build_welcome_message()
-                await self._app.bot.send_message(
-                    chat_id=self.admin_chat_id,
+                chat_id = int(self.admin_chat_id)
+                text, markup = self._build_setup_hub(chat_id)
+                msg = await self._app.bot.send_message(
+                    chat_id=chat_id,
                     text=text,
                     reply_markup=markup,
                     parse_mode=MD2,
                 )
-                logger.info("Sent welcome message to admin (first run)")
+                self._pending_wizard[chat_id] = {
+                    "step": "onboard_hub",
+                    "hub_message_id": msg.message_id,
+                }
+                logger.info("Sent setup hub to admin (first run)")
             except Exception as e:
                 logger.error(f"Failed to send first-run message: {e}")
 
@@ -331,6 +338,23 @@ class BrainRotGuardBot(ApprovalMixin, ChannelMixin, TimeLimitMixin, CommandsMixi
         # unallow/unblock: channel names may contain colons → rejoin from index 2
         CallbackRoute("unallow",         "_cb_channel_remove",      min_parts=3, answer=None, rejoin_from=2),
         CallbackRoute("unblock",         "_cb_channel_remove",      min_parts=3, answer=None, rejoin_from=2),
+
+        # Setup hub (onboard)
+        CallbackRoute("onboard_children",       "_cb_onboard_children",        min_parts=1, answer=None),
+        CallbackRoute("onboard_child_rename",   "_cb_onboard_child_rename",    min_parts=1, answer=None),
+        CallbackRoute("onboard_child_add",      "_cb_onboard_child_add",       min_parts=1, answer=None),
+        CallbackRoute("onboard_child_pin",      "_cb_onboard_child_pin",       min_parts=2, answer=None),
+        CallbackRoute("onboard_child_back",     "_cb_onboard_child_back",      min_parts=1, answer=None),
+        CallbackRoute("onboard_channels",       "_cb_onboard_channels",        min_parts=1, answer=None),
+        CallbackRoute("onboard_chan_sel",        "_cb_onboard_channels_sel",    min_parts=2, answer=None),
+        CallbackRoute("onboard_chan_back",       "_cb_onboard_channels_back",   min_parts=1, answer=None),
+        CallbackRoute("onboard_time",           "_cb_onboard_time",            min_parts=1, answer=None),
+        CallbackRoute("onboard_time_sel",        "_cb_onboard_time_sel",       min_parts=2, answer=None),
+        CallbackRoute("onboard_time_back",       "_cb_onboard_time_back",      min_parts=1, answer=None),
+        CallbackRoute("onboard_shorts",         "_cb_onboard_shorts",          min_parts=1, answer=None),
+        CallbackRoute("onboard_shorts_sel",      "_cb_onboard_shorts_select",  min_parts=2, answer=None),
+        CallbackRoute("onboard_shorts_tog",      "_cb_onboard_shorts_toggle",  min_parts=3, answer=None),
+        CallbackRoute("onboard_shorts_back",     "_cb_onboard_shorts_back",    min_parts=1, answer=None),
 
         # Time limit wizard
         CallbackRoute("setup_top",          "_cb_setup_top",          min_parts=2, answer=""),
