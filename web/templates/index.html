@@ -110,7 +110,7 @@
             </div>
             <div class="video-info">
                 <h3 class="video-title">{{ video.title }}</h3>
-                <p class="video-channel">{{ video.channel_name }}{% if video.view_count %} <span class="video-views-inline">{{ video.view_count | format_views }} views</span>{% endif %}</p>
+                <p class="video-channel">{{ video.channel_name }}{% if video.yt_view_count %} <span class="video-views-inline">{{ video.yt_view_count | format_views }} views</span>{% endif %}</p>
             </div>
         </a>
         {% endfor %}
@@ -310,7 +310,7 @@
             '</div>' +
             '<div class="video-info">' +
                 '<h3 class="video-title">' + escapeHtml(v.title || '') + '</h3>' +
-                '<p class="video-channel">' + escapeHtml(v.channel_name || '') + (v.view_count ? ' <span class="video-views-inline">' + escapeHtml(formatViews(v.view_count)) + ' views</span>' : '') + '</p>' +
+                '<p class="video-channel">' + escapeHtml(v.channel_name || '') + ((v.view_count || v.yt_view_count) ? ' <span class="video-views-inline">' + escapeHtml(formatViews(v.view_count || v.yt_view_count)) + ' views</span>' : '') + '</p>' +
             '</div>';
         return a;
     }

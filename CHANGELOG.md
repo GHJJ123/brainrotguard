@@ -1,4 +1,12 @@
 # Changelog
+## v1.27.5 - 2026-02-26
+
+**Added**
+- YouTube view count (`yt_view_count`) stored at request time — "Your Requests" section now shows real YouTube views instead of internal watch count
+
+**Changed**
+- Separated YouTube views (`yt_view_count`) from internal watch counter (`view_count`) in database — parent-facing bot commands (`/approved`, `/stats`) show internal counts, web UI shows YouTube views
+
 ## v1.27.4 - 2026-02-26
 
 **Added**

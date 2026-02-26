@@ -104,6 +104,7 @@ class VideoStore:
         self._add_column_if_missing("videos", "is_short", "INTEGER DEFAULT 0")
         self._add_column_if_missing("profiles", "avatar_icon", "TEXT")
         self._add_column_if_missing("profiles", "avatar_color", "TEXT")
+        self._add_column_if_missing("videos", "yt_view_count", "INTEGER DEFAULT 0")
         self.conn.execute("""
             CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
@@ -142,7 +143,7 @@ class VideoStore:
         self._migrate_profile_id()
 
     _ALLOWED_TABLES = {"channels", "videos", "watch_log", "settings", "search_log", "word_filters", "profiles"}
-    _ALLOWED_COLUMNS = {"channel_id", "handle", "category", "is_short", "profile_id", "avatar_icon", "avatar_color"}
+    _ALLOWED_COLUMNS = {"channel_id", "handle", "category", "is_short", "profile_id", "avatar_icon", "avatar_color", "yt_view_count"}
 
     def _add_column_if_missing(self, table: str, column: str, col_type: str) -> None:
         """Add a column to a table if it doesn't already exist (migration helper)."""
@@ -376,6 +377,7 @@ class VideoStore:
         channel_id: Optional[str] = None,
         is_short: bool = False,
         profile_id: str = "default",
+        yt_view_count: Optional[int] = None,
     ) -> dict:
         """
         Add a new video request. If already exists for this profile, return existing.
@@ -386,10 +388,10 @@ class VideoStore:
             self.conn.execute(
                 """
                 INSERT OR IGNORE INTO videos
-                (video_id, title, channel_name, thumbnail_url, duration, channel_id, is_short, profile_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (video_id, title, channel_name, thumbnail_url, duration, channel_id, is_short, profile_id, yt_view_count)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (video_id, title, channel_name, thumbnail_url, duration, channel_id, int(is_short), profile_id)
+                (video_id, title, channel_name, thumbnail_url, duration, channel_id, int(is_short), profile_id, yt_view_count or 0)
             )
             self.conn.commit()
             return self._get_video_unlocked(video_id, profile_id)

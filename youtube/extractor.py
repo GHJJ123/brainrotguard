@@ -91,6 +91,7 @@ async def extract_metadata(video_id: str) -> Optional[dict]:
                     'channel_id': info.get('channel_id'),
                     'thumbnail_url': _safe_thumbnail(info.get('thumbnail'), video_id),
                     'duration': info.get('duration'),
+                    'view_count': info.get('view_count'),
                     'is_short': _is_short_url(info.get('webpage_url')),
                 }
         except Exception as e:

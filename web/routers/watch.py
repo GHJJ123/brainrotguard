@@ -75,6 +75,7 @@ async def watch_video(request: Request, video_id: str):
             duration=metadata.get('duration'),
             channel_id=metadata.get('channel_id'),
             is_short=metadata.get('is_short', False),
+            yt_view_count=metadata.get('view_count'),
         )
         cs.update_status(video_id, "approved")
         invalidate_catalog_cache(state)

@@ -131,6 +131,8 @@ async def request_video(
         channel_id = metadata.get('channel_id')
         is_short = metadata.get('is_short', False)
 
+        view_count = metadata.get('view_count')
+
         # Check if channel is blocked -> auto-deny
         if cs.is_channel_blocked(channel_name, channel_id=channel_id or ""):
             cs.add_video(
@@ -141,6 +143,7 @@ async def request_video(
                 duration=metadata.get('duration'),
                 channel_id=channel_id,
                 is_short=is_short,
+                yt_view_count=view_count,
             )
             cs.update_status(video_id, "denied")
             invalidate_catalog_cache(state)
@@ -159,6 +162,7 @@ async def request_video(
                 duration=metadata.get('duration'),
                 channel_id=channel_id,
                 is_short=is_short,
+                yt_view_count=view_count,
             )
             cs.update_status(video_id, "approved")
             invalidate_catalog_cache(state)
@@ -172,6 +176,7 @@ async def request_video(
             duration=metadata.get('duration'),
             channel_id=channel_id,
             is_short=is_short,
+            view_count=view_count,
         )
 
         notify_cb = state.notify_callback
