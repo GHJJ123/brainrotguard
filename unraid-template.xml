@@ -14,6 +14,7 @@
     <Overview>YouTube approval system for kids. Your child searches YouTube via a kid-friendly web UI, you get a Telegram notification with thumbnail and details, tap Approve or Deny, and approved videos play via privacy-enhanced embeds. Includes channel allow/block lists, daily watch time limits, scheduled access windows, category labeling, and search history tracking. Pair with DNS blocking (Pi-hole/AdGuard) for full control.</Overview>
     <Category>MediaApp:Video HomeAutomation Tools:</Category>
     <WebUI>http://[IP]:[PORT:8080]</WebUI>
+    <TemplateURL>https://raw.githubusercontent.com/GHJJ123/brainrotguard/main/unraid-template.xml</TemplateURL>
     <Icon>https://raw.githubusercontent.com/GHJJ123/brainrotguard/main/web/static/brg-icon-512.png</Icon>
     <ExtraSearchTerms>youtube kids parental controls screen time telegram</ExtraSearchTerms>
     <Requires>A Telegram Bot Token (create one via @BotFather) and your Telegram Chat ID.</Requires>
