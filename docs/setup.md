@@ -9,6 +9,7 @@ Full walkthrough for getting BrainRotGuard running. If you already know your way
 - [Step 4: Start It Up](#step-4-start-it-up)
 - [Step 5: Block YouTube on the Kid's Devices](#step-5-block-youtube-on-the-kids-devices)
 - [Using the Pre-Built Docker Image](#using-the-pre-built-docker-image)
+- [Installing on Unraid](#installing-on-unraid)
 - [Running Without Docker](#running-without-docker)
 
 ## Step 1: Create a Telegram Bot
@@ -148,6 +149,48 @@ To update to a new version:
 docker compose -f docker-compose.example.yml pull
 docker compose -f docker-compose.example.yml up -d
 ```
+
+## Installing on Unraid
+
+BrainRotGuard has an Unraid template for guided installation through the Docker tab.
+
+### Add the Template Repository
+
+1. In the Unraid web UI, go to **Docker** > **Add Container** > **Template Repositories**
+2. Add this URL:
+   ```
+   https://raw.githubusercontent.com/GHJJ123/brainrotguard/main/unraid-template.xml
+   ```
+3. Click **Save**
+
+### Create the Container
+
+1. Go to **Docker** > **Add Container**
+2. Select **BrainRotGuard** from the template dropdown
+3. Fill in the required fields:
+
+   | Field | What to put |
+   |-------|------------|
+   | **Telegram Bot Token** | The token from [@BotFather](https://core.telegram.org/bots#how-do-i-create-a-bot) |
+   | **Telegram Admin Chat ID** | Your numeric chat ID ([how to find it](#step-2-get-your-chat-id)) |
+
+4. Optional fields (click **Show more settings** if needed):
+
+   | Field | What it does | Default |
+   |-------|-------------|---------|
+   | **PIN Code** | Protect the web UI with a PIN | No PIN |
+   | **Base URL** | LAN address for Telegram deep links (e.g. `http://192.168.1.50:8080`) | Auto-detected |
+   | **Daily Watch Limit** | Daily screen time limit in minutes (0 = unlimited) | 120 |
+   | **Timezone** | For daily resets and scheduled access windows | America/New_York |
+   | **Config File** | Mount a custom `config.yaml` for advanced settings | Not needed |
+
+5. Click **Apply**
+
+The container will pull the image and start. Open `http://<your-unraid-ip>:8080` on the kid's tablet.
+
+### Updating
+
+Unraid handles updates automatically when a new image is pushed. You'll see an update notification in the Docker tab — click **Apply Update** to pull the latest version.
 
 ## Running Without Docker
 
