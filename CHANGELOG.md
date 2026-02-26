@@ -1,4 +1,16 @@
 # Changelog
+## v1.27.0 - 2026-02-25
+
+**Added**
+- Interactive setup hub: `/start` and `/setup` now show a persistent message with 4 configurable sections (Children, Time Limits, Channels, Shorts)
+- Each section has its own sub-menu with inline buttons — tap to configure, tap Back to return to the hub
+- Children section: rename default profile, add children, set PINs — all via inline buttons and text replies
+- Channels section: browse and import starter channels per profile with Back to Setup navigation
+- Time Limits section: chains to existing `/time setup` wizard, returns to hub on completion
+- Shorts section: per-profile enable/disable toggle
+- Hub shows live status for all sections (child names, limit values, channel counts, shorts state)
+- First-run auto-message now sends the setup hub instead of a static welcome
+
 ## v1.26.6 - 2026-02-25
 
 **Changed**
