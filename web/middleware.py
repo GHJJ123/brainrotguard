@@ -45,7 +45,7 @@ class PinAuthMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next) -> Response:
         # Allow unauthenticated access to login, static assets, and specific read-only APIs
-        if request.url.path.startswith(("/login", "/static", "/help")):
+        if request.url.path.startswith(("/login", "/static")):
             return await call_next(request)
         if request.url.path.startswith(_API_AUTH_EXEMPT):
             return await call_next(request)

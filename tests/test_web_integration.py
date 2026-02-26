@@ -161,9 +161,6 @@ class TestPageLoads:
         resp = auth_client.get("/")
         assert resp.status_code == 200
 
-    def test_help_page_no_auth(self, client):
-        resp = client.get("/help")
-        assert resp.status_code == 200
 
 
 # ---------------------------------------------------------------------------

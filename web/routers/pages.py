@@ -93,9 +93,3 @@ async def activity_page(request: Request):
         "time_info": time_info,
         "cat_info": cat_info,
     })
-
-
-@router.get("/help", response_class=HTMLResponse)
-async def help_page(request: Request):
-    """Telegram bot commands reference (no auth required)."""
-    return templates.TemplateResponse("help.html", {"request": request})
