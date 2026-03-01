@@ -1,6 +1,8 @@
 services:
   brainrotguard:
-    build: .
+    build:
+      context: .
+      network: host
     image: brainrotguard
     container_name: brainrotguard
     restart: unless-stopped
