@@ -176,7 +176,7 @@ async def request_video(
             duration=metadata.get('duration'),
             channel_id=channel_id,
             is_short=is_short,
-            view_count=view_count,
+            yt_view_count=view_count,
         )
 
         notify_cb = state.notify_callback
