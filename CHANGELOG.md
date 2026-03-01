@@ -1,4 +1,9 @@
 # Changelog
+## v1.28.0 - 2026-03-01
+
+**Changed**
+- Shorts now shuffle daily — different selection each day instead of the same popularity-ordered shorts repeating indefinitely
+
 ## v1.27.7 - 2026-03-01
 
 **Fixed**
