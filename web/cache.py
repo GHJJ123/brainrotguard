@@ -286,21 +286,18 @@ def build_shorts_catalog(state, profile_id: str = "default") -> list[dict]:
     cache = get_profile_cache(state, profile_id)
     shorts_channels = cache.get("shorts", {})
     if shorts_channels:
-        chan_lists = [list(vids) for vids in shorts_channels.values() if vids]
-        indices = [0] * len(chan_lists)
-        while True:
-            added = False
-            for i, vids in enumerate(chan_lists):
-                if indices[i] < len(vids):
-                    v = vids[indices[i]]
-                    vid = v.get("video_id", "")
-                    indices[i] += 1
-                    if vid and vid not in seen_ids:
-                        seen_ids.add(vid)
-                        shorts.append(dict(v))
-                    added = True
-            if not added:
-                break
+        # YouTube's /shorts tab returns newest-first per channel.
+        # Tag each short with its position (lower = newer) then sort
+        # globally so the newest shorts across all channels rise to top.
+        for vids in shorts_channels.values():
+            for idx, v in enumerate(vids):
+                vid = v.get("video_id", "")
+                if vid and vid not in seen_ids:
+                    seen_ids.add(vid)
+                    entry = dict(v)
+                    entry["_recency"] = idx
+                    shorts.append(entry)
+        shorts.sort(key=lambda v: v.get("_recency", 0))
 
     if child_store:
         for v in child_store.get_approved_shorts():
@@ -315,6 +312,9 @@ def build_shorts_catalog(state, profile_id: str = "default") -> list[dict]:
     wf = get_word_filter_patterns(state)
     if wf:
         shorts = [v for v in shorts if not title_matches_filter(v.get("title", ""), wf)]
+
+    for v in shorts:
+        v.pop("_recency", None)
 
     return shorts
 
