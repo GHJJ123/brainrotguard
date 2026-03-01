@@ -1,8 +1,10 @@
 """Cache management: channel cache, catalog builders, YT script proxy, word filters."""
 
 import asyncio
+import datetime
 import hashlib
 import logging
+import random
 import re
 import time
 from urllib.parse import urlparse
@@ -286,18 +288,16 @@ def build_shorts_catalog(state, profile_id: str = "default") -> list[dict]:
     cache = get_profile_cache(state, profile_id)
     shorts_channels = cache.get("shorts", {})
     if shorts_channels:
-        # YouTube's /shorts tab returns newest-first per channel.
-        # Tag each short with its position (lower = newer) then sort
-        # globally so the newest shorts across all channels rise to top.
+        # Collect all shorts, then shuffle with a daily seed so the
+        # selection rotates each day but stays consistent within a day.
         for vids in shorts_channels.values():
-            for idx, v in enumerate(vids):
+            for v in vids:
                 vid = v.get("video_id", "")
                 if vid and vid not in seen_ids:
                     seen_ids.add(vid)
-                    entry = dict(v)
-                    entry["_recency"] = idx
-                    shorts.append(entry)
-        shorts.sort(key=lambda v: v.get("_recency", 0))
+                    shorts.append(dict(v))
+        day_seed = datetime.date.today().isoformat() + profile_id
+        random.Random(day_seed).shuffle(shorts)
 
     if child_store:
         for v in child_store.get_approved_shorts():
@@ -312,9 +312,6 @@ def build_shorts_catalog(state, profile_id: str = "default") -> list[dict]:
     wf = get_word_filter_patterns(state)
     if wf:
         shorts = [v for v in shorts if not title_matches_filter(v.get("title", ""), wf)]
-
-    for v in shorts:
-        v.pop("_recency", None)
 
     return shorts
 
