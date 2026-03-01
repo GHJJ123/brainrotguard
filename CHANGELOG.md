@@ -1,4 +1,9 @@
 # Changelog
+## v1.27.7 - 2026-03-01
+
+**Fixed**
+- Video requests from new/unknown channels failed with internal server error since v1.27.5 — wrong keyword argument (`view_count` instead of `yt_view_count`) in the pending-approval code path
+
 ## v1.27.6 - 2026-02-26
 
 **Changed**
