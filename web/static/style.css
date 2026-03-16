@@ -498,6 +498,38 @@ main {
     height: 44px;
 }
 
+.video-fallback-fullscreen,
+.video-fallback-fullscreen body {
+    overflow: hidden;
+}
+
+.video-wrapper.video-wrapper-fallback-fullscreen {
+    position: fixed;
+    inset: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
+    width: auto;
+    height: auto;
+    padding-bottom: 0;
+    border-radius: 0;
+    box-shadow: none;
+    background: #000;
+    z-index: 450;
+}
+
+.video-wrapper.video-wrapper-fallback-fullscreen iframe {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.video-wrapper.video-wrapper-fallback-fullscreen .fs-toggle {
+    opacity: 1;
+    bottom: 16px;
+    right: 16px;
+    width: 44px;
+    height: 44px;
+}
+
 
 .watch-info {
     margin-top: 20px;

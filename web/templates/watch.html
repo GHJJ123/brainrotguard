@@ -82,16 +82,73 @@ var backToLibraryText = {{ t("Back to Library") | tojson }};
 var remainingTodayText = {{ t("{remaining} min remaining today", remaining="__REMAINING__") | tojson }};
 var noTimeRemainingText = {{ t("No time remaining today") | tojson }};
 var limitMinutes = {{ time_info.limit_min if time_info else 0 }};
+var fallbackFullscreenActive = false;
+
+function getFullscreenElement() {
+    return document.fullscreenElement || document.webkitFullscreenElement;
+}
+
+function prefersFallbackFullscreen() {
+    return window.matchMedia('(pointer: coarse)').matches
+        && (window.matchMedia('(display-mode: standalone)').matches || !!window.navigator.standalone);
+}
+
+function enterFallbackFullscreen() {
+    var wrapper = document.querySelector('.video-wrapper');
+    if (!wrapper) return;
+    fallbackFullscreenActive = true;
+    wrapper.classList.add('video-wrapper-fallback-fullscreen');
+    document.documentElement.classList.add('video-fallback-fullscreen');
+    document.body.classList.add('video-fallback-fullscreen');
+    updateFsButton();
+}
+
+function exitFallbackFullscreen() {
+    var wrapper = document.querySelector('.video-wrapper');
+    fallbackFullscreenActive = false;
+    if (wrapper) wrapper.classList.remove('video-wrapper-fallback-fullscreen');
+    document.documentElement.classList.remove('video-fallback-fullscreen');
+    document.body.classList.remove('video-fallback-fullscreen');
+    updateFsButton();
+}
 
 function toggleFullscreen() {
     var wrapper = document.querySelector('.video-wrapper');
     if (!wrapper) return;
-    var fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+    var fsEl = getFullscreenElement();
     if (fsEl) {
         (document.exitFullscreen || document.webkitExitFullscreen).call(document);
-    } else {
-        var rfs = wrapper.requestFullscreen || wrapper.webkitRequestFullscreen;
-        if (rfs) rfs.call(wrapper).catch(function() {});
+        return;
+    }
+    if (fallbackFullscreenActive) {
+        exitFallbackFullscreen();
+        return;
+    }
+    if (prefersFallbackFullscreen()) {
+        enterFallbackFullscreen();
+        return;
+    }
+
+    var rfs = wrapper.requestFullscreen || wrapper.webkitRequestFullscreen;
+    if (!rfs) {
+        enterFallbackFullscreen();
+        return;
+    }
+
+    try {
+        var result = rfs.call(wrapper);
+        if (result && typeof result.catch === 'function') {
+            result.catch(function() {
+                enterFallbackFullscreen();
+            });
+        }
+        window.setTimeout(function() {
+            if (!getFullscreenElement() && !fallbackFullscreenActive) {
+                enterFallbackFullscreen();
+            }
+        }, 350);
+    } catch (e) {
+        enterFallbackFullscreen();
     }
 }
 
@@ -99,15 +156,22 @@ document.addEventListener('fullscreenchange', updateFsButton);
 document.addEventListener('webkitfullscreenchange', updateFsButton);
 function updateFsButton() {
     var btn = document.getElementById('fs-toggle');
-    if (btn) btn.classList.toggle('fs-exit', !!(document.fullscreenElement || document.webkitFullscreenElement));
+    if (btn) btn.classList.toggle('fs-exit', !!getFullscreenElement() || fallbackFullscreenActive);
 }
+
+document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape' && fallbackFullscreenActive) {
+        exitFallbackFullscreen();
+    }
+});
 
 // Replace placeholder div with sandboxed iframe before YT API loads
 (function() {
     var placeholder = document.getElementById('ytplayer');
     var iframe = document.createElement('iframe');
     iframe.id = 'ytplayer';
-    iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin');
+    iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation');
+    iframe.setAttribute('allow', 'autoplay; fullscreen; encrypted-media; picture-in-picture');
     iframe.setAttribute('allowfullscreen', '');
     iframe.src = 'https://www.youtube-nocookie.com/embed/' + videoId
         + '?enablejsapi=1&autoplay=0&rel=0&modestbranding=1'
