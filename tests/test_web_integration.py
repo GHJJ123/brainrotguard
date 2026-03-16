@@ -222,6 +222,36 @@ class TestSearchFlow:
         assert resp.status_code == 200
         assert "Test Video" in resp.text
 
+    def test_request_pending_video_resends_notification(self, auth_client):
+        app = auth_client.app
+        store = app.state.video_store
+        store.add_video(
+            video_id="jjpjjcMeujM",
+            title="Pending Video",
+            channel_name="Test Channel",
+            thumbnail_url=None,
+            duration=60,
+            channel_id="UCtest123",
+            is_short=False,
+            profile_id="default",
+        )
+        notify_cb = app.state.notify_callback
+        notify_cb.reset_mock()
+
+        home = auth_client.get("/")
+        csrf_match = re.search(r'name="csrf_token"\s+value="([^"]+)"', home.text)
+        csrf = csrf_match.group(1) if csrf_match else ""
+
+        resp = auth_client.post(
+            "/request",
+            data={"video_id": "jjpjjcMeujM", "csrf_token": csrf},
+            follow_redirects=False,
+        )
+
+        assert resp.status_code in (302, 303)
+        assert resp.headers.get("location", "") == "/pending/jjpjjcMeujM"
+        notify_cb.assert_awaited_once()
+
     def test_search_calls_extractor(self, store):
         app = _create_test_app(store)
         c = TestClient(app, raise_server_exceptions=False)

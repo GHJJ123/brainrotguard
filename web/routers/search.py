@@ -114,6 +114,9 @@ async def request_video(
     if existing:
         if existing["status"] == "approved":
             return RedirectResponse(url=f"/watch/{video_id}", status_code=303)
+        notify_cb = state.notify_callback
+        if existing["status"] == "pending" and notify_cb:
+            await notify_cb(existing, profile_id)
         return RedirectResponse(url=f"/pending/{video_id}", status_code=303)
 
     # Prevent duplicate notifications from concurrent requests for the same video
