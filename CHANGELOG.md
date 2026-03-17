@@ -1,4 +1,11 @@
 # Changelog
+## v1.30.0 - 2026-03-17
+
+**Added**
+- `/autoload [on|off]` toggle: switch homepage between Show More mode (default, all cards rendered server-side, revealed in batches) and infinite scroll mode (fetches from API on demand)
+- Show More mode: channel and category filters work client-side via DOM filtering (no API calls)
+- Norwegian translations for autoload command messages
+
 ## v1.29.0 - 2026-03-17
 
 **Added**
