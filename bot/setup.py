@@ -3,7 +3,7 @@
 import logging
 import re
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import ForceReply, Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
 from bot.helpers import _md, _answer_bg, _edit_msg, MD2
@@ -16,22 +16,30 @@ class SetupMixin:
 
     # --- Hub ---
 
+    async def _send_reply_prompt(self, message, prompt: str, markdown: bool = False) -> None:
+        """Send a ForceReply prompt so free-text steps work reliably in groups."""
+        kwargs = {"reply_markup": ForceReply(selective=True)}
+        text = _md(prompt) if markdown else prompt
+        if markdown:
+            kwargs["parse_mode"] = MD2
+        await message.reply_text(text, **kwargs)
+
     def _build_setup_hub(self, chat_id: int) -> tuple[str, InlineKeyboardMarkup]:
         """Build the setup hub message text + 4 category buttons with current status."""
         from version import __version__
         profiles = self._get_profiles()
 
         # Children status
-        if len(profiles) == 1 and profiles[0]["display_name"] == "default" and not profiles[0]["pin"]:
-            children_status = "not configured"
+        if len(profiles) == 1 and profiles[0]["display_name"].lower() == "default" and not profiles[0]["pin"]:
+            children_status = self.tr("not configured")
         elif profiles:
             parts = []
             for p in profiles:
-                pin = " (PIN set)" if p["pin"] else ""
+                pin = self.tr(" (PIN set)") if p["pin"] else ""
                 parts.append(f"{p['display_name']}{pin}")
             children_status = ", ".join(parts)
         else:
-            children_status = "not configured"
+            children_status = self.tr("not configured")
 
         # Time limits status
         time_parts = []
@@ -42,24 +50,24 @@ class SetupMixin:
             fun = cs.get_setting("fun_limit_minutes", "")
             sched_start = cs.get_setting("schedule_start", "")
             if simple:
-                time_parts.append(f"{p['display_name']}: {simple}m/day")
+                time_parts.append(f"{p['display_name']}: {self.tr('{minutes}m/day', minutes=simple)}")
             elif edu or fun:
-                e = f"{edu}m edu" if edu else ""
-                f_ = f"{fun}m fun" if fun else ""
+                e = self.tr("{minutes}m edu", minutes=edu) if edu else ""
+                f_ = self.tr("{minutes}m fun", minutes=fun) if fun else ""
                 time_parts.append(f"{p['display_name']}: {' / '.join(x for x in [e, f_] if x)}")
             elif sched_start:
-                time_parts.append(f"{p['display_name']}: schedule only")
+                time_parts.append(f"{p['display_name']}: {self.tr('schedule only')}")
         if time_parts:
             time_status = "; ".join(time_parts) if len(profiles) > 1 else time_parts[0].split(": ", 1)[1]
         else:
-            time_status = "not configured"
+            time_status = self.tr("not configured")
 
         # Channels status
         total_allowed = 0
         for p in profiles:
             cs = self._child_store(p["id"])
             total_allowed += len(cs.get_channels_with_ids("allowed"))
-        channels_status = f"{total_allowed} allowed" if total_allowed else "0 channels"
+        channels_status = self.tr("{channels} channels", channels=total_allowed)
 
         # Shorts status
         shorts_parts = []
@@ -74,32 +82,37 @@ class SetupMixin:
                 enabled = False
             shorts_parts.append((p["display_name"], enabled))
         if not shorts_parts:
-            shorts_status = "disabled"
+            shorts_status = self.tr("disabled")
         elif len(profiles) > 1:
-            shorts_status = "; ".join(f"{name}: {'enabled' if e else 'disabled'}" for name, e in shorts_parts)
+            shorts_status = "; ".join(
+                f"{name}: {self.tr('enabled') if enabled else self.tr('disabled')}"
+                for name, enabled in shorts_parts
+            )
         else:
-            shorts_status = "enabled" if shorts_parts[0][1] else "disabled"
+            shorts_status = self.tr("enabled") if shorts_parts[0][1] else self.tr("disabled")
 
+        intro = self.tr(
+            "BrainRotGuard v{version}\n\nYouTube approval system for kids. Tap a section below to set things up.",
+            version=__version__,
+        )
         text = (
-            f"**BrainRotGuard v{__version__}**\n\n"
-            "YouTube approval system for kids. Tap a section "
-            "below to set things up.\n\n"
-            f"  Children — {children_status}\n"
-            f"  Time Limits — {time_status}\n"
-            f"  Channels — {channels_status}\n"
-            f"  Shorts — {shorts_status}"
+            f"{intro}\n\n"
+            f"  {self.tr('Children')} — {children_status}\n"
+            f"  {self.tr('Time Limits')} — {time_status}\n"
+            f"  {self.tr('Channels')} — {channels_status}\n"
+            f"  {self.tr('Shorts')} — {shorts_status}"
         )
 
         keyboard = InlineKeyboardMarkup([
             [
-                InlineKeyboardButton("\U0001f9d2 Children", callback_data="onboard_children"),
-                InlineKeyboardButton("\u23f0 Time Limits", callback_data="onboard_time"),
+                InlineKeyboardButton(f"\U0001f9d2 {self.tr('Children')}", callback_data="onboard_children"),
+                InlineKeyboardButton(f"\u23f0 {self.tr('Time Limits')}", callback_data="onboard_time"),
             ],
             [
-                InlineKeyboardButton("\U0001f4fa Channels", callback_data="onboard_channels"),
-                InlineKeyboardButton("\U0001f3ac Shorts", callback_data="onboard_shorts"),
+                InlineKeyboardButton(f"\U0001f4fa {self.tr('Channels')}", callback_data="onboard_channels"),
+                InlineKeyboardButton(f"\U0001f3ac {self.tr('Shorts')}", callback_data="onboard_shorts"),
             ],
-            [InlineKeyboardButton("\u2705 Done", callback_data="onboard_done")],
+            [InlineKeyboardButton(f"\u2705 {self.tr('Done')}", callback_data="onboard_done")],
         ])
         return _md(text), keyboard
 
@@ -150,21 +163,21 @@ class SetupMixin:
     def _build_children_submenu(self) -> tuple[str, InlineKeyboardMarkup]:
         """Render children sub-menu showing current profiles."""
         profiles = self._get_profiles()
-        lines = ["**Children Setup**\n"]
-        if not profiles or (len(profiles) == 1 and profiles[0]["display_name"] == "default"):
-            lines.append("Current: default (no name)")
+        lines = [f"**{self.tr('Children Setup')}**\n"]
+        if not profiles or (len(profiles) == 1 and profiles[0]["display_name"].lower() == "default"):
+            lines.append(self.tr("Current: default (no name)"))
         else:
             for p in profiles:
-                pin = " (PIN set)" if p["pin"] else " (no PIN)"
+                pin = self.tr(" (PIN set)") if p["pin"] else self.tr(" (no PIN)")
                 lines.append(f"  {p['display_name']}{pin}")
 
         buttons = []
         # Show rename button if default profile exists (unnamed)
-        has_default = any(p["display_name"] == "default" for p in profiles)
+        has_default = any(p["display_name"].lower() == "default" for p in profiles)
         if has_default:
-            buttons.append([InlineKeyboardButton("Rename Default", callback_data="onboard_child_rename")])
-        buttons.append([InlineKeyboardButton("Add Child", callback_data="onboard_child_add")])
-        buttons.append([InlineKeyboardButton("\u2190 Back", callback_data="onboard_child_back")])
+            buttons.append([InlineKeyboardButton(self.tr("Rename Default"), callback_data="onboard_child_rename")])
+        buttons.append([InlineKeyboardButton(self.tr("Add Child"), callback_data="onboard_child_add")])
+        buttons.append([InlineKeyboardButton(f"\u2190 {self.tr('Back')}", callback_data="onboard_child_back")])
 
         return _md("\n".join(lines)), InlineKeyboardMarkup(buttons)
 
@@ -184,7 +197,9 @@ class SetupMixin:
             "hub_message_id": hub_mid,
             "target_profile": "default",
         }
-        await _edit_msg(query, _md("Reply with the child's name:"))
+        prompt = self.tr("Reply with the child's name:")
+        await _edit_msg(query, _md(prompt))
+        await self._send_reply_prompt(query.message, prompt)
 
     async def _cb_onboard_child_add(self, query) -> None:
         """Prompt for new child name."""
@@ -195,7 +210,9 @@ class SetupMixin:
             "step": "onboard_child_name:add",
             "hub_message_id": hub_mid,
         }
-        await _edit_msg(query, _md("Reply with the child's name:"))
+        prompt = self.tr("Reply with the child's name:")
+        await _edit_msg(query, _md(prompt))
+        await self._send_reply_prompt(query.message, prompt)
 
     async def _cb_onboard_child_pin(self, query, choice: str) -> None:
         """Handle PIN yes/no choice."""
@@ -203,12 +220,14 @@ class SetupMixin:
         chat_id = query.message.chat_id
         state = self._pending_wizard.get(chat_id, {})
         if not state.get("last_profile_id"):
-            await query.answer("Session expired — run /setup to restart.")
+            await query.answer(self.tr("Session expired — run /setup to restart."))
             return
         if choice == "yes":
             state["step"] = "onboard_child_pin"
             self._pending_wizard[chat_id] = state
-            await _edit_msg(query, _md("Reply with a PIN:"))
+            prompt = self.tr("Reply with a PIN:")
+            await _edit_msg(query, _md(prompt))
+            await self._send_reply_prompt(query.message, prompt)
         else:
             # Skip PIN, return to children sub-menu
             state["step"] = "onboard_hub"
@@ -226,17 +245,19 @@ class SetupMixin:
     def _build_channels_submenu(self) -> tuple[str, InlineKeyboardMarkup]:
         """Render channels sub-menu with per-profile stats."""
         profiles = self._get_profiles()
-        lines = ["**Channels**\n"]
+        lines = [f"**{self.tr('Channels')}**\n"]
         for p in profiles:
             cs = self._child_store(p["id"])
             allowed = len(cs.get_channels_with_ids("allowed"))
             blocked = len(cs.get_channels_with_ids("blocked"))
-            lines.append(f"  {p['display_name']}: {allowed} allowed, {blocked} blocked")
+            lines.append(
+                f"  {p['display_name']}: {allowed} {self.tr('allowed')}, {blocked} {self.tr('blocked')}"
+            )
 
         buttons = []
         if len(profiles) == 1:
             buttons.append([InlineKeyboardButton(
-                "Browse Starters", callback_data=f"onboard_chan_sel:{profiles[0]['id']}",
+                self.tr("Browse Starters"), callback_data=f"onboard_chan_sel:{profiles[0]['id']}",
             )])
         else:
             row = []
@@ -249,7 +270,7 @@ class SetupMixin:
                     row = []
             if row:
                 buttons.append(row)
-        buttons.append([InlineKeyboardButton("\u2190 Back", callback_data="onboard_chan_back")])
+        buttons.append([InlineKeyboardButton(f"\u2190 {self.tr('Back')}", callback_data="onboard_chan_back")])
         return _md("\n".join(lines)), InlineKeyboardMarkup(buttons)
 
     async def _cb_onboard_channels(self, query) -> None:
@@ -278,7 +299,7 @@ class SetupMixin:
     def _build_time_submenu(self) -> tuple[str, InlineKeyboardMarkup]:
         """Render time limits sub-menu with per-profile status."""
         profiles = self._get_profiles()
-        lines = ["**Time Limits**\n"]
+        lines = [f"**{self.tr('Time Limits')}**\n"]
         for p in profiles:
             cs = self._child_store(p["id"])
             simple = cs.get_setting("daily_limit_minutes", "")
@@ -288,25 +309,24 @@ class SetupMixin:
             sched_end = cs.get_setting("schedule_end", "")
             parts = []
             if simple:
-                parts.append(f"{simple}m/day")
+                parts.append(self.tr("{minutes}m/day", minutes=simple))
             elif edu or fun:
                 if edu:
-                    parts.append(f"{edu}m edu")
+                    parts.append(self.tr("{minutes}m edu", minutes=edu))
                 if fun:
-                    parts.append(f"{fun}m fun")
+                    parts.append(self.tr("{minutes}m fun", minutes=fun))
             if sched_start or sched_end:
-                from utils import format_time_12h
-                s_disp = format_time_12h(sched_start) if sched_start else "?"
-                e_disp = format_time_12h(sched_end) if sched_end else "?"
+                s_disp = self.fmt_time(sched_start) if sched_start else "?"
+                e_disp = self.fmt_time(sched_end) if sched_end else "?"
                 parts.append(f"{s_disp}\u2013{e_disp}")
             if not parts:
-                parts.append("no limits set")
+                parts.append(self.tr("no limits set"))
             lines.append(f"  {p['display_name']}: {' / '.join(parts)}")
 
         buttons = []
         if len(profiles) == 1:
             buttons.append([InlineKeyboardButton(
-                "Set Limits", callback_data=f"onboard_time_sel:{profiles[0]['id']}",
+                self.tr("Set Limits"), callback_data=f"onboard_time_sel:{profiles[0]['id']}",
             )])
         else:
             row = []
@@ -319,7 +339,7 @@ class SetupMixin:
                     row = []
             if row:
                 buttons.append(row)
-        buttons.append([InlineKeyboardButton("\u2190 Back", callback_data="onboard_time_back")])
+        buttons.append([InlineKeyboardButton(f"\u2190 {self.tr('Back')}", callback_data="onboard_time_back")])
         return _md("\n".join(lines)), InlineKeyboardMarkup(buttons)
 
     async def _cb_onboard_time(self, query) -> None:
@@ -341,17 +361,17 @@ class SetupMixin:
             "hub_message_id": hub_mid,
         }
         text = _md(
-            f"\u23f0 **Time Setup for {name}**\n\n"
-            "What would you like to configure?\n\n"
-            "**Limits** \u2014 daily screen time budgets\n"
-            "**Schedule** \u2014 when videos are available"
+            f"\u23f0 **{self.tr('Time Setup for {name}', name=name)}**\n\n"
+            f"{self.tr('What would you like to configure?')}\n\n"
+            f"**{self.tr('Limits')}** \u2014 {self.tr('daily screen time budgets')}\n"
+            f"**{self.tr('Schedule')}** \u2014 {self.tr('when videos are available')}"
         )
         keyboard = InlineKeyboardMarkup([
             [
-                InlineKeyboardButton("Limits", callback_data="setup_top:limits"),
-                InlineKeyboardButton("Schedule", callback_data="setup_top:schedule"),
+                InlineKeyboardButton(self.tr("Limits"), callback_data="setup_top:limits"),
+                InlineKeyboardButton(self.tr("Schedule"), callback_data="setup_top:schedule"),
             ],
-            [InlineKeyboardButton("\u2190 Back", callback_data="onboard_time_back")],
+            [InlineKeyboardButton(f"\u2190 {self.tr('Back')}", callback_data="onboard_time_back")],
         ])
         await _edit_msg(query, text, keyboard)
 
@@ -376,9 +396,9 @@ class SetupMixin:
         """Render shorts sub-menu with per-profile status."""
         profiles = self._get_profiles()
         if selected_name:
-            lines = [f"**YouTube Shorts for {selected_name}** (under 60s)\n"]
+            lines = [f"**{self.tr('YouTube Shorts for {name}', name=selected_name)}** ({self.tr('under 60s')})\n"]
         else:
-            lines = ["**YouTube Shorts** (under 60s)\n"]
+            lines = [f"**{self.tr('YouTube Shorts')}** ({self.tr('under 60s')})\n"]
         for p in profiles:
             cs = self._child_store(p["id"])
             db_val = cs.get_setting("shorts_enabled", "")
@@ -388,21 +408,21 @@ class SetupMixin:
                 enabled = self.config.youtube.shorts_enabled
             else:
                 enabled = False
-            lines.append(f"  {p['display_name']}: {'enabled' if enabled else 'disabled'}")
+            lines.append(f"  {p['display_name']}: {self.tr('enabled') if enabled else self.tr('disabled')}")
 
         buttons = []
         if len(profiles) == 1:
             # Direct enable/disable for single child
             pid = profiles[0]["id"]
             buttons.append([
-                InlineKeyboardButton("Enable", callback_data=f"onboard_shorts_tog:{pid}:on"),
-                InlineKeyboardButton("Disable", callback_data=f"onboard_shorts_tog:{pid}:off"),
+                InlineKeyboardButton(self.tr("Enable"), callback_data=f"onboard_shorts_tog:{pid}:on"),
+                InlineKeyboardButton(self.tr("Disable"), callback_data=f"onboard_shorts_tog:{pid}:off"),
             ])
         elif selected_profile_id:
             # Show toggle for selected profile
             buttons.append([
-                InlineKeyboardButton("Enable", callback_data=f"onboard_shorts_tog:{selected_profile_id}:on"),
-                InlineKeyboardButton("Disable", callback_data=f"onboard_shorts_tog:{selected_profile_id}:off"),
+                InlineKeyboardButton(self.tr("Enable"), callback_data=f"onboard_shorts_tog:{selected_profile_id}:on"),
+                InlineKeyboardButton(self.tr("Disable"), callback_data=f"onboard_shorts_tog:{selected_profile_id}:off"),
             ])
         else:
             # Profile selector
@@ -416,7 +436,7 @@ class SetupMixin:
                     row = []
             if row:
                 buttons.append(row)
-        buttons.append([InlineKeyboardButton("\u2190 Back", callback_data="onboard_shorts_back")])
+        buttons.append([InlineKeyboardButton(f"\u2190 {self.tr('Back')}", callback_data="onboard_shorts_back")])
         return _md("\n".join(lines)), InlineKeyboardMarkup(buttons)
 
     async def _cb_onboard_shorts(self, query) -> None:
@@ -434,7 +454,7 @@ class SetupMixin:
 
     async def _cb_onboard_shorts_toggle(self, query, profile_id: str, choice: str) -> None:
         """Toggle shorts for a profile."""
-        _answer_bg(query, f"Shorts {'enabled' if choice == 'on' else 'disabled'}")
+        _answer_bg(query, self.tr("Shorts {status}", status=self.tr("enabled") if choice == "on" else self.tr("disabled")))
         cs = self._child_store(profile_id)
         cs.set_setting("shorts_enabled", str(choice == "on").lower())
         if self.on_channel_change:
@@ -472,12 +492,14 @@ class SetupMixin:
             action = step.split(":")[1]  # "rename" or "add"
             name = text[:30].strip()
             if not name:
-                await update.effective_message.reply_text("Name can't be empty. Try again:")
+                await update.effective_message.reply_text(self.tr("Name can't be empty. Try again:"))
                 return True
             # Validate name
             pid = re.sub(r'[^a-z0-9]', '', name.lower())[:20]
             if not pid:
-                await update.effective_message.reply_text("Name must contain at least one alphanumeric character. Try again:")
+                await update.effective_message.reply_text(
+                    self.tr("Name must contain at least one alphanumeric character. Try again:")
+                )
                 return True
 
             if action == "rename":
@@ -490,18 +512,19 @@ class SetupMixin:
                 state["last_profile_name"] = name
                 self._pending_wizard[chat_id] = state
                 keyboard = InlineKeyboardMarkup([[
-                    InlineKeyboardButton("Set PIN", callback_data="onboard_child_pin:yes"),
-                    InlineKeyboardButton("No PIN", callback_data="onboard_child_pin:no"),
+                    InlineKeyboardButton(self.tr("Set PIN"), callback_data="onboard_child_pin:yes"),
+                    InlineKeyboardButton(self.tr("No PIN"), callback_data="onboard_child_pin:no"),
                 ]])
                 await update.effective_message.reply_text(
-                    _md(f"Set a PIN for {name}?"), parse_mode=MD2, reply_markup=keyboard,
+                    self.tr("Set a PIN for {name}?", name=name),
+                    reply_markup=keyboard,
                 )
             elif action == "add":
                 # Check for conflict
                 existing = self.video_store.get_profile(pid)
                 if existing:
                     await update.effective_message.reply_text(
-                        f"A profile with that name already exists. Try a different name:"
+                        self.tr("A profile with that name already exists. Try a different name:")
                     )
                     return True
                 self.video_store.create_profile(pid, name)
@@ -510,11 +533,12 @@ class SetupMixin:
                 state["last_profile_name"] = name
                 self._pending_wizard[chat_id] = state
                 keyboard = InlineKeyboardMarkup([[
-                    InlineKeyboardButton("Set PIN", callback_data="onboard_child_pin:yes"),
-                    InlineKeyboardButton("No PIN", callback_data="onboard_child_pin:no"),
+                    InlineKeyboardButton(self.tr("Set PIN"), callback_data="onboard_child_pin:yes"),
+                    InlineKeyboardButton(self.tr("No PIN"), callback_data="onboard_child_pin:no"),
                 ]])
                 await update.effective_message.reply_text(
-                    _md(f"Set a PIN for {name}?"), parse_mode=MD2, reply_markup=keyboard,
+                    self.tr("Set a PIN for {name}?", name=name),
+                    reply_markup=keyboard,
                 )
             return True
 

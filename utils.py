@@ -4,6 +4,8 @@ import logging
 import re
 from datetime import datetime, timezone
 
+from i18n import format_time as locale_format_time, normalize_locale, t
+
 logger = logging.getLogger(__name__)
 
 DAY_NAMES = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
@@ -136,7 +138,13 @@ def format_time_12h(hhmm: str) -> str:
     return f"{display_h}:{m:02d} {suffix}"
 
 
-def is_within_schedule(start_str: str, end_str: str, tz_name: str = "") -> tuple[bool, str]:
+def is_within_schedule(
+    start_str: str,
+    end_str: str,
+    tz_name: str = "",
+    locale: str = "en",
+    time_format: str | None = None,
+) -> tuple[bool, str]:
     """Check if current time falls within the scheduled access window.
 
     Returns (allowed, unlock_time_display).
@@ -147,6 +155,8 @@ def is_within_schedule(start_str: str, end_str: str, tz_name: str = "") -> tuple
     """
     if not start_str and not end_str:
         return (True, "")
+
+    locale = normalize_locale(locale)
 
     # Get current local time
     if tz_name:
@@ -167,7 +177,10 @@ def is_within_schedule(start_str: str, end_str: str, tz_name: str = "") -> tuple
         except (ValueError, AttributeError):
             return (True, "")
         allowed = now_minutes >= sh * 60 + sm
-        unlock_time = ("at " + format_time_12h(start_str)) if not allowed else ""
+        unlock_time = (
+            t(locale, "at {time}", time=locale_format_time(start_str, locale, time_format=time_format))
+            if not allowed else ""
+        )
         return (allowed, unlock_time)
 
     # Only end set: allowed until end, blocked after
@@ -177,7 +190,7 @@ def is_within_schedule(start_str: str, end_str: str, tz_name: str = "") -> tuple
         except (ValueError, AttributeError):
             return (True, "")
         allowed = now_minutes < eh * 60 + em
-        unlock_time = "tomorrow" if not allowed else ""
+        unlock_time = t(locale, "tomorrow") if not allowed else ""
         return (allowed, unlock_time)
 
     # Both set
@@ -197,7 +210,10 @@ def is_within_schedule(start_str: str, end_str: str, tz_name: str = "") -> tuple
         # Overnight range (e.g. 22:00 - 06:00)
         allowed = now_minutes >= start_minutes or now_minutes < end_minutes
 
-    unlock_time = ("at " + format_time_12h(start_str)) if not allowed else ""
+    unlock_time = (
+        t(locale, "at {time}", time=locale_format_time(start_str, locale, time_format=time_format))
+        if not allowed else ""
+    )
     return (allowed, unlock_time)
 
 

@@ -7,10 +7,11 @@ from fastapi import Request
 from pydantic import BaseModel
 
 from data.child_store import ChildStore
+from i18n import format_time, normalize_locale, normalize_time_format, t
 from utils import (
     get_today_str, get_day_utc_bounds, get_weekday,
-    is_within_schedule, format_time_12h, resolve_setting,
-    get_bonus_minutes, DAY_NAMES, CAT_LABELS,
+    is_within_schedule, resolve_setting,
+    get_bonus_minutes, DAY_NAMES,
 )
 
 # ---------------------------------------------------------------------------
@@ -80,6 +81,7 @@ def base_ctx(request: Request) -> dict:
     """Common template context: child_name + multi_profile for base.html header."""
     vs = request.app.state.video_store
     profiles = vs.get_profiles() if vs else []
+    locale = normalize_locale(getattr(request.app.state, "locale", "en"))
     # Populate avatar fields from session (or DB on first load after upgrade)
     avatar_icon = request.session.get("avatar_icon", "")
     avatar_color = request.session.get("avatar_color", "")
@@ -94,6 +96,8 @@ def base_ctx(request: Request) -> dict:
                 request.session["avatar_color"] = avatar_color
     return {
         "request": request,
+        "locale": locale,
+        "time_format": normalize_time_format(getattr(request.app.state, "time_format", "locale")),
         "child_name": get_child_name(request),
         "multi_profile": len(profiles) > 1,
         "avatar_icon": avatar_icon,
@@ -233,7 +237,9 @@ def get_schedule_info(store, wl_cfg) -> dict | None:
     if not start and not end:
         return None
     tz = wl_cfg.timezone if wl_cfg else ""
-    allowed, unlock_time = is_within_schedule(start, end, tz)
+    locale = normalize_locale(getattr(wl_cfg, "locale", "") or "en")
+    time_format = normalize_time_format(getattr(wl_cfg, "time_format", "") or "locale")
+    allowed, unlock_time = is_within_schedule(start, end, tz, locale=locale, time_format=time_format)
     if not allowed and end:
         from datetime import datetime as _dt
         if tz:
@@ -247,14 +253,14 @@ def get_schedule_info(store, wl_cfg) -> dict | None:
             if now.hour * 60 + now.minute >= eh * 60 + em:
                 next_start = get_next_start_time(store=store, wl_cfg=wl_cfg)
                 if next_start:
-                    unlock_time = f"tomorrow at {next_start}"
+                    unlock_time = t(locale, "tomorrow at {time}", time=next_start)
         except (ValueError, AttributeError):
             pass
     return {
         "allowed": allowed,
         "unlock_time": unlock_time,
-        "start": format_time_12h(start) if start else "midnight",
-        "end": format_time_12h(end) if end else "midnight",
+        "start": format_time(start, locale, time_format=time_format) if start else t(locale, "midnight"),
+        "end": format_time(end, locale, time_format=time_format) if end else t(locale, "midnight"),
     }
 
 
@@ -268,7 +274,9 @@ def get_next_start_time(store=None, wl_cfg=None) -> str | None:
     next_start = store.get_setting(f"{tomorrow}_schedule_start", "")
     if not next_start:
         next_start = store.get_setting("schedule_start", "")
-    return format_time_12h(next_start) if next_start else None
+    locale = normalize_locale(getattr(wl_cfg, "locale", "") or "en")
+    time_format = normalize_time_format(getattr(wl_cfg, "time_format", "") or "locale")
+    return format_time(next_start, locale, time_format=time_format) if next_start else None
 
 
 # ---------------------------------------------------------------------------

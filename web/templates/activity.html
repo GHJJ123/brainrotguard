@@ -1,26 +1,26 @@
 {% extends "base.html" %}
-{% block title %}Today's Activity - BrainRotGuard{% endblock %}
+{% block title %}{{ t("Today's Activity") }} - BrainRotGuard{% endblock %}
 
 {% block content %}
 <div class="activity-container">
     <div class="activity-header">
-        <h2 class="section-title">Today's Activity</h2>
-        <a href="/" class="back-link-small">&larr; Back</a>
+        <h2 class="section-title">{{ t("Today's Activity") }}</h2>
+        <a href="/" class="back-link-small">&larr; {{ t("Back") }}</a>
     </div>
 
     {% if cat_info %}
     <div class="activity-summary">
         {% for cat_name in ["edu", "fun"] %}
-        {% set cat_label = "Edu" if cat_name == "edu" else "Fun" %}
+        {% set cat_name_label = cat_label(cat_name, short=True) %}
         {% set info = cat_info.categories[cat_name] %}
         <div class="activity-stat">
             <span class="stat-value">{{ info.used_min | int }}</span>
-            <span class="stat-label">{{ cat_label }} min</span>
+            <span class="stat-label">{{ t("{label} min", label=cat_name_label) }}</span>
         </div>
         {% if info.limit_min > 0 %}
         <div class="activity-stat">
             <span class="stat-value {% if info.remaining_min < 10 %}stat-low{% endif %}">{{ info.remaining_min | int }}</span>
-            <span class="stat-label">{{ cat_label }} left</span>
+            <span class="stat-label">{{ t("{label} left", label=cat_name_label) }}</span>
         </div>
         {% endif %}
         {% endfor %}
@@ -29,15 +29,15 @@
     <div class="activity-summary">
         <div class="activity-stat">
             <span class="stat-value">{{ total_min | int }}</span>
-            <span class="stat-label">min watched</span>
+            <span class="stat-label">{{ t("min watched") }}</span>
         </div>
         <div class="activity-stat">
             <span class="stat-value">{{ time_info.limit_min }}</span>
-            <span class="stat-label">min allowed</span>
+            <span class="stat-label">{{ t("min allowed") }}</span>
         </div>
         <div class="activity-stat">
             <span class="stat-value {% if time_info.remaining_min < 10 %}stat-low{% endif %}">{{ time_info.remaining_min | int }}</span>
-            <span class="stat-label">min left</span>
+            <span class="stat-label">{{ t("min left") }}</span>
         </div>
     </div>
     <div class="activity-bar-wrap">
@@ -48,7 +48,7 @@
     <div class="activity-summary">
         <div class="activity-stat">
             <span class="stat-value">{{ total_min | int }}</span>
-            <span class="stat-label">min watched today</span>
+            <span class="stat-label">{{ t("min watched today") }}</span>
         </div>
     </div>
     {% endif %}
@@ -57,17 +57,17 @@
     {% if cat_info %}
     {# Group by category #}
     {% for cat_name in ["edu", "fun"] %}
-    {% set cat_label = "Educational" if cat_name == "edu" else "Entertainment" %}
+    {% set cat_name_label = cat_label(cat_name) %}
     {% set cat_vids = breakdown | selectattr("category", "equalto", cat_name) | list %}
     {% if cat_vids %}
     {% set cat_total = cat_vids | sum(attribute="minutes") %}
     {% set cat_budget = cat_info.categories[cat_name] %}
     <div class="activity-category-header">
-        <strong>{{ cat_label }}</strong>
+        <strong>{{ cat_name_label }}</strong>
         {% if cat_budget.limit_min > 0 %}
         — {{ cat_total | int }}/{{ cat_budget.limit_min }} min
         {% else %}
-        — {{ cat_total | int }} min (no limit)
+        — {{ t("{total} min (no limit)", total=cat_total | int) }}
         {% endif %}
     </div>
     {% if cat_budget.limit_min > 0 %}
@@ -93,7 +93,7 @@
     {# Also show uncategorized as fun #}
     {% set uncat_vids = breakdown | rejectattr("category") | list %}
     {% if uncat_vids %}
-    <div class="activity-category-header"><strong>Entertainment</strong> (uncategorized)</div>
+    <div class="activity-category-header"><strong>{{ t("Entertainment (uncategorized)") }}</strong></div>
     <div class="activity-list">
         {% for v in uncat_vids %}
         <a href="/watch/{{ v.video_id }}" class="activity-row">
@@ -124,8 +124,8 @@
     {% endif %}
     {% else %}
     <div class="empty-state">
-        <p>No videos watched today</p>
-        <p class="empty-hint">Your watch history will appear here</p>
+        <p>{{ t("No videos watched today") }}</p>
+        <p class="empty-hint">{{ t("Your watch history will appear here") }}</p>
     </div>
     {% endif %}
 </div>

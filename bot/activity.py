@@ -7,6 +7,7 @@ from telegram.ext import ContextTypes
 
 from bot.helpers import _md, _answer_bg, _nav_row, _edit_msg, _channel_md_link, MD2
 from bot.timelimits import _progress_bar
+from i18n import format_month_day
 from utils import get_today_str, get_day_utc_bounds, get_bonus_minutes
 
 logger = logging.getLogger(__name__)
@@ -41,17 +42,17 @@ class ActivityMixin:
             if days == 0:
                 today = get_today_str(tz)
                 dates = [today]
-                header = f"Today's Watch Activity{ctx}"
+                header = self.tr("Today's Watch Activity{ctx}", ctx=ctx)
             elif days == 1:
                 yesterday = (_dt.datetime.now(tz_info) - timedelta(days=1)).strftime("%Y-%m-%d")
                 dates = [yesterday]
-                header = f"Yesterday's Watch Activity{ctx}"
+                header = self.tr("Yesterday's Watch Activity{ctx}", ctx=ctx)
             else:
                 dates = [
                     (_dt.datetime.now(tz_info) - timedelta(days=i)).strftime("%Y-%m-%d")
                     for i in range(days)
                 ]
-                header = f"Watch Activity (last {days} days){ctx}"
+                header = self.tr("Watch Activity (last {days} days){ctx}", days=days, ctx=ctx)
 
             lines = [f"**{header}**\n"]
 
@@ -70,16 +71,17 @@ class ActivityMixin:
                 bonus = get_bonus_minutes(cs, today)
 
                 if limit_min == 0:
-                    lines.append(f"**Watch limit:** OFF")
-                    lines.append(f"**Watched today:** {int(used)} min")
+                    lines.append(f"**{self.tr('Watch limit:')}** {self.tr('OFF')}")
+                    lines.append(self.tr("**Watched today:** {used} min", used=int(used)))
                 else:
                     effective = limit_min + bonus
                     remaining = max(0, effective - used)
                     pct = min(1.0, used / effective) if effective > 0 else 0
-                    lines.append(f"**Daily limit:** {limit_min} min")
+                    lines.append(self.tr("**Daily limit:** {limit} min", limit=limit_min))
                     if bonus > 0:
-                        lines.append(f"**Bonus today:** +{bonus} min")
-                    lines.append(f"**Used:** {int(used)} min \u00b7 **Remaining:** {int(remaining)} min")
+                        lines.append(self.tr("**Bonus today:** +{bonus} min", bonus=bonus))
+                    lines.append(self.tr("**Used:** {used} min · **Remaining:** {remaining} min",
+                                         used=int(used), remaining=int(remaining)))
                     lines.append(f"`{_progress_bar(pct)}` {int(pct * 100)}%")
                 lines.append("")
 
@@ -97,14 +99,13 @@ class ActivityMixin:
                 if max_min == 0:
                     max_min = 1
                 grand_total = sum(daily_totals.values())
-                lines.append(f"**Overview** \u2014 {int(grand_total)} min total")
+                lines.append(self.tr("**Overview** — {total} min total", total=int(grand_total)))
                 bar_width = 10
                 for date_str in dates:
                     total = daily_totals[date_str]
                     frac = total / max_min
                     bar = _progress_bar(frac, bar_width)
-                    dt = _dt.datetime.strptime(date_str, "%Y-%m-%d")
-                    day_label = dt.strftime("%b %d")
+                    day_label = format_month_day(date_str, self.locale)
                     total_str = f"{int(total)}m" if total >= 1 else "\u2014"
                     lines.append(f"`{day_label}  {bar}` {total_str}")
                 lines.append("")
@@ -113,14 +114,14 @@ class ActivityMixin:
             if len(dates) == 1:
                 breakdown = all_breakdowns[dates[0]]
                 if not breakdown:
-                    lines.append("_No videos watched._")
+                    lines.append(f"_{self.tr('No videos watched.')}_")
                 else:
                     by_cat: dict = {}
                     for v in breakdown:
                         cat = v.get('category') or 'fun'
                         by_cat.setdefault(cat, []).append(v)
 
-                    for cat, cat_label in [("edu", "Educational"), ("fun", "Entertainment")]:
+                    for cat, cat_label in [("edu", self.cat_label("edu")), ("fun", self.cat_label("fun"))]:
                         vids = by_cat.get(cat, [])
                         if not vids:
                             continue
@@ -128,11 +129,13 @@ class ActivityMixin:
                         cat_limit_str = self._resolve_setting(f"{cat}_limit_minutes", store=cs)
                         cat_limit = int(cat_limit_str) if cat_limit_str else 0
                         if cat_limit > 0:
-                            lines.append(f"\n**{cat_label}** \u2014 {int(cat_total)}/{cat_limit} min")
+                            lines.append(self.tr("\n**{category}** — {used}/{limit} min",
+                                                 category=cat_label, used=int(cat_total), limit=cat_limit))
                             pct = min(1.0, cat_total / cat_limit) if cat_limit > 0 else 0
                             lines.append(f"`{_progress_bar(pct)}` {int(pct * 100)}%")
                         else:
-                            lines.append(f"\n**{cat_label}** \u2014 {int(cat_total)} min (no limit)")
+                            lines.append(self.tr("\n**{category}** — {used} min (no limit)",
+                                                 category=cat_label, used=int(cat_total)))
 
                         for v in vids:
                             title = v['title'][:40]
@@ -143,10 +146,12 @@ class ActivityMixin:
                                 dur_min = vid_dur // 60
                                 pct = min(100, int(v['minutes'] / (vid_dur / 60) * 100)) if vid_dur > 0 else 0
                                 lines.append(f"\u2022 **{title}**")
-                                lines.append(f"  {ch_link} \u00b7 {watched_min}m / {dur_min}m ({pct}%)")
+                                lines.append(self.tr("  {channel} · {watched}m / {duration}m ({percent}%)",
+                                                     channel=ch_link, watched=watched_min, duration=dur_min, percent=pct))
                             else:
                                 lines.append(f"\u2022 **{title}**")
-                                lines.append(f"  {ch_link} \u00b7 {watched_min}m watched")
+                                lines.append(self.tr("  {channel} · {watched}m watched",
+                                                     channel=ch_link, watched=watched_min))
 
             await update.effective_message.reply_text(
                 _md("\n".join(lines)), parse_mode=MD2, disable_web_page_preview=True,
@@ -170,8 +175,8 @@ class ActivityMixin:
                     days = min(int(arg), 365)
             activity = cs.get_recent_activity(days)
             if not activity:
-                period = "today" if days == 1 else f"last {days} days"
-                await update.effective_message.reply_text(f"No activity in the {period}.")
+                period = self.tr("Today").lower() if days == 1 else self.tr("Last {days} days", days=days).lower()
+                await update.effective_message.reply_text(self.tr("No activity in the {period}.", period=period))
                 return
             text, keyboard = self._render_logs_page(activity, days, 0, profile_id=profile["id"])
             await update.effective_message.reply_text(text, parse_mode=MD2, reply_markup=keyboard)
@@ -187,12 +192,12 @@ class ActivityMixin:
         page_items = activity[start:end]
         total_pages = (total + page_size - 1) // page_size
 
-        period = "Today" if days == 1 else f"Last {days} days"
+        period = self.tr("Today") if days == 1 else self.tr("Last {days} days", days=days)
         status_icon = {"approved": "\u2713", "denied": "\u2717", "pending": "?"}
         ctx = self._ctx_label({"display_name": self._profile_name(profile_id)}) if len(self._get_profiles()) > 1 else ""
-        header = f"\U0001f4cb **Activity ({period}){ctx} \u2014 {total} videos**"
+        header = f"\U0001f4cb **{self.tr('Activity ({period}){ctx} — {total} videos', period=period, ctx=ctx, total=total)}**"
         if total_pages > 1:
-            header += f" \u00b7 pg {page + 1}/{total_pages}"
+            header += self.tr(" · pg {page}/{total}", page=page + 1, total=total_pages)
         lines = [header, "", "```"]
         for v in page_items:
             icon = status_icon.get(v['status'], '?')
@@ -201,7 +206,8 @@ class ActivityMixin:
             lines.append(f"{icon} {ts}  {title}")
         lines.append("```")
 
-        nav = _nav_row(page, total, page_size, f"logs_page:{profile_id}:{days}")
+        nav = _nav_row(page, total, page_size, f"logs_page:{profile_id}:{days}",
+                       back_label=self.tr("Back"), next_label=self.tr("Next"))
         keyboard = InlineKeyboardMarkup([nav]) if nav else None
         return _md("\n".join(lines)), keyboard
 
@@ -211,7 +217,7 @@ class ActivityMixin:
         cs = self._child_store(profile_id)
         activity = cs.get_recent_activity(days)
         if not activity:
-            await query.answer("No activity.")
+            await query.answer(self.tr("No activity."))
             return
         _answer_bg(query)
         text, keyboard = self._render_logs_page(activity, days, page, profile_id=profile_id)
@@ -245,8 +251,8 @@ class ActivityMixin:
                 days = min(int(arg), 365)
         searches = s.get_recent_searches(days)
         if not searches:
-            period = "today" if days == 1 else f"last {days} days"
-            await update.effective_message.reply_text(f"No searches in the {period}.")
+            period = self.tr("Today").lower() if days == 1 else self.tr("Last {days} days", days=days).lower()
+            await update.effective_message.reply_text(self.tr("No searches in the {period}.", period=period))
             return
         text, keyboard = self._render_search_page(searches, days, 0, profile_id=profile_id)
         await update.effective_message.reply_text(
@@ -262,11 +268,11 @@ class ActivityMixin:
         page_items = searches[start:end]
         total_pages = (total + ps - 1) // ps
 
-        period = "Today" if days == 1 else f"Last {days} days"
+        period = self.tr("Today") if days == 1 else self.tr("Last {days} days", days=days)
         ctx = self._ctx_label({"display_name": self._profile_name(profile_id)}) if len(self._get_profiles()) > 1 else ""
-        header = f"\U0001f50d **Search History ({period}){ctx}**"
+        header = f"\U0001f50d **{self.tr('Search History ({period}){ctx}', period=period, ctx=ctx)}**"
         if total_pages > 1:
-            header += f" \u00b7 pg {page + 1}/{total_pages}"
+            header += self.tr(" · pg {page}/{total}", page=page + 1, total=total_pages)
         lines = [header, "", "```"]
         for s in page_items:
             ts = s['searched_at'][5:16].replace('T', ' ')
@@ -274,7 +280,8 @@ class ActivityMixin:
             lines.append(f"{ts}  {query}")
         lines.append("```")
 
-        nav = _nav_row(page, total, ps, f"search_page:{profile_id}:{days}")
+        nav = _nav_row(page, total, ps, f"search_page:{profile_id}:{days}",
+                       back_label=self.tr("Back"), next_label=self.tr("Next"))
         keyboard = InlineKeyboardMarkup([nav]) if nav else None
         return _md("\n".join(lines)), keyboard
 
@@ -284,7 +291,7 @@ class ActivityMixin:
         cs = self._child_store(profile_id)
         searches = cs.get_recent_searches(days)
         if not searches:
-            await query.answer("No searches.")
+            await query.answer(self.tr("No searches."))
             return
         _answer_bg(query)
         text, keyboard = self._render_search_page(searches, days, page, profile_id=profile_id)
@@ -303,7 +310,7 @@ class ActivityMixin:
             await self._filter_list(update)
             return
         if len(args) < 2:
-            await update.effective_message.reply_text("Usage: /filter add|remove <word>")
+            await update.effective_message.reply_text(self.tr("Usage: /filter add|remove <word>"))
             return
         word = " ".join(args[1:])
         if action == "add":
@@ -311,29 +318,26 @@ class ActivityMixin:
                 if self.on_channel_change:
                     self.on_channel_change()
                 await update.effective_message.reply_text(
-                    f"Filter added: \"{word}\"\n"
-                    "Videos with this word in the title are hidden everywhere."
+                    self.tr('Filter added: "{word}"\nVideos with this word in the title are hidden everywhere.', word=word)
                 )
             else:
-                await update.effective_message.reply_text(f"Already filtered: \"{word}\"")
+                await update.effective_message.reply_text(self.tr('Already filtered: "{word}"', word=word))
         elif action in ("remove", "rm", "del"):
             if self.video_store.remove_word_filter(word):
                 if self.on_channel_change:
                     self.on_channel_change()
-                await update.effective_message.reply_text(f"Filter removed: \"{word}\"")
+                await update.effective_message.reply_text(self.tr('Filter removed: "{word}"', word=word))
             else:
-                await update.effective_message.reply_text(f"\"{word}\" isn't in the filter list.")
+                await update.effective_message.reply_text(self.tr('"{word}" isn\'t in the filter list.', word=word))
         else:
-            await update.effective_message.reply_text("Usage: /filter add|remove <word>")
+            await update.effective_message.reply_text(self.tr("Usage: /filter add|remove <word>"))
 
     async def _filter_list(self, update: Update) -> None:
         words = self.video_store.get_word_filters()
         if not words:
-            await update.effective_message.reply_text("No word filters set. Use /filter add <word> to hide videos by title.")
+            await update.effective_message.reply_text(self.tr("No word filters set. Use /filter add <word> to hide videos by title."))
             return
-        lines = ["**Word Filters** (hidden everywhere):\n"]
+        lines = [self.tr("**Word Filters** (hidden everywhere):\n")]
         for w in words:
             lines.append(f"- `{w}`")
         await update.effective_message.reply_text(_md("\n".join(lines)), parse_mode=MD2)
-
-

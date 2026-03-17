@@ -31,7 +31,8 @@ def _answer_bg(query, text: str = "") -> None:
     asyncio.create_task(_do())
 
 
-def _nav_row(page: int, total: int, page_size: int, callback_prefix: str) -> list | None:
+def _nav_row(page: int, total: int, page_size: int, callback_prefix: str,
+             back_label: str = "Back", next_label: str = "Next") -> list | None:
     """Build a pagination nav row with Back/Next buttons (disabled placeholders when at bounds).
 
     Returns a list of two InlineKeyboardButtons, or None if everything fits on one page.
@@ -42,9 +43,9 @@ def _nav_row(page: int, total: int, page_size: int, callback_prefix: str) -> lis
     end = min((page + 1) * page_size, total)
     has_next = end < total
     return [
-        InlineKeyboardButton("\u25c0 Back", callback_data=f"{callback_prefix}:{page - 1}") if page > 0
+        InlineKeyboardButton(f"\u25c0 {back_label}", callback_data=f"{callback_prefix}:{page - 1}") if page > 0
         else InlineKeyboardButton(" ", callback_data="noop"),
-        InlineKeyboardButton("Next \u25b6", callback_data=f"{callback_prefix}:{page + 1}") if has_next
+        InlineKeyboardButton(f"{next_label} \u25b6", callback_data=f"{callback_prefix}:{page + 1}") if has_next
         else InlineKeyboardButton(" ", callback_data="noop"),
     ]
 

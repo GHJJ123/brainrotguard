@@ -38,6 +38,8 @@ class TestExpandEnvVars:
 class TestConfigFromYaml:
     def test_load_basic_yaml(self, config_yaml):
         cfg = Config.from_yaml(config_yaml)
+        assert cfg.app.locale == "en"
+        assert cfg.app.time_format == "locale"
         assert cfg.web.port == 8080
         assert cfg.web.pin == "4321"
         assert cfg.telegram.bot_token == "fake:token123"
@@ -72,9 +74,12 @@ class TestConfigFromEnv:
     def test_defaults(self, monkeypatch):
         # Clear any env vars that might interfere
         for var in ["BRG_WEB_HOST", "BRG_WEB_PORT", "BRG_BOT_TOKEN",
-                     "BRG_ADMIN_CHAT_ID", "BRG_BASE_URL", "BRG_PIN"]:
+                     "BRG_ADMIN_CHAT_ID", "BRG_BASE_URL", "BRG_PIN", "BRG_LOCALE",
+                     "BRG_TIME_FORMAT"]:
             monkeypatch.delenv(var, raising=False)
         cfg = Config.from_env()
+        assert cfg.app.locale == "en"
+        assert cfg.app.time_format == "locale"
         assert cfg.web.host == "0.0.0.0"
         assert cfg.web.port == 8080
         assert cfg.telegram.bot_token == ""
@@ -83,7 +88,11 @@ class TestConfigFromEnv:
         monkeypatch.setenv("BRG_WEB_PORT", "9090")
         monkeypatch.setenv("BRG_BOT_TOKEN", "test_token")
         monkeypatch.setenv("BRG_ADMIN_CHAT_ID", "11111")
+        monkeypatch.setenv("BRG_LOCALE", "nb_NO")
+        monkeypatch.setenv("BRG_TIME_FORMAT", "24h")
         cfg = Config.from_env()
+        assert cfg.app.locale == "nb_NO"
+        assert cfg.app.time_format == "24h"
         assert cfg.web.port == 9090
         assert cfg.telegram.bot_token == "test_token"
 
@@ -91,7 +100,50 @@ class TestConfigFromEnv:
 class TestLoadConfig:
     def test_load_from_path(self, config_yaml):
         cfg = load_config(str(config_yaml))
+        assert cfg.app.locale == "en"
         assert cfg.web.pin == "4321"
+
+    def test_normalizes_locale(self, tmp_path):
+        cfg_file = tmp_path / "locale.yaml"
+        cfg_file.write_text("""\
+app:
+  locale: "nb_NO"
+web:
+  host: 0.0.0.0
+  port: 8080
+telegram:
+  bot_token: "t"
+  admin_chat_id: "1"
+youtube:
+  search_max_results: 5
+database:
+  path: "test.db"
+watch_limits:
+  daily_limit_minutes: 60
+""")
+        cfg = load_config(str(cfg_file))
+        assert cfg.app.locale == "nb"
+
+    def test_normalizes_time_format(self, tmp_path):
+        cfg_file = tmp_path / "time_format.yaml"
+        cfg_file.write_text("""\
+app:
+  time_format: "24hour"
+web:
+  host: 0.0.0.0
+  port: 8080
+telegram:
+  bot_token: "t"
+  admin_chat_id: "1"
+youtube:
+  search_max_results: 5
+database:
+  path: "test.db"
+watch_limits:
+  daily_limit_minutes: 60
+""")
+        cfg = load_config(str(cfg_file))
+        assert cfg.app.time_format == "24h"
 
     def test_missing_file_raises(self):
         with pytest.raises(FileNotFoundError):

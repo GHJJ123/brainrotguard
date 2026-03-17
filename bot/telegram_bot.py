@@ -7,7 +7,7 @@ from typing import Optional
 from urllib.parse import urlparse
 
 import aiohttp
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ForceReply
 from telegram.ext import (
     ApplicationBuilder, CommandHandler,
     CallbackQueryHandler, ContextTypes,
@@ -26,6 +26,16 @@ from bot.commands import CommandsMixin
 from bot.setup import SetupMixin
 from bot.timelimits import TimeLimitMixin
 from data.child_store import ChildStore
+from i18n import (
+    category_label,
+    day_label,
+    format_month_day,
+    format_time,
+    format_time_compact,
+    get_locale,
+    get_time_format,
+    t,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +47,11 @@ class BrainRotGuardBot(SetupMixin, ApprovalMixin, ChannelMixin, TimeLimitMixin, 
                  starter_channels_path: Optional[Path] = None):
         self.bot_token = bot_token
         self.admin_chat_id = admin_chat_id
+        self.admin_chat_target = self._normalize_chat_target(admin_chat_id)
         self.video_store = video_store
         self.config = config
+        self.locale = get_locale(config)
+        self.time_format = get_time_format(config)
         self._app = None
         self._limit_notified_cats: dict[tuple, str] = {}  # (profile_id, category) -> date
         self._pending_wizard: dict[int, dict] = {}  # chat_id -> wizard state for custom input
@@ -69,6 +82,52 @@ class BrainRotGuardBot(SetupMixin, ApprovalMixin, ChannelMixin, TimeLimitMixin, 
             return f" \u2014 {profile['display_name']}"
         return ""
 
+    @staticmethod
+    def _normalize_chat_target(chat_id: str | int | None) -> str | int | None:
+        """Return an int chat_id when possible so Bot API calls use the canonical type."""
+        if chat_id is None:
+            return None
+        if isinstance(chat_id, int):
+            return chat_id
+        value = str(chat_id).strip()
+        if not value:
+            return None
+        if value.lstrip("-").isdigit():
+            return int(value)
+        return value
+
+    def tr(self, key: str, **kwargs) -> str:
+        """Translate a key for the active bot locale."""
+        return t(self.locale, key, **kwargs)
+
+    def cat_label(self, category: str, short: bool = False) -> str:
+        """Localized category label."""
+        return category_label(category, self.locale, short=short)
+
+    def day_label(self, day: str, short: bool = False) -> str:
+        """Localized day label."""
+        return day_label(day, self.locale, short=short)
+
+    def fmt_time(self, hhmm: str | None, compact: bool = False) -> str | None:
+        """Localized time formatter."""
+        if compact:
+            return format_time_compact(hhmm, self.locale, time_format=self.time_format)
+        return format_time(hhmm, self.locale, time_format=self.time_format)
+
+    def format_month_day(self, date_str: str) -> str:
+        """Localized month/day formatter."""
+        return format_month_day(date_str, self.locale)
+
+    async def _send_reply_prompt(self, message, text: str, markdown: bool = False) -> None:
+        """Send a ForceReply prompt so text-entry wizard steps work reliably in chat."""
+        kwargs = {"reply_markup": ForceReply(selective=True)}
+        if markdown:
+            kwargs["text"] = _md(text)
+            kwargs["parse_mode"] = MD2
+        else:
+            kwargs["text"] = text
+        await message.reply_text(**kwargs)
+
     async def _with_child_context(self, update: Update, context, handler_fn,
                                    allow_all: bool = False) -> None:
         """Route a child-scoped command through profile selection.
@@ -82,7 +141,7 @@ class BrainRotGuardBot(SetupMixin, ApprovalMixin, ChannelMixin, TimeLimitMixin, 
             await handler_fn(update, context, cs, profiles[0])
             return
         if not profiles:
-            await update.effective_message.reply_text("No profiles. Use /child add <name> to create one.")
+            await update.effective_message.reply_text(self.tr("No profiles. Use /child add <name> to create one."))
             return
 
         # Store pending command for callback
@@ -100,9 +159,9 @@ class BrainRotGuardBot(SetupMixin, ApprovalMixin, ChannelMixin, TimeLimitMixin, 
         if row:
             buttons.append(row)
         if allow_all:
-            buttons.append([InlineKeyboardButton("All Children", callback_data="child_sel:__all__")])
+            buttons.append([InlineKeyboardButton(self.tr("All"), callback_data="child_sel:__all__")])
         keyboard = InlineKeyboardMarkup(buttons)
-        await update.effective_message.reply_text("Which child?", reply_markup=keyboard)
+        await update.effective_message.reply_text(self.tr("Which child?"), reply_markup=keyboard)
 
     def _check_admin(self, update: Update) -> bool:
         """Check if interaction is from an authorized admin context.
@@ -121,7 +180,7 @@ class BrainRotGuardBot(SetupMixin, ApprovalMixin, ChannelMixin, TimeLimitMixin, 
         """Check admin access; send denial if unauthorized. Returns True if authorized."""
         if self._check_admin(update):
             return True
-        msg = "This bot is for the parent/admin only."
+        msg = self.tr("This bot is for the parent/admin only.")
         if update.callback_query:
             await update.callback_query.answer(msg)
         elif update.message:
@@ -209,7 +268,7 @@ class BrainRotGuardBot(SetupMixin, ApprovalMixin, ChannelMixin, TimeLimitMixin, 
         # First-run: send setup hub if channel list is empty
         if not self.video_store.get_channel_handles_set():
             try:
-                chat_id = int(self.admin_chat_id)
+                chat_id = self.admin_chat_target
                 text, markup = self._build_setup_hub(chat_id)
                 msg = await self._app.bot.send_message(
                     chat_id=chat_id,
@@ -294,13 +353,19 @@ class BrainRotGuardBot(SetupMixin, ApprovalMixin, ChannelMixin, TimeLimitMixin, 
             return False
 
         text = (
-            f"**BrainRotGuard v{latest} available** (you have v{__version__})\n\n"
-            f"{body}\n\n"
-            f"[View release]({html_url})"
+            self.tr(
+                "**BrainRotGuard v{latest} available** (you have v{current})\n\n"
+                "{body}\n\n"
+                "[View release]({url})",
+                latest=latest,
+                current=__version__,
+                body=body,
+                url=html_url,
+            )
         )
         try:
             await self._app.bot.send_message(
-                chat_id=self.admin_chat_id,
+                chat_id=self.admin_chat_target,
                 text=_md(text),
                 parse_mode=MD2,
                 disable_web_page_preview=True,
@@ -398,7 +463,7 @@ class BrainRotGuardBot(SetupMixin, ApprovalMixin, ChannelMixin, TimeLimitMixin, 
             route, args = result
             # Auto-answer the callback query
             if route.answer is not None:
-                _answer_bg(query, route.answer)
+                _answer_bg(query, self.tr(route.answer) if route.answer else route.answer)
             handler = getattr(self, route.handler)
             try:
                 if route.pass_update:
@@ -409,7 +474,7 @@ class BrainRotGuardBot(SetupMixin, ApprovalMixin, ChannelMixin, TimeLimitMixin, 
                 else:
                     await handler(query, *args)
             except (ValueError, IndexError):
-                await query.answer("Invalid callback.")
+                await query.answer(self.tr("Invalid callback."))
             return
 
         # Fallthrough: video action callbacks (approve/deny/revoke/allowchan/blockchan/setcat)
@@ -425,12 +490,11 @@ class BrainRotGuardBot(SetupMixin, ApprovalMixin, ChannelMixin, TimeLimitMixin, 
             action, video_id = parts
             profile_id = "default"
         else:
-            await query.answer("Invalid callback.")
+            await query.answer(self.tr("Invalid callback."))
             return
 
         if action not in _VIDEO_ACTIONS:
-            await query.answer("Invalid callback.")
+            await query.answer(self.tr("Invalid callback."))
             return
 
         await self._cb_video_action(query, action, profile_id, video_id)
-

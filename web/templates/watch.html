@@ -4,14 +4,14 @@
 {% block content %}
 {% if schedule_info and schedule_info.allowed %}
 <div class="schedule-banner schedule-open">
-    <span>Available until {{ schedule_info.end }}</span>
+    <span>{{ t("Available until {time}", time=schedule_info.end) }}</span>
 </div>
 {% endif %}
 
 {% if time_info %}
 <div class="time-budget {% if time_info.remaining_min < 15 %}time-budget-low{% endif %}">
-    <span>{{ cat_label }}: {{ time_info.remaining_min | int }} min remaining</span>
-    <span class="time-budget-detail">{{ time_info.used_min | int }} / {{ time_info.limit_min }} min used</span>
+    <span>{{ t("{category}: {remaining} min remaining", category=cat_label, remaining=time_info.remaining_min | int) }}</span>
+    <span class="time-budget-detail">{{ t("{used} / {limit} min used detail", used=time_info.used_min | int, limit=time_info.limit_min) }}</span>
 </div>
 {% endif %}
 
@@ -19,7 +19,7 @@
     <div class="video-player">
         <div class="video-wrapper">
             <div id="ytplayer"></div>
-            <button id="fs-toggle" class="fs-toggle" onclick="toggleFullscreen()" aria-label="Fullscreen"></button>
+            <button id="fs-toggle" class="fs-toggle" onclick="toggleFullscreen()" aria-label="{{ t('Fullscreen') }}"></button>
         </div>
     </div>
 
@@ -28,25 +28,25 @@
         <p class="watch-channel">{{ video.channel_name }}</p>
         {% if time_info %}
         <p class="time-remaining" id="time-remaining">
-            {{ cat_label }} time left: <span id="time-counter">{{ time_info.remaining_min | int }} min</span>
+            {{ t("{category} time left:", category=cat_label) }} <span id="time-counter">{{ time_info.remaining_min | int }} min</span>
         </p>
         {% endif %}
-        <a href="/" class="back-link">Back to Library</a>
+        <a href="/" class="back-link">{{ t("Back to Library") }}</a>
     </div>
 </div>
 
 {% if time_info %}
 <div class="time-warning" id="time-warning" style="display:none;">
-    Less than 5 minutes remaining
+    {{ t("Less than 5 minutes remaining") }}
 </div>
 <div class="time-critical" id="time-critical" style="display:none;">
-    Less than 1 minute remaining!
+    {{ t("Less than 1 minute remaining!") }}
 </div>
 <div class="time-overlay" id="time-overlay" style="display:none;">
     <div class="time-overlay-content">
         <div class="timesup-icon">&#x23F0;</div>
-        <h2>Time's Up!</h2>
-        <p>Redirecting to home...</p>
+        <h2>{{ t("Time's Up") }}!</h2>
+        <p>{{ t("Redirecting to home...") }}</p>
     </div>
 </div>
 {% endif %}
@@ -67,6 +67,8 @@ var remainingSeconds = {{ time_info.remaining_sec if time_info else -1 }};
 var hasTimeLimit = {{ 'true' if time_info else 'false' }};
 var videoId = {{ video.video_id | tojson }};
 var countdownInterval = null;
+var videoFinishedText = {{ t("Video finished") | tojson }};
+var backToLibraryText = {{ t("Back to Library") | tojson }};
 
 function toggleFullscreen() {
     var wrapper = document.querySelector('.video-wrapper');
@@ -205,7 +207,7 @@ function showEndOverlay() {
     overlay.id = 'end-overlay';
     overlay.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;background:#1a1a2e;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;border-radius:8px;gap:16px;';
     var msg = document.createElement('p');
-    msg.textContent = 'Video finished';
+    msg.textContent = videoFinishedText;
     msg.style.cssText = 'color:#ccc;font-size:1.2em;margin:0;';
     var btn = document.createElement('div');
     btn.style.cssText = 'width:72px;height:72px;background:rgba(231,76,111,0.9);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;';
@@ -225,7 +227,7 @@ function showEndOverlay() {
     };
     var link = document.createElement('a');
     link.href = '/';
-    link.textContent = 'Back to Library';
+    link.textContent = backToLibraryText;
     link.style.cssText = 'color:#888;font-size:1em;text-decoration:none;';
     overlay.appendChild(msg);
     overlay.appendChild(btn);

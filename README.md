@@ -98,6 +98,7 @@ Now I curate his content and I can see the difference. He's not parroting gamer 
 - **Bonus time** — grant extra minutes for today only (`/time add 30`)
 - **Shorts control** — toggle YouTube Shorts visibility across the entire app
 - **Watch activity log** — see what was watched, for how long, grouped by category
+- **Localized UI and bot** — English and Norwegian support, with locale-aware or forced 12h/24h time display
 - **Word filters** — block videos whose titles contain specific words
 - **Search history** — see everything your child has searched for
 - **Starter channels** — curated list of kid-friendly channels (edu + fun) to import on first boot
@@ -160,6 +161,7 @@ See the [full Unraid setup guide](docs/setup.md#installing-on-unraid) for detail
 
 - **[Setup Guide](docs/setup.md)** — full walkthrough from Telegram bot creation to DNS blocking
 - [Configuration Reference](docs/configuration.md) — config.yaml options, environment variables, defaults
+- [Locale Guide](i18n/locales/README.md) — how translations work and how to add a new language
 - [Telegram Commands](docs/telegram-commands.md) — full command list for the parent bot
 - [Troubleshooting](docs/troubleshooting.md) — common issues and fixes
 - [Architecture](docs/architecture.md) — system diagrams and request flow

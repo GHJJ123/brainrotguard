@@ -1,12 +1,12 @@
 {% extends "base.html" %}
-{% block title %}Not Approved{% endblock %}
+{% block title %}{{ t("Not Approved") }}{% endblock %}
 
 {% block content %}
 <div class="denied-container">
     <div class="denied-icon">&#x1f6ab;</div>
-    <h2>Not Approved</h2>
+    <h2>{{ t("Not Approved") }}</h2>
     <p class="denied-video-title">{{ video.title }}</p>
-    <p class="denied-text">This video wasn't approved by your parent. You can browse other videos or request a different one.</p>
-    <a href="/" class="back-link">Back to Home</a>
+    <p class="denied-text">{{ t("This video wasn't approved by your parent. You can browse other videos or request a different one.") }}</p>
+    <a href="/" class="back-link">{{ t("Back to Home") }}</a>
 </div>
 {% endblock %}

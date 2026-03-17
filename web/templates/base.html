@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ html_lang() }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
@@ -21,16 +21,16 @@
         <div class="search-dropdown-wrap">
             <button type="button" class="search-toggle" onclick="var d=this.nextElementSibling;d.classList.toggle('open');if(d.classList.contains('open'))d.querySelector('input').focus();">&#x1F50D;</button>
             <div class="search-dropdown">
-                <div class="avatar-dd-label">Search YouTube</div>
+                <div class="avatar-dd-label">{{ t("Search YouTube") }}</div>
                 <form action="/search" method="GET" class="search-dd-form">
-                    <input type="text" name="q" placeholder="Search or paste a link..." class="search-dd-input">
-                    <button type="submit" class="btn-primary search-dd-go">Go</button>
+                    <input type="text" name="q" placeholder="{{ t('Search or paste a link...') }}" class="search-dd-input">
+                    <button type="submit" class="btn-primary search-dd-go">{{ t("Go") }}</button>
                 </form>
             </div>
         </div>
         <form action="/search" method="GET" class="header-search">
-            <input type="text" name="q" placeholder="Search or paste a link..." class="header-search-input" {% block search_attrs %}{% endblock %}>
-            <button type="submit" class="btn-primary header-search-btn">Search</button>
+            <input type="text" name="q" placeholder="{{ t('Search or paste a link...') }}" class="header-search-input" {% block search_attrs %}{% endblock %}>
+            <button type="submit" class="btn-primary header-search-btn">{{ t("Search") }}</button>
         </form>
         {% endif %}
         {% if child_name %}
@@ -39,21 +39,21 @@
                 <span class="profile-avatar" id="hdr-avatar" style="{% if avatar_color %}background:{{ avatar_color }}{% endif %}">{{ avatar_icon if avatar_icon else child_name[0] }}</span>
             </button>
             <div class="avatar-dropdown">
-                <div class="avatar-dd-greeting">Hi {{ child_name }}!</div>
-                <div class="avatar-dd-label">Pick your icon</div>
+                <div class="avatar-dd-greeting">{{ t("Hi {name}!", name=child_name) }}</div>
+                <div class="avatar-dd-label">{{ t("Pick your icon") }}</div>
                 <div class="avatar-grid">
                     {% for ic in avatar_icons %}
                     <button type="button" class="avatar-option{% if ic == avatar_icon %} selected{% endif %}" data-icon="{{ ic }}">{{ ic }}</button>
                     {% endfor %}
                 </div>
-                <div class="avatar-dd-label">Pick your color</div>
+                <div class="avatar-dd-label">{{ t("Pick your color") }}</div>
                 <div class="color-grid">
                     {% for c in avatar_colors %}
                     <button type="button" class="color-option{% if c == avatar_color %} selected{% endif %}" data-color="{{ c }}" style="background:{{ c }}"></button>
                     {% endfor %}
                 </div>
                 {% if multi_profile %}
-                <a href="/switch-profile" class="avatar-switch-link">Switch Profile</a>
+                <a href="/switch-profile" class="avatar-switch-link">{{ t("Switch Profile") }}</a>
                 {% endif %}
             </div>
         </div>
@@ -63,7 +63,7 @@
         {% block content %}{% endblock %}
     </main>
     <footer>
-        <a href="https://ko-fi.com/coffee4jj" target="_blank" rel="noopener">☕ Buy me a coffee</a>
+        <a href="https://ko-fi.com/coffee4jj" target="_blank" rel="noopener">☕ {{ t("Buy me a coffee") }}</a>
     </footer>
     {% block scripts %}{% endblock %}
     <script>

@@ -9,8 +9,8 @@ from bot.helpers import _md, _answer_bg, _edit_msg, MD2
 from data.child_store import ChildStore
 from utils import (
     get_today_str, get_day_utc_bounds, get_weekday, parse_time_input,
-    format_time_12h, is_within_schedule, resolve_setting, get_bonus_minutes,
-    DAY_NAMES, DAY_GROUPS, CAT_LABELS,
+    is_within_schedule, resolve_setting, get_bonus_minutes,
+    DAY_NAMES, DAY_GROUPS,
 )
 
 logger = logging.getLogger(__name__)
@@ -24,8 +24,6 @@ def _progress_bar(fraction: float, width: int = 20) -> str:
 class TimeLimitMixin:
     """Time limit methods extracted from BrainRotGuardBot."""
 
-    _DAY_LABELS = {"mon": "Monday", "tue": "Tuesday", "wed": "Wednesday",
-                   "thu": "Thursday", "fri": "Friday", "sat": "Saturday", "sun": "Sunday"}
     _OVERRIDE_KEYS = ("schedule_start", "schedule_end", "edu_limit_minutes",
                       "fun_limit_minutes", "daily_limit_minutes")
 
@@ -57,18 +55,29 @@ class TimeLimitMixin:
         if len(profiles) > 1:
             p = self.video_store.get_profile(profile_id)
             if p:
-                child_label = f" — {p['display_name']}"
+                child_label = self.tr(" — {name}", name=p["display_name"])
 
-        cat_label = {"edu": "Educational", "fun": "Entertainment"}.get(category, "")
-        cat_text = f" ({cat_label})" if cat_label else ""
+        cat_label = self.cat_label(category) if category else ""
+        cat_text = self.tr(" ({category})", category=cat_label) if cat_label else ""
         text = _md(
-            f"**Daily watch limit reached{cat_text}{child_label}**\n\n"
-            f"**Used:** {int(used_min)} min / {limit_min} min limit\n"
-            f"{'Videos in this category are' if cat_label else 'Videos are'} blocked until tomorrow."
+            self.tr(
+                "**Daily watch limit reached{category}{child}**\n\n"
+                "**Used:** {used} min / {limit} min limit\n"
+                "{blocked_text}",
+                category=cat_text,
+                child=child_label,
+                used=int(used_min),
+                limit=limit_min,
+                blocked_text=(
+                    self.tr("Videos in this category are blocked until tomorrow.")
+                    if cat_label
+                    else self.tr("Videos are blocked until tomorrow.")
+                ),
+            )
         )
         try:
             await self._app.bot.send_message(
-                chat_id=self.admin_chat_id,
+                chat_id=self.admin_chat_target,
                 text=text,
                 parse_mode=MD2,
             )
@@ -189,19 +198,21 @@ class TimeLimitMixin:
                     cs.set_setting("daily_limit_minutes", "0")
                     cs.set_setting("edu_limit_minutes", "0")
                     cs.set_setting("fun_limit_minutes", "0")
-                    await update.effective_message.reply_text("All watch time limits disabled. Videos can be watched without a daily cap.")
+                    await update.effective_message.reply_text(self.tr("All watch time limits disabled. Videos can be watched without a daily cap."))
                     return
                 elif arg.isdigit():
                     await self._time_set_flat_limit(update, [arg], store=cs)
                     return
                 else:
                     await update.effective_message.reply_text(
-                        "Usage: /time [minutes|off]\n"
-                        "       /time setup\n"
-                        "       /time start|stop <time|off>\n"
-                        "       /time add <minutes>\n"
-                        "       /time edu|fun <minutes|off>\n"
-                        "       /time <day> [start|stop|edu|fun|limit|off|copy]"
+                        self.tr(
+                            "Usage: /time [minutes|off]\n"
+                            "       /time setup\n"
+                            "       /time start|stop <time|off>\n"
+                            "       /time add <minutes>\n"
+                            "       /time edu|fun <minutes|off>\n"
+                            "       /time <day> [start|stop|edu|fun|limit|off|copy]"
+                        )
                     )
                     return
 
@@ -214,17 +225,17 @@ class TimeLimitMixin:
 
     def _format_day_summary(self, day: str, is_today: bool = False, store=None) -> str:
         """Format a single day's effective settings as a compact line."""
-        label = day[:3].capitalize()
+        label = self.day_label(day, short=True)
         sched_start = self._effective_setting(day, "schedule_start", store=store)
         sched_end = self._effective_setting(day, "schedule_end", store=store)
 
         # Schedule part — use ASCII hyphen for consistent monospace width
         if sched_start or sched_end:
-            s = format_time_12h(sched_start).replace(" AM", "a").replace(" PM", "p").replace(":00", "") if sched_start else "-"
-            e = format_time_12h(sched_end).replace(" AM", "a").replace(" PM", "p").replace(":00", "") if sched_end else "-"
+            s = self.fmt_time(sched_start, compact=True) if sched_start else "-"
+            e = self.fmt_time(sched_end, compact=True) if sched_end else "-"
             sched = f"{s}-{e}"
         else:
-            sched = "open"
+            sched = self.tr("open")
 
         # Limits part
         edu_str = self._effective_setting(day, "edu_limit_minutes", store=store)
@@ -237,9 +248,9 @@ class TimeLimitMixin:
         if edu > 0 or fun > 0:
             parts = []
             if edu > 0:
-                parts.append(f"edu {edu}")
+                parts.append(f"{self.cat_label('edu', short=True)} {edu}")
             if fun > 0:
-                parts.append(f"fun {fun}")
+                parts.append(f"{self.cat_label('fun', short=True)} {fun}")
             limits = "/".join(parts) + "m"
         elif flat > 0:
             limits = f"{flat}m"
@@ -277,21 +288,27 @@ class TimeLimitMixin:
 
         # Schedule status
         if sched_start or sched_end:
-            allowed, unlock_time = is_within_schedule(sched_start, sched_end, tz)
-            s_display = format_time_12h(sched_start) if sched_start else "midnight"
-            e_display = format_time_12h(sched_end) if sched_end else "midnight"
-            status = "OPEN" if allowed else f"CLOSED (unlocks {unlock_time})"
+            allowed, unlock_time = is_within_schedule(
+                sched_start,
+                sched_end,
+                tz,
+                locale=self.locale,
+                time_format=self.time_format,
+            )
+            s_display = self.fmt_time(sched_start) if sched_start else self.tr("midnight")
+            e_display = self.fmt_time(sched_end) if sched_end else self.tr("midnight")
+            status = self.tr("OPEN") if allowed else self.tr("CLOSED (unlocks {unlock_time})", unlock_time=unlock_time)
         else:
-            status = "OPEN"
+            status = self.tr("OPEN")
             s_display = e_display = ""
 
-        day_label = self._DAY_LABELS[today_day]
+        day_label = self.day_label(today_day, short=True)
         pid = getattr(s, 'profile_id', 'default')
         ctx = self._ctx_label({"display_name": self._profile_name(pid)}) if len(self._get_profiles()) > 1 else ""
-        lines = [f"\u23f0 **Today ({day_label[:3]}){ctx}** \u2014 {status}\n"]
+        lines = [f"\u23f0 **{self.tr('Today ({day}){ctx} — {status}', day=day_label, ctx=ctx, status=status)}**\n"]
 
         if s_display:
-            lines.append(f"Schedule: {s_display} \u2013 {e_display}")
+            lines.append(self.tr("Schedule: {start} - {end}", start=s_display, end=e_display))
 
         # Bonus
         bonus = get_bonus_minutes(s, today)
@@ -307,13 +324,13 @@ class TimeLimitMixin:
 
             parts = []
             if edu_limit > 0:
-                parts.append(f"Edu: {edu_limit}")
+                parts.append(f"{self.cat_label('edu', short=True)}: {edu_limit}")
             if fun_limit > 0:
-                parts.append(f"Fun: {fun_limit}")
+                parts.append(f"{self.cat_label('fun', short=True)}: {fun_limit}")
             joined = " \u00b7 ".join(parts)
-            lines.append(f"{joined} min ({effective_total}m total)")
+            lines.append(self.tr("{limits} min ({total}m total)", limits=joined, total=effective_total))
             if bonus > 0:
-                lines.append(f"Bonus today: +{bonus} min")
+                lines.append(self.tr("Bonus today: +{bonus} min", bonus=bonus))
             lines.append("")
 
             pct = min(1.0, total_used / effective_total) if effective_total > 0 else 0
@@ -323,35 +340,43 @@ class TimeLimitMixin:
             if edu_limit > 0:
                 eff_edu = edu_limit + bonus
                 epct = min(1.0, edu_used / eff_edu) if eff_edu > 0 else 0
-                lines.append(f"  Edu `{_progress_bar(epct, 10)}` {int(edu_used)}/{eff_edu}")
+                lines.append(self.tr("  {category} `{bar}` {used}/{limit}",
+                                     category=self.cat_label("edu", short=True),
+                                     bar=_progress_bar(epct, 10),
+                                     used=int(edu_used),
+                                     limit=eff_edu))
             if fun_limit > 0:
                 eff_fun = fun_limit + bonus
                 fpct = min(1.0, fun_used / eff_fun) if eff_fun > 0 else 0
-                lines.append(f"  Fun `{_progress_bar(fpct, 10)}` {int(fun_used)}/{eff_fun}")
+                lines.append(self.tr("  {category} `{bar}` {used}/{limit}",
+                                     category=self.cat_label("fun", short=True),
+                                     bar=_progress_bar(fpct, 10),
+                                     used=int(fun_used),
+                                     limit=eff_fun))
         elif flat_limit > 0:
             effective = flat_limit + bonus
             remaining = max(0, effective - used)
             pct = min(1.0, used / effective) if effective > 0 else 0
-            lines.append(f"Limit: {flat_limit} min")
+            lines.append(self.tr("Limit: {limit} min", limit=flat_limit))
             if bonus > 0:
-                lines.append(f"Bonus today: +{bonus} min")
+                lines.append(self.tr("Bonus today: +{bonus} min", bonus=bonus))
             lines.append("")
             lines.append(f"`{_progress_bar(pct)}` {int(used)}/{effective} min ({int(pct * 100)}%)")
         else:
-            lines.append(f"No limits set \u2014 {int(used)} min watched")
+            lines.append(self.tr("No limits set — {used} min watched", used=int(used)))
             mode = self._get_limit_mode(store=s)
             if mode == "none":
-                lines.append("_Use /time setup to configure limits._")
+                lines.append(f"_{self.tr('Use /time setup to configure limits.')}_")
 
         # 7-day view
         has_overrides = self._has_any_day_overrides(store=s)
         any_limits = edu_limit > 0 or fun_limit > 0 or flat_limit > 0
         if has_overrides or any_limits:
-            lines.append(f"\n\U0001f4cb **Week**")
+            lines.append(f"\n\U0001f4cb **{self.tr('Week')}**")
             for d in DAY_NAMES:
                 lines.append(self._format_day_summary(d, is_today=(d == today_day), store=s))
             if not has_overrides:
-                lines.append("_All days: same schedule_")
+                lines.append(f"_{self.tr('All days: same schedule')}_")
         lines.append("")
 
         await update.effective_message.reply_text(_md("\n".join(lines)), parse_mode=MD2)
@@ -381,23 +406,28 @@ class TimeLimitMixin:
             # Clear all overrides for this day
             for key in self._OVERRIDE_KEYS:
                 s.set_setting(f"{prefix}{key}", "")
-            label = self._DAY_LABELS[day]
-            await update.effective_message.reply_text(f"{label} overrides cleared — default settings will apply.")
+            label = self.day_label(day)
+            await update.effective_message.reply_text(
+                self.tr("{label} overrides cleared — default settings will apply.", label=label)
+            )
         elif sub == "copy":
             await self._time_day_copy(update, day, args[1:], store=s)
         elif sub.isdigit():
             await self._time_set_flat_limit(update, [sub], day=day, store=s)
         else:
-            label = self._DAY_LABELS[day]
+            label = self.day_label(day)
             await update.effective_message.reply_text(
-                f"Usage: /time {day} [start|stop|edu|fun|limit|off|copy]\n"
-                f"       /time {day} copy <days|weekdays|weekend|all>"
+                self.tr(
+                    "Usage: /time {day} [start|stop|edu|fun|limit|off|copy]\n"
+                    "       /time {day} copy <days|weekdays|weekend|all>",
+                    day=day,
+                )
             )
 
     async def _time_day_show(self, update: Update, day: str, store=None) -> None:
         """Show effective settings for a specific day."""
         s = store or self.video_store
-        label = self._DAY_LABELS[day]
+        label = self.day_label(day)
         overrides = self._get_day_overrides(day, store=s)
 
         lines = [f"**{label}**\n"]
@@ -406,11 +436,11 @@ class TimeLimitMixin:
         sched_start = self._effective_setting(day, "schedule_start", store=s)
         sched_end = self._effective_setting(day, "schedule_end", store=s)
         if sched_start or sched_end:
-            s_disp = format_time_12h(sched_start) if sched_start else "midnight"
-            e_disp = format_time_12h(sched_end) if sched_end else "midnight"
-            lines.append(f"**Schedule:** {s_disp} \u2013 {e_disp}")
+            s_disp = self.fmt_time(sched_start) if sched_start else self.tr("midnight")
+            e_disp = self.fmt_time(sched_end) if sched_end else self.tr("midnight")
+            lines.append(self.tr("**Schedule:** {start} – {end}", start=s_disp, end=e_disp))
         else:
-            lines.append("**Schedule:** not set")
+            lines.append(self.tr("**Schedule:** {status}", status=self.tr("not set")))
 
         # Limits
         edu_str = self._effective_setting(day, "edu_limit_minutes", store=s)
@@ -422,19 +452,19 @@ class TimeLimitMixin:
 
         if edu > 0 or fun > 0:
             if edu > 0:
-                lines.append(f"**Educational:** {edu} min")
+                lines.append(f"**{self.cat_label('edu')}:** {edu} min")
             if fun > 0:
-                lines.append(f"**Entertainment:** {fun} min")
-            lines.append(f"**Total:** {edu + fun} min")
+                lines.append(f"**{self.cat_label('fun')}:** {fun} min")
+            lines.append(self.tr("**Total:** {minutes} min", minutes=edu + fun))
         elif flat > 0:
-            lines.append(f"**Daily limit:** {flat} min")
+            lines.append(self.tr("**Daily limit:** {minutes} min", minutes=flat))
         else:
-            lines.append("**Limits:** none")
+            lines.append(f"**{self.tr('Limits')}:** {self.tr('none')}")
 
         if overrides:
-            lines.append(f"\n_Has {len(overrides)} override(s) — defaults used for the rest._")
+            lines.append(self.tr("\n_Has {count} override(s) — defaults used for the rest._", count=len(overrides)))
         else:
-            lines.append("\n_No overrides — using default settings._")
+            lines.append(self.tr("\n_No overrides — using default settings._"))
 
         await update.effective_message.reply_text(_md("\n".join(lines)), parse_mode=MD2)
 
@@ -443,7 +473,7 @@ class TimeLimitMixin:
         s = store or self.video_store
         if not args:
             await update.effective_message.reply_text(
-                f"Usage: /time {src_day} copy <day|weekdays|weekend|all>"
+                self.tr("Usage: /time {day} copy <day|weekdays|weekend|all>", day=src_day)
             )
             return
 
@@ -458,13 +488,17 @@ class TimeLimitMixin:
             elif arg_lower == "all":
                 targets.extend(d for d in DAY_NAMES if d != src_day)
             else:
-                await update.effective_message.reply_text(f"Unknown day: {arg}. Use day names (mon, tue...), weekdays, weekend, or all.")
+                await update.effective_message.reply_text(
+                    self.tr("Unknown day: {day}. Use day names (mon, tue...), weekdays, weekend, or all.", day=arg)
+                )
                 return
 
         # Remove source from targets and deduplicate
         targets = list(dict.fromkeys(t for t in targets if t != src_day))
         if not targets:
-            await update.effective_message.reply_text("No valid days. Use day names (mon, tue...), weekdays, weekend, or all.")
+            await update.effective_message.reply_text(
+                self.tr("No valid days. Use day names (mon, tue...), weekdays, weekend, or all.")
+            )
             return
 
         src_overrides = self._get_day_overrides(src_day, store=s)
@@ -477,11 +511,12 @@ class TimeLimitMixin:
             for key, val in src_overrides.items():
                 s.set_setting(f"{target}_{key}", val)
 
-        src_label = self._DAY_LABELS[src_day]
-        target_labels = ", ".join(self._DAY_LABELS[t][:3] for t in targets)
+        src_label = self.day_label(src_day)
+        target_labels = ", ".join(self.day_label(t, short=True) for t in targets)
         count = len(src_overrides)
         await update.effective_message.reply_text(
-            f"Copied {count} override(s) from {src_label} \u2192 {target_labels}."
+            self.tr("Copied {count} override(s) from {source} → {targets}.",
+                    count=count, source=src_label, targets=target_labels)
         )
 
     # --- Flat limit (simple mode) ---
@@ -490,11 +525,11 @@ class TimeLimitMixin:
         """Handle /time [<day>] limit|<N> with mode switch warning."""
         s = store or self.video_store
         if not args or not args[0].isdigit():
-            await update.effective_message.reply_text("Usage: /time [<day>] limit <minutes>")
+            await update.effective_message.reply_text(self.tr("Usage: /time [<day>] limit <minutes>"))
             return
         minutes = int(args[0])
         if minutes == 0:
-            await update.effective_message.reply_text("Use `/time off` to disable the time limit.", parse_mode="MarkdownV2")
+            await update.effective_message.reply_text(self.tr("Use `/time off` to disable the time limit."), parse_mode="MarkdownV2")
             return
 
         # Mode switch check (only for default, not per-day)
@@ -506,19 +541,22 @@ class TimeLimitMixin:
                 edu_val = int(edu) if edu else 0
                 fun_val = int(fun) if fun else 0
                 text = _md(
-                    f"\u26a0\ufe0f You have category limits set (edu:{edu_val} fun:{fun_val}).\n\n"
-                    f"Switching to a simple limit replaces category budgets "
-                    f"with a single daily cap."
+                    self.tr(
+                        "⚠️ You have category limits set (edu:{edu} fun:{fun}).\n\n"
+                        "Switching to a simple limit replaces category budgets with a single daily cap.",
+                        edu=edu_val,
+                        fun=fun_val,
+                    )
                 )
                 # Store profile_id in callback for mode switch
                 pid = s.profile_id if hasattr(s, 'profile_id') else "default"
                 keyboard = InlineKeyboardMarkup([[
                     InlineKeyboardButton(
-                        f"Switch to {minutes} min flat",
+                        self.tr("Switch to {minutes} min flat", minutes=minutes),
                         callback_data=f"switch_confirm:{pid}:simple:{minutes}",
                     ),
                     InlineKeyboardButton(
-                        "Keep categories",
+                        self.tr("Keep categories"),
                         callback_data="switch_confirm:keep",
                     ),
                 ]])
@@ -530,10 +568,15 @@ class TimeLimitMixin:
         self._auto_clear_mode("simple", day=day, store=s)
 
         if day:
-            label = self._DAY_LABELS[day]
-            await update.effective_message.reply_text(f"{label} limit set to {minutes} minutes. Playback stops when time runs out.")
+            label = self.day_label(day)
+            await update.effective_message.reply_text(
+                self.tr("{label} limit set to {minutes} minutes. Playback stops when time runs out.",
+                        label=label, minutes=minutes)
+            )
         else:
-            await update.effective_message.reply_text(f"Daily limit set to {minutes} minutes. Playback stops when time runs out.")
+            await update.effective_message.reply_text(
+                self.tr("Daily limit set to {minutes} minutes. Playback stops when time runs out.", minutes=minutes)
+            )
 
     # --- Category limits ---
 
@@ -541,7 +584,7 @@ class TimeLimitMixin:
                                        category: str, day: str = "", store=None) -> None:
         """Handle /time [<day>] edu|fun <minutes|off>."""
         s = store or self.video_store
-        cat_label = CAT_LABELS.get(category, "Entertainment")
+        cat_label = self.cat_label(category)
         prefix = f"{day}_" if day else ""
         setting_key = f"{prefix}{category}_limit_minutes"
 
@@ -549,25 +592,32 @@ class TimeLimitMixin:
             current = s.get_setting(setting_key, "")
             limit = int(current) if current else 0
             if day:
-                label = self._DAY_LABELS[day]
+                label = self.day_label(day)
                 if limit == 0:
                     # Day override: check if it's explicitly set or just empty
                     if current:
-                        await update.effective_message.reply_text(f"{label} {cat_label}: OFF (override)")
+                        await update.effective_message.reply_text(self.tr("{label} {category}: OFF (override)",
+                                                                          label=label, category=cat_label))
                     else:
                         effective = s.get_setting(f"{category}_limit_minutes", "")
                         eff_val = int(effective) if effective else 0
                         if eff_val:
-                            await update.effective_message.reply_text(f"{label} {cat_label}: {eff_val} min (from default)")
+                            await update.effective_message.reply_text(
+                                self.tr("{label} {category}: {minutes} min (from default)",
+                                        label=label, category=cat_label, minutes=eff_val)
+                            )
                         else:
-                            await update.effective_message.reply_text(f"{label} {cat_label}: OFF")
+                            await update.effective_message.reply_text(self.tr("{label} {category}: OFF",
+                                                                              label=label, category=cat_label))
                 else:
-                    await update.effective_message.reply_text(f"{label} {cat_label}: {limit} min (override)")
+                    await update.effective_message.reply_text(self.tr("{label} {category}: {minutes} min (override)",
+                                                                      label=label, category=cat_label, minutes=limit))
             else:
                 if limit == 0:
-                    await update.effective_message.reply_text(f"{cat_label} limit: OFF (unlimited)")
+                    await update.effective_message.reply_text(self.tr("{category} limit: OFF (unlimited)", category=cat_label))
                 else:
-                    await update.effective_message.reply_text(f"{cat_label} limit: {limit} minutes/day")
+                    await update.effective_message.reply_text(self.tr("{category} limit: {minutes} minutes/day",
+                                                                      category=cat_label, minutes=limit))
             return
 
         value = args[0].lower()
@@ -576,15 +626,19 @@ class TimeLimitMixin:
             if day:
                 # Day override: "off" clears the override (falls back to default)
                 s.set_setting(setting_key, "")
-                label = self._DAY_LABELS[day]
-                await update.effective_message.reply_text(f"{label} {cat_label} override cleared — default settings will apply.")
+                label = self.day_label(day)
+                await update.effective_message.reply_text(
+                    self.tr("{label} {category} override cleared — default settings will apply.",
+                            label=label, category=cat_label)
+                )
             else:
                 s.set_setting(setting_key, "0")
-                await update.effective_message.reply_text(f"{cat_label} limit disabled — no daily cap.")
+                await update.effective_message.reply_text(self.tr("{category} limit disabled — no daily cap.",
+                                                                  category=cat_label))
             return
 
         if not value.isdigit():
-            await update.effective_message.reply_text(f"Usage: /time {category} <minutes|off>")
+            await update.effective_message.reply_text(self.tr("Usage: /time {category} <minutes|off>", category=category))
             return
 
         minutes = int(value)
@@ -596,18 +650,20 @@ class TimeLimitMixin:
                 flat = s.get_setting("daily_limit_minutes", "")
                 flat_val = int(flat) if flat else 0
                 text = _md(
-                    f"\u26a0\ufe0f You have a simple limit of {flat_val} min.\n\n"
-                    f"Switching to category mode replaces this with separate "
-                    f"edu and fun budgets."
+                    self.tr(
+                        "⚠️ You have a simple limit of {minutes} min.\n\n"
+                        "Switching to category mode replaces this with separate edu and fun budgets.",
+                        minutes=flat_val,
+                    )
                 )
                 pid = s.profile_id if hasattr(s, 'profile_id') else "default"
                 keyboard = InlineKeyboardMarkup([[
                     InlineKeyboardButton(
-                        "Set up categories",
+                        self.tr("Set up categories"),
                         callback_data=f"switch_confirm:{pid}:category:{category}:{minutes}",
                     ),
                     InlineKeyboardButton(
-                        "Keep simple limit",
+                        self.tr("Keep simple limit"),
                         callback_data="switch_confirm:keep",
                     ),
                 ]])
@@ -618,10 +674,16 @@ class TimeLimitMixin:
         self._auto_clear_mode("category", day=day, store=s)
 
         if day:
-            label = self._DAY_LABELS[day]
-            await update.effective_message.reply_text(f"{label} {cat_label} limit set to {minutes} min. Playback stops when budget runs out.")
+            label = self.day_label(day)
+            await update.effective_message.reply_text(
+                self.tr("{label} {category} limit set to {minutes} min. Playback stops when budget runs out.",
+                        label=label, category=cat_label, minutes=minutes)
+            )
         else:
-            await update.effective_message.reply_text(f"{cat_label} limit set to {minutes} min/day. Playback stops when budget runs out.")
+            await update.effective_message.reply_text(
+                self.tr("{category} limit set to {minutes} min/day. Playback stops when budget runs out.",
+                        category=cat_label, minutes=minutes)
+            )
 
     # --- Schedule ---
 
@@ -630,46 +692,53 @@ class TimeLimitMixin:
         """Handle /time [<day>] start|stop subcommands."""
         s = store or self.video_store
         is_start = setting_key.endswith("schedule_start")
-        label = "Start" if is_start else "Stop"
-        day_label = f"{self._DAY_LABELS[day]} " if day else ""
+        label = self.tr("Start") if is_start else self.tr("Stop")
+        day_label = f"{self.day_label(day)} " if day else ""
 
         if not args:
             current = s.get_setting(setting_key, "")
             if current:
-                await update.effective_message.reply_text(f"{day_label}{label} time: {format_time_12h(current)}")
+                await update.effective_message.reply_text(
+                    self.tr("{label} time: {time}", label=f"{day_label}{label}", time=self.fmt_time(current))
+                )
             elif day:
                 # Show effective (default fallback)
                 base = "schedule_start" if is_start else "schedule_end"
                 default = s.get_setting(base, "")
                 if default:
                     await update.effective_message.reply_text(
-                        f"{day_label}{label} time: {format_time_12h(default)} (from default)"
+                        self.tr("{label} time: {time} (from default)",
+                                label=f"{day_label}{label}", time=self.fmt_time(default))
                     )
                 else:
-                    await update.effective_message.reply_text(f"{day_label}{label} time: not set")
+                    await update.effective_message.reply_text(
+                        self.tr("{label} time: not set", label=f"{day_label}{label}")
+                    )
             else:
-                await update.effective_message.reply_text(f"{label} time: not set")
+                await update.effective_message.reply_text(self.tr("{label} time: not set", label=label))
             return
 
         value = args[0].lower()
         if value == "off":
             s.set_setting(setting_key, "")
             if day:
-                await update.effective_message.reply_text(f"{day_label}{label} time override cleared.")
+                await update.effective_message.reply_text(
+                    self.tr("{label} time override cleared.", label=f"{day_label}{label}")
+                )
             else:
-                await update.effective_message.reply_text(f"{label} time cleared.")
+                await update.effective_message.reply_text(self.tr("{label} time cleared.", label=label))
             return
 
         parsed = parse_time_input(args[0])
         if not parsed:
             await update.effective_message.reply_text(
-                "Invalid time. Examples: 800am, 8:00, 2000, 8:00PM"
+                self.tr("Invalid time. Examples: 800am, 8:00, 2000, 8:00PM")
             )
             return
 
         s.set_setting(setting_key, parsed)
         await update.effective_message.reply_text(
-            f"{day_label}{label} time set to {format_time_12h(parsed)}"
+            self.tr("{label} time set to {time}", label=f"{day_label}{label}", time=self.fmt_time(parsed))
         )
 
     # --- Bonus ---
@@ -678,14 +747,14 @@ class TimeLimitMixin:
         """Handle /time add <minutes> — grant bonus screen time for today only."""
         s = store or self.video_store
         if not args or not args[0].isdigit():
-            await update.effective_message.reply_text("Usage: /time add <minutes>")
+            await update.effective_message.reply_text(self.tr("Usage: /time add <minutes>"))
             return
         add_min = int(args[0])
         if add_min <= 0:
-            await update.effective_message.reply_text("Bonus minutes must be a positive number.")
+            await update.effective_message.reply_text(self.tr("Bonus minutes must be a positive number."))
             return
         if add_min > 480:
-            await update.effective_message.reply_text("Bonus must be 480 minutes (8 hours) or less.")
+            await update.effective_message.reply_text(self.tr("Bonus must be 480 minutes (8 hours) or less."))
             return
         today = get_today_str(self._get_tz())
         bonus_date = s.get_setting("daily_bonus_date", "")
@@ -697,7 +766,8 @@ class TimeLimitMixin:
         s.set_setting("daily_bonus_minutes", str(new_bonus))
         s.set_setting("daily_bonus_date", today)
         await update.effective_message.reply_text(
-            f"Added {add_min} bonus minutes for today ({new_bonus} total). Expires at midnight."
+            self.tr("Added {added} bonus minutes for today ({total} total). Expires at midnight.",
+                    added=add_min, total=new_bonus)
         )
 
     # --- Guided limit setup wizard ---
@@ -714,50 +784,48 @@ class TimeLimitMixin:
     def _render_setup_top(self, onboard: bool = False) -> tuple[str, InlineKeyboardMarkup]:
         """Build the top-level Limits / Schedule menu."""
         text = _md(
-            "\u23f0 **Time Setup**\n\n"
-            "What would you like to configure?\n\n"
-            "**Limits** \u2014 daily screen time budgets\n"
-            "**Schedule** \u2014 when videos are available"
+            f"\u23f0 **{self.tr('Time Setup')}**\n\n"
+            f"{self.tr('What would you like to configure?')}\n\n"
+            f"**{self.tr('Limits')}** \u2014 {self.tr('daily screen time budgets')}\n"
+            f"**{self.tr('Schedule')}** \u2014 {self.tr('when videos are available')}"
         )
         rows = [[
-            InlineKeyboardButton("Limits", callback_data="setup_top:limits"),
-            InlineKeyboardButton("Schedule", callback_data="setup_top:schedule"),
+            InlineKeyboardButton(self.tr("Limits"), callback_data="setup_top:limits"),
+            InlineKeyboardButton(self.tr("Schedule"), callback_data="setup_top:schedule"),
         ]]
         if onboard:
-            rows.append([InlineKeyboardButton("\u2190 Back", callback_data="onboard_time_back")])
+            rows.append([InlineKeyboardButton(f"\u2190 {self.tr('Back')}", callback_data="onboard_time_back")])
         else:
-            rows.append([InlineKeyboardButton("\u2705 Done", callback_data="setup_done")])
+            rows.append([InlineKeyboardButton(f"\u2705 {self.tr('Done')}", callback_data="setup_done")])
         keyboard = InlineKeyboardMarkup(rows)
         return text, keyboard
 
     def _render_setup_mode(self) -> tuple[str, InlineKeyboardMarkup]:
         """Build the Simple / Category mode choice."""
         text = _md(
-            "\u23f0 **Time Limit Setup**\n\n"
-            "How would you like to manage screen time?\n\n"
-            "**Simple** \u2014 one daily cap for all videos.\n"
-            "**Category** \u2014 separate edu + fun budgets (total = edu + fun)."
+            f"\u23f0 **{self.tr('Time Limit Setup')}**\n\n"
+            f"{self.tr('How would you like to manage screen time?')}\n\n"
+            f"**{self.tr('Simple')}** \u2014 {self.tr('one daily cap for all videos.')}\n"
+            f"**{self.tr('Category')}** \u2014 {self.tr('separate edu + fun budgets (total = edu + fun).')}"
         )
         keyboard = InlineKeyboardMarkup([
             [
-                InlineKeyboardButton("Simple Limit", callback_data="setup_mode:simple"),
-                InlineKeyboardButton("Category Limits", callback_data="setup_mode:category"),
+                InlineKeyboardButton(self.tr("Simple Limit"), callback_data="setup_mode:simple"),
+                InlineKeyboardButton(self.tr("Category Limits"), callback_data="setup_mode:category"),
             ],
-            [InlineKeyboardButton("\u2190 Back", callback_data="setup_back:top")],
+            [InlineKeyboardButton(f"\u2190 {self.tr('Back')}", callback_data="setup_back:top")],
         ])
         return text, keyboard
 
     def _render_setup_sched_apply(self) -> tuple[str, InlineKeyboardMarkup]:
         """Build the Same for all / Customize by day choice."""
-        text = _md(
-            "Same schedule every day, or different times for specific days?"
-        )
+        text = _md(self.tr("Same schedule every day, or different times for specific days?"))
         keyboard = InlineKeyboardMarkup([
             [
-                InlineKeyboardButton("Same for all days", callback_data="setup_sched_apply:all"),
-                InlineKeyboardButton("Customize by day", callback_data="setup_sched_apply:custom"),
+                InlineKeyboardButton(self.tr("Same for all days"), callback_data="setup_sched_apply:all"),
+                InlineKeyboardButton(self.tr("Customize by day"), callback_data="setup_sched_apply:custom"),
             ],
-            [InlineKeyboardButton("\u2190 Back", callback_data="setup_back:top")],
+            [InlineKeyboardButton(f"\u2190 {self.tr('Back')}", callback_data="setup_back:top")],
         ])
         return text, keyboard
 
@@ -812,15 +880,15 @@ class TimeLimitMixin:
 
     async def _setup_sched_start_menu(self, query, prefix: str = "setup_sched_start") -> None:
         """Show start-time presets."""
-        text = _md("Set when watching is allowed to begin:")
+        text = _md(self.tr("Set when watching is allowed to begin:"))
         keyboard = InlineKeyboardMarkup([
             [
-                InlineKeyboardButton("7 AM", callback_data=f"{prefix}:07:00"),
-                InlineKeyboardButton("8 AM", callback_data=f"{prefix}:08:00"),
-                InlineKeyboardButton("9 AM", callback_data=f"{prefix}:09:00"),
-                InlineKeyboardButton("Custom", callback_data=f"{prefix}:custom"),
+                InlineKeyboardButton(self.fmt_time("07:00"), callback_data=f"{prefix}:07:00"),
+                InlineKeyboardButton(self.fmt_time("08:00"), callback_data=f"{prefix}:08:00"),
+                InlineKeyboardButton(self.fmt_time("09:00"), callback_data=f"{prefix}:09:00"),
+                InlineKeyboardButton(self.tr("Custom"), callback_data=f"{prefix}:custom"),
             ],
-            [InlineKeyboardButton("\u2190 Back", callback_data="setup_back:sched_apply")],
+            [InlineKeyboardButton(f"\u2190 {self.tr('Back')}", callback_data="setup_back:sched_apply")],
         ])
         await _edit_msg(query, text, keyboard)
 
@@ -828,17 +896,16 @@ class TimeLimitMixin:
                                      prefix: str = "setup_sched_stop") -> None:
         """Show stop-time presets."""
         text = _md(
-            f"Start: {start_display} \u2713\n"
-            f"Now set when watching must stop:"
+            self.tr("Start: {time} ✓\nNow set when watching must stop:", time=start_display)
         )
         keyboard = InlineKeyboardMarkup([
             [
-                InlineKeyboardButton("7 PM", callback_data=f"{prefix}:19:00"),
-                InlineKeyboardButton("8 PM", callback_data=f"{prefix}:20:00"),
-                InlineKeyboardButton("9 PM", callback_data=f"{prefix}:21:00"),
-                InlineKeyboardButton("Custom", callback_data=f"{prefix}:custom"),
+                InlineKeyboardButton(self.fmt_time("19:00"), callback_data=f"{prefix}:19:00"),
+                InlineKeyboardButton(self.fmt_time("20:00"), callback_data=f"{prefix}:20:00"),
+                InlineKeyboardButton(self.fmt_time("21:00"), callback_data=f"{prefix}:21:00"),
+                InlineKeyboardButton(self.tr("Custom"), callback_data=f"{prefix}:custom"),
             ],
-            [InlineKeyboardButton("\u2190 Back", callback_data="setup_back:sched_start")],
+            [InlineKeyboardButton(f"\u2190 {self.tr('Back')}", callback_data="setup_back:sched_start")],
         ])
         await _edit_msg(query, text, keyboard)
 
@@ -849,14 +916,13 @@ class TimeLimitMixin:
         start = s.get_setting("schedule_start", "")
         end = s.get_setting("schedule_end", "")
         if start or end:
-            start_disp = format_time_12h(start) if start else "not set"
-            end_disp = format_time_12h(end) if end else "not set"
-            header = f"Default: {start_disp} \u2013 {end_disp}\n\n"
+            start_disp = self.fmt_time(start) if start else self.tr("not set")
+            end_disp = self.fmt_time(end) if end else self.tr("not set")
+            header = self.tr("Default: {start} – {end}\n\n", start=start_disp, end=end_disp)
         else:
-            header = "Days without a schedule are open (no restrictions).\n\n"
+            header = self.tr("Days without a schedule are open (no restrictions).\n\n")
         text = _md(
-            f"{header}"
-            f"Tap a day to set its schedule, or Done to finish."
+            f"{header}{self.tr('Tap a day to set its schedule, or Done to finish.')}"
         )
         # Build day buttons, mark overrides with bullet
         row1, row2 = [], []
@@ -865,7 +931,7 @@ class TimeLimitMixin:
                 s.get_setting(f"{day}_schedule_start", "") or
                 s.get_setting(f"{day}_schedule_end", "")
             )
-            label = self._DAY_LABELS[day][:3]
+            label = self.day_label(day, short=True)
             if has_override:
                 label += " \u2022"
             btn = InlineKeyboardButton(label, callback_data=f"setup_sched_day:{day}")
@@ -874,8 +940,8 @@ class TimeLimitMixin:
             else:
                 row2.append(btn)
         bottom_row = [
-            InlineKeyboardButton("\u2190 Back", callback_data="setup_back:sched_apply"),
-            InlineKeyboardButton("Done \u2713", callback_data="setup_sched_done"),
+            InlineKeyboardButton(f"\u2190 {self.tr('Back')}", callback_data="setup_back:sched_apply"),
+            InlineKeyboardButton(self.tr("Done ✓"), callback_data="setup_sched_done"),
         ]
         keyboard = InlineKeyboardMarkup([row1, row2, bottom_row])
         return text, keyboard
@@ -885,7 +951,9 @@ class TimeLimitMixin:
         chat_id = query.message.chat_id
         ws = self._wizard_store(chat_id)
         if value == "custom":
-            await _edit_msg(query, _md("Reply with the start time (e.g. 8am, 08:00):"))
+            prompt = self.tr("Reply with the start time (e.g. 8am, 08:00):")
+            await _edit_msg(query, _md(prompt))
+            await self._send_reply_prompt(query.message, prompt)
             state = self._pending_wizard.get(chat_id, {})
             pid = state.get("profile_id", "default")
             new_state = {"step": "setup_sched_start", "profile_id": pid}
@@ -894,14 +962,16 @@ class TimeLimitMixin:
             self._pending_wizard[chat_id] = new_state
             return
         ws.set_setting("schedule_start", value)
-        await self._setup_sched_stop_menu(query, format_time_12h(value))
+        await self._setup_sched_stop_menu(query, self.fmt_time(value))
 
     async def _cb_setup_sched_stop(self, query, value: str) -> None:
         """Handle default stop-time selection — goes to done summary."""
         chat_id = query.message.chat_id
         ws = self._wizard_store(chat_id)
         if value == "custom":
-            await _edit_msg(query, _md("Reply with the stop time (e.g. 8pm, 20:00):"))
+            prompt = self.tr("Reply with the stop time (e.g. 8pm, 20:00):")
+            await _edit_msg(query, _md(prompt))
+            await self._send_reply_prompt(query.message, prompt)
             state = self._pending_wizard.get(chat_id, {})
             pid = state.get("profile_id", "default")
             new_state = {"step": "setup_sched_stop", "profile_id": pid}
@@ -926,11 +996,11 @@ class TimeLimitMixin:
         if day not in DAY_NAMES:
             return
         ws = self._wizard_store(query.message.chat_id)
-        label = self._DAY_LABELS[day]
+        label = self.day_label(day)
         start = self._effective_setting(day, "schedule_start", store=ws)
         end = self._effective_setting(day, "schedule_end", store=ws)
-        start_disp = format_time_12h(start) if start else "not set"
-        end_disp = format_time_12h(end) if end else "not set"
+        start_disp = self.fmt_time(start) if start else self.tr("not set")
+        end_disp = self.fmt_time(end) if end else self.tr("not set")
         # Check if this day has its own overrides
         has_own = (
             ws.get_setting(f"{day}_schedule_start", "") or
@@ -938,18 +1008,23 @@ class TimeLimitMixin:
         )
         source = "" if has_own else " (default)"
         text = _md(
-            f"**{label}** \u2014 currently {start_disp} \u2013 {end_disp}{source}\n\n"
-            f"Set start time for {label}:"
+            self.tr(
+                "**{label}** — currently {start} – {end}{source}\n\nSet start time for {label}:",
+                label=label,
+                start=start_disp,
+                end=end_disp,
+                source=self.tr(" (default)") if not has_own else "",
+            )
         )
         # Offer presets near the current default
         keyboard = InlineKeyboardMarkup([
             [
-                InlineKeyboardButton("8 AM", callback_data=f"setup_daystart:{day}:08:00"),
-                InlineKeyboardButton("9 AM", callback_data=f"setup_daystart:{day}:09:00"),
-                InlineKeyboardButton("10 AM", callback_data=f"setup_daystart:{day}:10:00"),
-                InlineKeyboardButton("Custom", callback_data=f"setup_daystart:{day}:custom"),
+                InlineKeyboardButton(self.fmt_time("08:00"), callback_data=f"setup_daystart:{day}:08:00"),
+                InlineKeyboardButton(self.fmt_time("09:00"), callback_data=f"setup_daystart:{day}:09:00"),
+                InlineKeyboardButton(self.fmt_time("10:00"), callback_data=f"setup_daystart:{day}:10:00"),
+                InlineKeyboardButton(self.tr("Custom"), callback_data=f"setup_daystart:{day}:custom"),
             ],
-            [InlineKeyboardButton("\u2190 Back", callback_data="setup_back:day_grid")],
+            [InlineKeyboardButton(f"\u2190 {self.tr('Back')}", callback_data="setup_back:day_grid")],
         ])
         await _edit_msg(query, text, keyboard)
 
@@ -960,8 +1035,10 @@ class TimeLimitMixin:
         chat_id = query.message.chat_id
         ws = self._wizard_store(chat_id)
         if value == "custom":
-            label = self._DAY_LABELS[day]
-            await _edit_msg(query, _md(f"Reply with start time for {label} (e.g. 9am, 09:00):"))
+            label = self.day_label(day)
+            prompt = self.tr("Reply with start time for {label} (e.g. 9am, 09:00):", label=label)
+            await _edit_msg(query, _md(prompt))
+            await self._send_reply_prompt(query.message, prompt)
             state = self._pending_wizard.get(chat_id, {})
             pid = state.get("profile_id", "default")
             new_state = {"step": f"setup_daystart:{day}", "profile_id": pid}
@@ -970,19 +1047,18 @@ class TimeLimitMixin:
             self._pending_wizard[chat_id] = new_state
             return
         ws.set_setting(f"{day}_schedule_start", value)
-        label = self._DAY_LABELS[day]
+        label = self.day_label(day)
         text = _md(
-            f"{label} start: {format_time_12h(value)} \u2713\n"
-            f"Set stop time for {label}:"
+            self.tr("{label} start: {time} ✓\nSet stop time for {label}:", label=label, time=self.fmt_time(value))
         )
         keyboard = InlineKeyboardMarkup([
             [
-                InlineKeyboardButton("8 PM", callback_data=f"setup_daystop:{day}:20:00"),
-                InlineKeyboardButton("9 PM", callback_data=f"setup_daystop:{day}:21:00"),
-                InlineKeyboardButton("10 PM", callback_data=f"setup_daystop:{day}:22:00"),
-                InlineKeyboardButton("Custom", callback_data=f"setup_daystop:{day}:custom"),
+                InlineKeyboardButton(self.fmt_time("20:00"), callback_data=f"setup_daystop:{day}:20:00"),
+                InlineKeyboardButton(self.fmt_time("21:00"), callback_data=f"setup_daystop:{day}:21:00"),
+                InlineKeyboardButton(self.fmt_time("22:00"), callback_data=f"setup_daystop:{day}:22:00"),
+                InlineKeyboardButton(self.tr("Custom"), callback_data=f"setup_daystop:{day}:custom"),
             ],
-            [InlineKeyboardButton("\u2190 Back", callback_data="setup_back:day_grid")],
+            [InlineKeyboardButton(f"\u2190 {self.tr('Back')}", callback_data="setup_back:day_grid")],
         ])
         await _edit_msg(query, text, keyboard)
 
@@ -993,8 +1069,10 @@ class TimeLimitMixin:
         chat_id = query.message.chat_id
         ws = self._wizard_store(chat_id)
         if value == "custom":
-            label = self._DAY_LABELS[day]
-            await _edit_msg(query, _md(f"Reply with stop time for {label} (e.g. 9pm, 21:00):"))
+            label = self.day_label(day)
+            prompt = self.tr("Reply with stop time for {label} (e.g. 9pm, 21:00):", label=label)
+            await _edit_msg(query, _md(prompt))
+            await self._send_reply_prompt(query.message, prompt)
             state = self._pending_wizard.get(chat_id, {})
             pid = state.get("profile_id", "default")
             new_state = {"step": f"setup_daystop:{day}", "profile_id": pid}
@@ -1012,58 +1090,59 @@ class TimeLimitMixin:
         ws = self._wizard_store(chat_id)
         start = ws.get_setting("schedule_start", "")
         end = ws.get_setting("schedule_end", "")
-        start_disp = format_time_12h(start) if start else "not set"
-        end_disp = format_time_12h(end) if end else "not set"
+        start_disp = self.fmt_time(start) if start else self.tr("not set")
+        end_disp = self.fmt_time(end) if end else self.tr("not set")
         lines = [
-            f"\u2713 **Schedule configured**\n",
-            f"Default: {start_disp} \u2013 {end_disp}",
+            self.tr("✓ **Schedule configured**\n"),
+            self.tr("Default: {start} – {end}", start=start_disp, end=end_disp),
         ]
         # List per-day overrides
         for day in DAY_NAMES:
             ds = ws.get_setting(f"{day}_schedule_start", "")
             de = ws.get_setting(f"{day}_schedule_end", "")
             if ds or de:
-                label = self._DAY_LABELS[day][:3]
-                ds_disp = format_time_12h(ds) if ds else start_disp
-                de_disp = format_time_12h(de) if de else end_disp
+                label = self.day_label(day, short=True)
+                ds_disp = self.fmt_time(ds) if ds else start_disp
+                de_disp = self.fmt_time(de) if de else end_disp
                 lines.append(f"{label}: {ds_disp} \u2013 {de_disp}")
-        lines.append(f"\nUse `/time <day> start|stop` to adjust later.")
+        lines.append(self.tr("\nUse `/time <day> start|stop` to adjust later."))
         await _edit_msg(query, _md("\n".join(lines)))
         await self._maybe_onboard_return(chat_id)
 
     def _render_setup_edu(self) -> tuple[str, InlineKeyboardMarkup]:
         """Build the edu preset picker."""
         text = _md(
-            "Category mode gives separate budgets for educational and "
-            "entertainment videos. Total screen time = edu + fun.\n\n"
-            "Set **educational** limit:"
+            self.tr(
+                "Category mode gives separate budgets for educational and entertainment videos. "
+                "Total screen time = edu + fun.\n\nSet **educational** limit:"
+            )
         )
         keyboard = InlineKeyboardMarkup([
             [
                 InlineKeyboardButton("60 min", callback_data="setup_edu:60"),
                 InlineKeyboardButton("90 min", callback_data="setup_edu:90"),
                 InlineKeyboardButton("120 min", callback_data="setup_edu:120"),
-                InlineKeyboardButton("Custom", callback_data="setup_edu:custom"),
+                InlineKeyboardButton(self.tr("Custom"), callback_data="setup_edu:custom"),
             ],
-            [InlineKeyboardButton("\u2190 Back", callback_data="setup_back:mode")],
+            [InlineKeyboardButton(f"\u2190 {self.tr('Back')}", callback_data="setup_back:mode")],
         ])
         return text, keyboard
 
     async def _cb_setup_mode(self, query, mode: str) -> None:
         """Handle mode choice from wizard."""
         if mode == "simple":
-            text = _md(
+            text = _md(self.tr(
                 "Set a daily screen time limit. All videos share one pool.\n\n"
                 "Pick a preset or reply with a custom number:"
-            )
+            ))
             keyboard = InlineKeyboardMarkup([
                 [
                     InlineKeyboardButton("60 min", callback_data="setup_simple:60"),
                     InlineKeyboardButton("90 min", callback_data="setup_simple:90"),
                     InlineKeyboardButton("120 min", callback_data="setup_simple:120"),
-                    InlineKeyboardButton("Custom", callback_data="setup_simple:custom"),
+                    InlineKeyboardButton(self.tr("Custom"), callback_data="setup_simple:custom"),
                 ],
-                [InlineKeyboardButton("\u2190 Back", callback_data="setup_back:mode")],
+                [InlineKeyboardButton(f"\u2190 {self.tr('Back')}", callback_data="setup_back:mode")],
             ])
             await _edit_msg(query, text, keyboard)
         elif mode == "category":
@@ -1075,7 +1154,9 @@ class TimeLimitMixin:
         chat_id = query.message.chat_id
         ws = self._wizard_store(chat_id)
         if value == "custom":
-            await _edit_msg(query, "Reply with the number of minutes:")
+            prompt = self.tr("Reply with the number of minutes:")
+            await _edit_msg(query, prompt)
+            await self._send_reply_prompt(query.message, prompt)
             state = self._pending_wizard.get(chat_id, {})
             pid = state.get("profile_id", "default")
             onboard = state.get("onboard_return", False)
@@ -1088,10 +1169,12 @@ class TimeLimitMixin:
         ws.set_setting("daily_limit_minutes", str(minutes))
         self._auto_clear_mode("simple", store=ws)
         text = _md(
-            f"\u2713 **Simple limit set**\n"
-            f"  Daily cap: {minutes} min/day\n\n"
-            f"These apply to all days. Use `/time <day> limit <min>` to "
-            f"customize specific days."
+            self.tr(
+                "✓ **Simple limit set**\n"
+                "  Daily cap: {minutes} min/day\n\n"
+                "These apply to all days. Use `/time <day> limit <min>` to customize specific days.",
+                minutes=minutes,
+            )
         )
         await _edit_msg(query, text)
         await self._maybe_onboard_return(chat_id)
@@ -1101,7 +1184,9 @@ class TimeLimitMixin:
         chat_id = query.message.chat_id
         ws = self._wizard_store(chat_id)
         if value == "custom":
-            await _edit_msg(query, "Reply with the number of minutes for **educational** limit:")
+            prompt = self.tr("Reply with the number of minutes for **educational** limit:")
+            await _edit_msg(query, _md(prompt))
+            await self._send_reply_prompt(query.message, prompt, markdown=True)
             state = self._pending_wizard.get(chat_id, {})
             pid = state.get("profile_id", "default")
             onboard = state.get("onboard_return", False)
@@ -1114,17 +1199,16 @@ class TimeLimitMixin:
         ws.set_setting("edu_limit_minutes", str(minutes))
         self._auto_clear_mode("category", store=ws)
         text = _md(
-            f"Educational: {minutes} min \u2713\n"
-            f"Now set **entertainment** limit:"
+            self.tr("Educational: {minutes} min ✓\nNow set **entertainment** limit:", minutes=minutes)
         )
         keyboard = InlineKeyboardMarkup([
             [
                 InlineKeyboardButton("30 min", callback_data="setup_fun:30"),
                 InlineKeyboardButton("60 min", callback_data="setup_fun:60"),
                 InlineKeyboardButton("90 min", callback_data="setup_fun:90"),
-                InlineKeyboardButton("Custom", callback_data="setup_fun:custom"),
+                InlineKeyboardButton(self.tr("Custom"), callback_data="setup_fun:custom"),
             ],
-            [InlineKeyboardButton("\u2190 Back", callback_data="setup_back:edu")],
+            [InlineKeyboardButton(f"\u2190 {self.tr('Back')}", callback_data="setup_back:edu")],
         ])
         await _edit_msg(query, text, keyboard)
 
@@ -1133,7 +1217,9 @@ class TimeLimitMixin:
         chat_id = query.message.chat_id
         ws = self._wizard_store(chat_id)
         if value == "custom":
-            await _edit_msg(query, "Reply with the number of minutes for **entertainment** limit:")
+            prompt = self.tr("Reply with the number of minutes for **entertainment** limit:")
+            await _edit_msg(query, _md(prompt))
+            await self._send_reply_prompt(query.message, prompt, markdown=True)
             state = self._pending_wizard.get(chat_id, {})
             pid = state.get("profile_id", "default")
             onboard = state.get("onboard_return", False)
@@ -1148,12 +1234,16 @@ class TimeLimitMixin:
         edu = int(ws.get_setting("edu_limit_minutes", "0") or "0")
         total = edu + minutes
         text = _md(
-            f"\u2713 **Category limits set**\n"
-            f"  Educational: {edu} min/day\n"
-            f"  Entertainment: {minutes} min/day\n"
-            f"  Total: {total} min/day\n\n"
-            f"These apply to all days. Use `/time <day> edu|fun <min>` to "
-            f"customize specific days."
+            self.tr(
+                "✓ **Category limits set**\n"
+                "  Educational: {edu} min/day\n"
+                "  Entertainment: {fun} min/day\n"
+                "  Total: {total} min/day\n\n"
+                "These apply to all days. Use `/time <day> edu|fun <min>` to customize specific days.",
+                edu=edu,
+                fun=minutes,
+                total=total,
+            )
         )
         await _edit_msg(query, text)
         await self._maybe_onboard_return(chat_id)
@@ -1161,7 +1251,11 @@ class TimeLimitMixin:
     async def _cb_switch_confirm(self, query, choice: str) -> None:
         """Handle mode switch confirmation callback."""
         if choice == "keep":
-            await _edit_msg(query, "Keeping current settings.")
+            try:
+                await query.edit_message_reply_markup(reply_markup=None)
+            except Exception:
+                pass
+            await _edit_msg(query, self.tr("Keeping current settings."))
             return
 
         parts = choice.split(":")
@@ -1172,7 +1266,7 @@ class TimeLimitMixin:
             minutes = int(parts[2])
             ws.set_setting("daily_limit_minutes", str(minutes))
             self._auto_clear_mode("simple", store=ws)
-            text = _md(f"\u2713 Switched to simple limit: {minutes} min/day")
+            text = _md(self.tr("✓ Switched to simple limit: {minutes} min/day", minutes=minutes))
             await _edit_msg(query, text)
         elif len(parts) >= 4 and parts[1] == "category" and parts[3].isdigit():
             pid = parts[0]
@@ -1181,14 +1275,18 @@ class TimeLimitMixin:
             minutes = int(parts[3])
             ws.set_setting(f"{category}_limit_minutes", str(minutes))
             self._auto_clear_mode("category", store=ws)
-            cat_label = CAT_LABELS.get(category, "Entertainment")
+            cat_label = self.cat_label(category)
             other = "fun" if category == "edu" else "edu"
-            other_label = "Entertainment" if category == "edu" else "Educational"
-            text = _md(
-                f"\u2713 Switched to category mode.\n"
-                f"  {cat_label}: {minutes} min/day\n\n"
-                f"Set the {other_label} limit with `/time {other} <minutes>`."
-            )
+            other_label = self.tr("Entertainment") if category == "edu" else self.tr("Educational")
+            text = _md(self.tr(
+                "✓ Switched to category mode.\n"
+                "  {category}: {minutes} min/day\n\n"
+                "Set the {other_label} limit with `/time {other} <minutes>`.",
+                category=cat_label,
+                minutes=minutes,
+                other_label=other_label,
+                other=other,
+            ))
             await _edit_msg(query, text)
 
     # --- Wizard custom reply handler ---
@@ -1219,7 +1317,7 @@ class TimeLimitMixin:
             parsed = parse_time_input(text)
             if not parsed:
                 await update.effective_message.reply_text(
-                    "Invalid time. Examples: 8am, 08:00, 2000, 8:00PM"
+                    self.tr("Invalid time. Examples: 800am, 8:00, 2000, 8:00PM")
                 )
                 return
             onboard = state.get("onboard_return", False)
@@ -1229,25 +1327,24 @@ class TimeLimitMixin:
                 ws.set_setting("schedule_start", parsed)
                 # Show stop-time picker (as new message since we can't edit)
                 stop_text = _md(
-                    f"Start: {format_time_12h(parsed)} \u2713\n"
-                    f"Now set when watching must stop:"
+                    self.tr("Start: {time} ✓\nNow set when watching must stop:", time=self.fmt_time(parsed))
                 )
                 keyboard = InlineKeyboardMarkup([[
-                    InlineKeyboardButton("7 PM", callback_data="setup_sched_stop:19:00"),
-                    InlineKeyboardButton("8 PM", callback_data="setup_sched_stop:20:00"),
-                    InlineKeyboardButton("9 PM", callback_data="setup_sched_stop:21:00"),
-                    InlineKeyboardButton("Custom", callback_data="setup_sched_stop:custom"),
+                    InlineKeyboardButton(self.fmt_time("19:00"), callback_data="setup_sched_stop:19:00"),
+                    InlineKeyboardButton(self.fmt_time("20:00"), callback_data="setup_sched_stop:20:00"),
+                    InlineKeyboardButton(self.fmt_time("21:00"), callback_data="setup_sched_stop:21:00"),
+                    InlineKeyboardButton(self.tr("Custom"), callback_data="setup_sched_stop:custom"),
                 ]])
                 await update.effective_message.reply_text(stop_text, parse_mode=MD2, reply_markup=keyboard)
             elif step == "setup_sched_stop":
                 ws.set_setting("schedule_end", parsed)
                 start = ws.get_setting("schedule_start", "")
-                start_disp = format_time_12h(start) if start else "not set"
-                end_disp = format_time_12h(parsed)
+                start_disp = self.fmt_time(start) if start else self.tr("not set")
+                end_disp = self.fmt_time(parsed)
                 lines = [
-                    f"\u2713 **Schedule configured**\n",
-                    f"Default: {start_disp} \u2013 {end_disp}",
-                    f"\nUse `/time <day> start|stop` to adjust later.",
+                    self.tr("✓ **Schedule configured**\n"),
+                    self.tr("Default: {start} – {end}", start=start_disp, end=end_disp),
+                    self.tr("\nUse `/time <day> start|stop` to adjust later."),
                 ]
                 await update.effective_message.reply_text(_md("\n".join(lines)), parse_mode=MD2)
                 if onboard:
@@ -1255,16 +1352,15 @@ class TimeLimitMixin:
             elif step.startswith("setup_daystart:"):
                 day = step.split(":", 1)[1]
                 ws.set_setting(f"{day}_schedule_start", parsed)
-                label = self._DAY_LABELS[day]
+                label = self.day_label(day)
                 stop_text = _md(
-                    f"{label} start: {format_time_12h(parsed)} \u2713\n"
-                    f"Set stop time for {label}:"
+                    self.tr("{label} start: {time} ✓\nSet stop time for {label}:", label=label, time=self.fmt_time(parsed))
                 )
                 keyboard = InlineKeyboardMarkup([[
-                    InlineKeyboardButton("8 PM", callback_data=f"setup_daystop:{day}:20:00"),
-                    InlineKeyboardButton("9 PM", callback_data=f"setup_daystop:{day}:21:00"),
-                    InlineKeyboardButton("10 PM", callback_data=f"setup_daystop:{day}:22:00"),
-                    InlineKeyboardButton("Custom", callback_data=f"setup_daystop:{day}:custom"),
+                    InlineKeyboardButton(self.fmt_time("20:00"), callback_data=f"setup_daystop:{day}:20:00"),
+                    InlineKeyboardButton(self.fmt_time("21:00"), callback_data=f"setup_daystop:{day}:21:00"),
+                    InlineKeyboardButton(self.fmt_time("22:00"), callback_data=f"setup_daystop:{day}:22:00"),
+                    InlineKeyboardButton(self.tr("Custom"), callback_data=f"setup_daystop:{day}:custom"),
                 ]])
                 await update.effective_message.reply_text(stop_text, parse_mode=MD2, reply_markup=keyboard)
             elif step.startswith("setup_daystop:"):
@@ -1276,7 +1372,7 @@ class TimeLimitMixin:
 
         # Limit wizard steps expect positive integer minutes
         if not text.isdigit() or int(text) <= 0:
-            await update.effective_message.reply_text("Please reply with a positive number of minutes.")
+            await update.effective_message.reply_text(self.tr("Please reply with a positive number of minutes."))
             return
         onboard = state.get("onboard_return", False)
         minutes = int(text)
@@ -1286,9 +1382,12 @@ class TimeLimitMixin:
             ws.set_setting("daily_limit_minutes", str(minutes))
             self._auto_clear_mode("simple", store=ws)
             await update.effective_message.reply_text(_md(
-                f"\u2713 **Simple limit set**\n"
-                f"  Daily cap: {minutes} min/day\n\n"
-                f"Use `/time <day> limit <min>` to customize specific days."
+                self.tr(
+                    "✓ **Simple limit set**\n"
+                    "  Daily cap: {minutes} min/day\n\n"
+                    "Use `/time <day> limit <min>` to customize specific days.",
+                    minutes=minutes,
+                )
             ), parse_mode=MD2)
             if onboard:
                 await self._send_onboard_time_return(chat_id)
@@ -1300,13 +1399,12 @@ class TimeLimitMixin:
                     InlineKeyboardButton("30 min", callback_data="setup_fun:30"),
                     InlineKeyboardButton("60 min", callback_data="setup_fun:60"),
                     InlineKeyboardButton("90 min", callback_data="setup_fun:90"),
-                    InlineKeyboardButton("Custom", callback_data="setup_fun:custom"),
+                    InlineKeyboardButton(self.tr("Custom"), callback_data="setup_fun:custom"),
                 ],
-                [InlineKeyboardButton("\u2190 Back", callback_data="setup_back:edu")],
+                [InlineKeyboardButton(f"\u2190 {self.tr('Back')}", callback_data="setup_back:edu")],
             ])
             await update.effective_message.reply_text(_md(
-                f"Educational: {minutes} min \u2713\n"
-                f"Now set **entertainment** limit:"
+                self.tr("Educational: {minutes} min ✓\nNow set **entertainment** limit:", minutes=minutes)
             ), parse_mode=MD2, reply_markup=keyboard)
         elif step == "setup_fun":
             ws.set_setting("fun_limit_minutes", str(minutes))
@@ -1314,11 +1412,16 @@ class TimeLimitMixin:
             edu = int(ws.get_setting("edu_limit_minutes", "0") or "0")
             total = edu + minutes
             await update.effective_message.reply_text(_md(
-                f"\u2713 **Category limits set**\n"
-                f"  Educational: {edu} min/day\n"
-                f"  Entertainment: {minutes} min/day\n"
-                f"  Total: {total} min/day\n\n"
-                f"Use `/time <day> edu|fun <min>` to customize specific days."
+                self.tr(
+                    "✓ **Category limits set**\n"
+                    "  Educational: {edu} min/day\n"
+                    "  Entertainment: {fun} min/day\n"
+                    "  Total: {total} min/day\n\n"
+                    "Use `/time <day> edu|fun <min>` to customize specific days.",
+                    edu=edu,
+                    fun=minutes,
+                    total=total,
+                )
             ), parse_mode=MD2)
             if onboard:
                 await self._send_onboard_time_return(chat_id)

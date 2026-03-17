@@ -1,12 +1,12 @@
 {% extends "base.html" %}
-{% block title %}Login{% endblock %}
+{% block title %}{{ t("Login") }}{% endblock %}
 
 {% block content %}
 <div class="login-container">
     {% if step == "pick" and profiles|length > 1 %}
     {# Profile picker: show name buttons #}
     <div class="login-form">
-        <h2>Who's Watching?</h2>
+        <h2>{{ t("Who's Watching?") }}</h2>
         <div class="profile-picker">
             {% for p in profiles %}
             <a href="/login?profile={{ p.id }}" class="profile-btn"><span class="profile-btn-avatar" style="background:{{ p.avatar_color or '#e94560' }}">{{ p.avatar_icon or p.display_name[0] }}</span>{{ p.display_name }}</a>
@@ -21,14 +21,14 @@
         {% if selected_profile %}
         <h2>{{ selected_profile.display_name }}</h2>
         {% endif %}
-        <h3>Enter PIN</h3>
+        <h3>{{ t("Enter PIN") }}</h3>
         {% if error %}
-        <p class="login-error">Wrong PIN. Try again.</p>
+        <p class="login-error">{{ t("Wrong PIN. Try again.") }}</p>
         {% endif %}
-        <input type="password" name="pin" placeholder="PIN" class="pin-input" inputmode="numeric" autofocus>
-        <button type="submit" class="btn-primary login-button">Enter</button>
+        <input type="password" name="pin" placeholder="{{ t('PIN') }}" class="pin-input" inputmode="numeric" autofocus>
+        <button type="submit" class="btn-primary login-button">{{ t("Enter") }}</button>
         {% if profiles|length > 1 %}
-        <a href="/login" class="switch-link">Switch profile</a>
+        <a href="/login" class="switch-link">{{ t("Switch profile") }}</a>
         {% endif %}
     </form>
     {% endif %}

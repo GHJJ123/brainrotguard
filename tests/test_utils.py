@@ -100,7 +100,6 @@ class TestIsWithinSchedule:
         """Before start time, should be blocked."""
         # Mock datetime.now to return 7:00 AM UTC
         import utils
-        _orig = datetime.now
         def mock_now(tz=None):
             return datetime(2025, 1, 15, 7, 0, tzinfo=timezone.utc)
         monkeypatch.setattr(utils, "datetime", type("MockDT", (datetime,), {"now": staticmethod(mock_now)}))
@@ -108,6 +107,26 @@ class TestIsWithinSchedule:
         allowed, unlock = is_within_schedule("08:00", "")
         assert allowed is False
         assert "8 AM" in unlock
+
+    def test_only_start_set_before_start_nb_locale(self, monkeypatch):
+        import utils
+        def mock_now(tz=None):
+            return datetime(2025, 1, 15, 7, 0, tzinfo=timezone.utc)
+        monkeypatch.setattr(utils, "datetime", type("MockDT", (datetime,), {"now": staticmethod(mock_now)}))
+
+        allowed, unlock = is_within_schedule("08:00", "", locale="nb")
+        assert allowed is False
+        assert unlock == "kl. 08:00"
+
+    def test_only_start_set_before_start_forced_24h(self, monkeypatch):
+        import utils
+        def mock_now(tz=None):
+            return datetime(2025, 1, 15, 7, 0, tzinfo=timezone.utc)
+        monkeypatch.setattr(utils, "datetime", type("MockDT", (datetime,), {"now": staticmethod(mock_now)}))
+
+        allowed, unlock = is_within_schedule("08:00", "", locale="en", time_format="24h")
+        assert allowed is False
+        assert unlock == "at 08:00"
 
     def test_only_start_set_after_start(self, monkeypatch):
         """After start time, should be allowed."""

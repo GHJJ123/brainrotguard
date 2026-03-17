@@ -15,7 +15,7 @@ from web.helpers import (
     get_schedule_info, get_next_start_time,
 )
 from web.cache import invalidate_catalog_cache
-from utils import CAT_LABELS
+from i18n import category_label
 
 router = APIRouter()
 
@@ -85,7 +85,8 @@ async def watch_video(request: Request, video_id: str):
         return RedirectResponse(url="/", status_code=303)
 
     video_cat = resolve_video_category(video, store=cs)
-    cat_label = CAT_LABELS.get(video_cat, "Entertainment")
+    locale = getattr(request.app.state, "locale", "en")
+    cat_label = category_label(video_cat, locale)
     cat_info = get_category_time_info(store=cs, wl_cfg=wl_cfg)
     base = base_ctx(request)
     time_info = None
@@ -95,7 +96,7 @@ async def watch_video(request: Request, video_id: str):
             available = []
             for c, info in cat_info["categories"].items():
                 if not info["exceeded"] and c != video_cat:
-                    c_label = CAT_LABELS.get(c, "Entertainment")
+                    c_label = category_label(c, locale)
                     available.append({"name": c, "label": c_label, "remaining_min": info["remaining_min"]})
             return templates.TemplateResponse("timesup.html", {
                 **base,

@@ -12,6 +12,10 @@ BRG_BASE_URL=http://192.168.1.100:8080
 
 **`config.yaml`** — app behavior (references `.env` variables via `${VAR}` syntax):
 ```yaml
+app:
+  locale: en             # UI/bot language: en or nb
+  time_format: locale    # locale default, or force 12h / 24h time display
+
 web:
   host: 0.0.0.0         # listen on all network interfaces
   port: 8080             # web UI port
@@ -37,6 +41,30 @@ watch_limits:
   notify_on_limit: true          # notify parent when limit is hit
 ```
 
+### Language and Time Format
+
+Language and time display are configured under the `app:` section:
+
+- `locale` sets the language used by both the web UI and Telegram bot
+- `time_format` controls how times are rendered in schedules, status messages, and other time-related labels
+
+Supported canonical locales:
+
+- `en` — English
+- `nb` — Norwegian Bokmal
+
+`locale` is normalized on load, so common variants such as `en-US`, `en_GB`, `nb-NO`, and `no` resolve to the supported internal locale automatically.
+
+Supported time format values:
+
+- `locale` — use the locale default
+- `12h` — force 12-hour time
+- `24h` — force 24-hour time
+
+When `time_format` is set to `locale`, English defaults to 12-hour time and Norwegian defaults to 24-hour time.
+
+For contributors adding another language, see the locale guide in [`i18n/locales/README.md`](../i18n/locales/README.md).
+
 ### Category Time Limits
 
 Category limits are managed via Telegram commands, not config files. They're stored in the SQLite database:
@@ -60,6 +88,8 @@ If you skip `config.yaml` entirely, everything falls back to environment variabl
 | `BRG_WEB_PORT` | Web server port | `8080` |
 | `BRG_PIN` | Web UI access PIN (empty = no auth) | — |
 | `BRG_POLL_INTERVAL` | Pending page poll interval (ms) | `3000` |
+| `BRG_LOCALE` | UI/bot language (`en` or `nb`) | `en` |
+| `BRG_TIME_FORMAT` | Time display format (`locale`, `12h`, `24h`) | `locale` |
 | `BRG_YOUTUBE_MAX_RESULTS` | Max search results | `10` |
 | `BRG_BASE_URL` | LAN URL for Telegram links (e.g. `http://192.168.1.100:8080`) | — |
 | `BRG_DB_PATH` | SQLite database path | `db/videos.db` |

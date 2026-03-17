@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Search: {{ query }}{% endblock %}
+{% block title %}{{ t("Search: {query}", query=query) }}{% endblock %}
 {% block search_attrs %}value="{{ query }}" autofocus{% endblock %}
 
 {% block content %}
@@ -10,7 +10,7 @@
 </div>
 {% endif %}
 <section class="results-section">
-    <h2 class="section-title">Results for "{{ query }}"</h2>
+    <h2 class="section-title">{{ t('Results for "{query}"', query=query) }}</h2>
     {% if results %}
     <div class="results-list" id="results-list">
         {% for result in results %}
@@ -18,24 +18,24 @@
             <div class="thumbnail-wrap result-thumb-wrap">
                 <img src="{{ result.thumbnail_url }}" alt="{{ result.title }}" class="result-thumbnail" loading="lazy">
                 <span class="duration-badge">{{ format_duration(result.duration) }}</span>
-                {% if result.is_short %}<span class="shorts-badge">Short</span>{% endif %}
+                {% if result.is_short %}<span class="shorts-badge">{{ t("Short") }}</span>{% endif %}
             </div>
             <div class="result-info">
                 <h3 class="result-title">{{ result.title }}</h3>
                 <p class="result-channel">{{ result.channel_name }}</p>
-                {% if result.view_count %}<p class="result-meta">{{ result.view_count | format_views }} views</p>{% endif %}
+                {% if result.view_count %}<p class="result-meta">{{ t("{views} views", views=result.view_count | format_views) }}</p>{% endif %}
             </div>
             <form action="/request" method="POST" class="request-form">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <input type="hidden" name="video_id" value="{{ result.video_id }}">
-                <button type="submit" class="btn-primary request-button">Request</button>
+                <button type="submit" class="btn-primary request-button">{{ t("Request") }}</button>
             </form>
         </div>
         {% endfor %}
     </div>
     {% if results|length > 5 %}
     <div class="show-more-wrap" id="show-more-wrap">
-        <button class="btn-primary show-more-btn" id="show-more-btn" type="button">Show More</button>
+        <button class="btn-primary show-more-btn" id="show-more-btn" type="button">{{ t("Show More") }}</button>
     </div>
     {% endif %}
     <script>
@@ -56,8 +56,8 @@
     {% else %}
     <div class="empty-state">
         <div class="empty-icon">&#x1f614;</div>
-        <p>No results found</p>
-        <p class="empty-hint">Try a different search</p>
+        <p>{{ t("No results found") }}</p>
+        <p class="empty-hint">{{ t("Try a different search") }}</p>
     </div>
     {% endif %}
 </section>

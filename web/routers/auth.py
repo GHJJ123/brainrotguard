@@ -7,7 +7,7 @@ from fastapi import APIRouter, Request, Form, Query
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from web.shared import templates, limiter
-from web.helpers import AVATAR_ICONS, AVATAR_COLORS, get_csrf_token, validate_csrf
+from web.helpers import AVATAR_ICONS, AVATAR_COLORS, base_ctx, get_csrf_token, validate_csrf
 
 router = APIRouter()
 
@@ -41,6 +41,7 @@ async def login_page(request: Request, profile: str = Query("", max_length=50)):
             return RedirectResponse(url="/", status_code=303)
         if p:
             return templates.TemplateResponse("login.html", {
+                **base_ctx(request),
                 "request": request,
                 "csrf_token": csrf_token,
                 "error": False,
@@ -52,6 +53,7 @@ async def login_page(request: Request, profile: str = Query("", max_length=50)):
     # Single profile with PIN -- go straight to PIN entry
     if len(profiles) == 1:
         return templates.TemplateResponse("login.html", {
+            **base_ctx(request),
             "request": request,
             "csrf_token": csrf_token,
             "error": False,
@@ -62,6 +64,7 @@ async def login_page(request: Request, profile: str = Query("", max_length=50)):
 
     # Show profile picker
     return templates.TemplateResponse("login.html", {
+        **base_ctx(request),
         "request": request,
         "csrf_token": csrf_token,
         "error": False,
@@ -116,6 +119,7 @@ async def login_submit(
     new_csrf = secrets.token_hex(32)
     request.session["csrf_token"] = new_csrf
     return templates.TemplateResponse("login.html", {
+        **base_ctx(request),
         "request": request,
         "csrf_token": new_csrf,
         "error": True,

@@ -9,7 +9,6 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
 from bot.helpers import _md, _answer_bg, _nav_row, _edit_msg, _channel_md_link, MD2
-from utils import CAT_LABELS
 from youtube.extractor import format_duration
 
 logger = logging.getLogger(__name__)
@@ -37,46 +36,51 @@ class CommandsMixin:
             await self._child_pin(update, args[1:])
         else:
             await update.effective_message.reply_text(
-                "Usage: /child [add|remove|rename|pin]\n\n"
+                self.tr("Usage: /child [add|remove|rename|pin]\n\n"
                 "`/child` — list profiles\n"
                 "`/child add <name> [pin]` — create\n"
                 "`/child remove <name>` — delete\n"
                 "`/child rename <name> <new>` — rename\n"
-                "`/child pin <name> [pin]` — set/clear PIN"
+                "`/child pin <name> [pin]` — set/clear PIN")
             )
 
     async def _child_list(self, update: Update) -> None:
         """List all child profiles."""
         profiles = self._get_profiles()
         if not profiles:
-            await update.effective_message.reply_text("No profiles. Use /child add <name> to create one.")
+            await update.effective_message.reply_text(self.tr("No profiles. Use /child add <name> to create one."))
             return
-        lines = ["**Child Profiles**\n"]
+        lines = [f"**{self.tr('Child Profiles')}**\n"]
         for p in profiles:
-            pin_status = "PIN set" if p["pin"] else "no PIN"
+            pin_status = self.tr("PIN set") if p["pin"] else self.tr("no PIN")
             cs = self._child_store(p["id"])
             stats = cs.get_stats()
             ch_count = len(cs.get_channels_with_ids("allowed"))
             lines.append(f"**{p['display_name']}**")
-            lines.append(f"  {pin_status} · {stats['approved']} videos · {ch_count} channels")
+            lines.append(
+                f"  {pin_status} · {self.tr('{videos} videos', videos=stats['approved'])} · "
+                f"{self.tr('{channels} channels', channels=ch_count)}"
+            )
         await update.effective_message.reply_text(_md("\n".join(lines)), parse_mode=MD2)
 
     async def _child_add(self, update: Update, args: list[str]) -> None:
         """Handle /child add <name> [pin]."""
         if not args:
-            await update.effective_message.reply_text("Usage: /child add <name> [pin]")
+            await update.effective_message.reply_text(self.tr("Usage: /child add <name> [pin]"))
             return
         name = args[0]
         pin = args[1] if len(args) > 1 else ""
         # Generate URL-safe ID from name
         pid = re.sub(r'[^a-z0-9]', '', name.lower())[:20]
         if not pid:
-            await update.effective_message.reply_text("Name must contain at least one alphanumeric character.")
+            await update.effective_message.reply_text(self.tr("Name must contain at least one alphanumeric character."))
             return
         # Ensure unique ID
         existing = self.video_store.get_profile(pid)
         if existing:
-            await update.effective_message.reply_text(f"Profile ID conflict with '{existing['display_name']}' — try a different name.")
+            await update.effective_message.reply_text(
+                self.tr("Profile ID conflict with '{name}' — try a different name.", name=existing["display_name"])
+            )
             return
         import random
         from web.helpers import AVATAR_ICONS, AVATAR_COLORS
@@ -84,10 +88,13 @@ class CommandsMixin:
             pid, name, pin=pin,
             icon=random.choice(AVATAR_ICONS), color=random.choice(AVATAR_COLORS),
         ):
-            pin_msg = " with PIN" if pin else " (no PIN)"
-            await update.effective_message.reply_text(_md(f"Created profile: **{name}**{pin_msg}"), parse_mode=MD2)
+            pin_msg = self.tr(" with PIN") if pin else self.tr(" (no PIN)")
+            await update.effective_message.reply_text(
+                _md(self.tr("Created profile: {name}{pin_msg}", name=f"**{name}**", pin_msg=pin_msg)),
+                parse_mode=MD2,
+            )
         else:
-            await update.effective_message.reply_text("Failed to create profile.")
+            await update.effective_message.reply_text(self.tr("Failed to create profile."))
 
     def _find_profile(self, name: str):
         """Find a profile by display name or id (case-insensitive)."""
@@ -100,22 +107,27 @@ class CommandsMixin:
     async def _child_remove(self, update: Update, args: list[str]) -> None:
         """Handle /child remove <name>."""
         if not args:
-            await update.effective_message.reply_text("Usage: /child remove <name>")
+            await update.effective_message.reply_text(self.tr("Usage: /child remove <name>"))
             return
         name = " ".join(args)
         target = self._find_profile(name)
         if not target:
-            await update.effective_message.reply_text(f"Profile not found: {name}")
+            await update.effective_message.reply_text(self.tr("Profile not found: {name}", name=name))
             return
         # Confirmation button
         keyboard = InlineKeyboardMarkup([[
             InlineKeyboardButton(
-                f"Delete {target['display_name']} and all data",
+                self.tr("Delete {name} and all data", name=target["display_name"]),
                 callback_data=f"child_del:{target['id']}",
             ),
         ]])
         await update.effective_message.reply_text(
-            _md(f"Delete **{target['display_name']}**? This removes all videos, channels, watch history, and settings."),
+            _md(
+                self.tr(
+                    "Delete **{name}**? This removes all videos, channels, watch history, and settings.",
+                    name=target["display_name"],
+                )
+            ),
             parse_mode=MD2,
             reply_markup=keyboard,
         )
@@ -123,42 +135,45 @@ class CommandsMixin:
     async def _child_rename(self, update: Update, args: list[str]) -> None:
         """Handle /child rename <name> <new_name>."""
         if len(args) < 2:
-            await update.effective_message.reply_text("Usage: /child rename <name> <new_name>")
+            await update.effective_message.reply_text(self.tr("Usage: /child rename <name> <new_name>"))
             return
         old_name = args[0]
         new_name = " ".join(args[1:])
         target = self._find_profile(old_name)
         if not target:
-            await update.effective_message.reply_text(f"Profile not found: {old_name}")
+            await update.effective_message.reply_text(self.tr("Profile not found: {name}", name=old_name))
             return
         # Check for display_name uniqueness
         conflict = self._find_profile(new_name)
         if conflict and conflict["id"] != target["id"]:
-            await update.effective_message.reply_text(f"A profile named '{new_name}' already exists.")
+            await update.effective_message.reply_text(self.tr("A profile named '{name}' already exists.", name=new_name))
             return
         if self.video_store.update_profile(target["id"], display_name=new_name):
-            await update.effective_message.reply_text(_md(f"Renamed: {target['display_name']} → **{new_name}**"), parse_mode=MD2)
+            await update.effective_message.reply_text(
+                _md(self.tr("Renamed: {old} -> **{new}**", old=target["display_name"], new=new_name)),
+                parse_mode=MD2,
+            )
         else:
-            await update.effective_message.reply_text("Failed to rename profile.")
+            await update.effective_message.reply_text(self.tr("Failed to rename profile."))
 
     async def _child_pin(self, update: Update, args: list[str]) -> None:
         """Handle /child pin <name> [pin]."""
         if not args:
-            await update.effective_message.reply_text("Usage: /child pin <name> [pin]\nOmit pin to remove it.")
+            await update.effective_message.reply_text(self.tr("Usage: /child pin <name> [pin]\nOmit pin to remove it."))
             return
         name = args[0]
         new_pin = args[1] if len(args) > 1 else ""
         target = self._find_profile(name)
         if not target:
-            await update.effective_message.reply_text(f"Profile not found: {name}")
+            await update.effective_message.reply_text(self.tr("Profile not found: {name}", name=name))
             return
         if self.video_store.update_profile(target["id"], pin=new_pin):
             if new_pin:
-                await update.effective_message.reply_text(_md(f"PIN set for **{target['display_name']}**."), parse_mode=MD2)
+                await update.effective_message.reply_text(_md(self.tr("PIN set for **{name}**.", name=target["display_name"])), parse_mode=MD2)
             else:
-                await update.effective_message.reply_text(_md(f"PIN removed for **{target['display_name']}**."), parse_mode=MD2)
+                await update.effective_message.reply_text(_md(self.tr("PIN removed for **{name}**.", name=target["display_name"])), parse_mode=MD2)
         else:
-            await update.effective_message.reply_text("Failed to update PIN.")
+            await update.effective_message.reply_text(self.tr("Failed to update PIN."))
 
     async def _cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Send the setup hub."""
@@ -170,45 +185,49 @@ class CommandsMixin:
         if not await self._require_admin(update):
             return
         from version import __version__
-        help_link = "📖 [Full command reference](https://github.com/GHJJ123/brainrotguard/blob/main/docs/telegram-commands.md)\n"
+        help_link = self.tr("📖 [Full command reference]({url})\n",
+                            url="https://github.com/GHJJ123/brainrotguard/blob/main/docs/telegram-commands.md")
         await update.effective_message.reply_text(_md(
-            f"**BrainRotGuard v{__version__}**\n\n"
-            "**Commands:**\n"
-            "`/help` - Show this message\n"
-            "`/pending` - List pending requests\n"
-            "`/approved` - List approved videos\n"
-            "`/stats` - Usage statistics\n"
-            "`/watch [yesterday|N]` - Watch activity & time budget\n"
-            "`/logs [days|today]` - Activity report\n"
-            "`/changelog` - Latest changes\n\n"
-            "**Channel:**\n"
-            "`/channel` - List all channels\n"
-            "`/channel starter` - Kid-friendly starter list\n"
-            "`/channel allow|unallow @handle [edu|fun]`\n"
-            "`/channel block|unblock @handle`\n"
-            "`/channel cat <name> edu|fun`\n\n"
-            "**Filters & Search:**\n"
-            "`/filter` - List word filters\n"
-            "`/filter add|remove <word>`\n"
-            "`/search [days|today|all]` - Search history\n\n"
-            "**Time & Schedule:**\n"
-            "`/time` - Show status & weekly view\n"
-            "`/time setup` - Guided limit wizard\n"
-            "`/time <min|off>` - Simple watch limit\n"
-            "`/time edu|fun <min|off>` - Category limits\n"
-            "`/time start|stop [time|off]` - Schedule\n"
-            "`/time add <min>` - Bonus for today\n"
-            "`/time <day> [start|stop|edu|fun|limit|off]`\n"
-            "`/time <day> copy <days|weekdays|weekend|all>`\n"
-            "`/shorts [on|off]` - Toggle Shorts row\n\n"
-            "**Profiles:**\n"
-            "`/child` - List child profiles\n"
-            "`/child add <name> [pin]`\n"
-            "`/child remove|rename|pin <name>`\n\n"
-            "**Setup:**\n"
-            "`/setup` - Interactive setup hub\n\n"
-            f"{help_link}"
-            "☕ [Buy me a coffee](https://ko-fi.com/coffee4jj)"
+            self.tr(
+                "**BrainRotGuard v{version}**\n\n"
+                "**Commands:**\n"
+                "`/help` - Show this message\n"
+                "`/pending` - List pending requests\n"
+                "`/approved` - List approved videos\n"
+                "`/stats` - Usage statistics\n"
+                "`/watch [yesterday|N]` - Watch activity & time budget\n"
+                "`/logs [days|today]` - Activity report\n"
+                "`/changelog` - Latest changes\n\n"
+                "**Channel:**\n"
+                "`/channel` - List all channels\n"
+                "`/channel starter` - Kid-friendly starter list\n"
+                "`/channel allow|unallow @handle [edu|fun]`\n"
+                "`/channel block|unblock @handle`\n"
+                "`/channel cat <name> edu|fun`\n\n"
+                "**Filters & Search:**\n"
+                "`/filter` - List word filters\n"
+                "`/filter add|remove <word>`\n"
+                "`/search [days|today|all]` - Search history\n\n"
+                "**Time & Schedule:**\n"
+                "`/time` - Show status & weekly view\n"
+                "`/time setup` - Guided limit wizard\n"
+                "`/time <min|off>` - Simple watch limit\n"
+                "`/time edu|fun <min|off>` - Category limits\n"
+                "`/time start|stop [time|off]` - Schedule\n"
+                "`/time add <min>` - Bonus for today\n"
+                "`/time <day> [start|stop|edu|fun|limit|off]`\n"
+                "`/time <day> copy <days|weekdays|weekend|all>`\n"
+                "`/shorts [on|off]` - Toggle Shorts row\n\n"
+                "**Profiles:**\n"
+                "`/child` - List child profiles\n"
+                "`/child add <name> [pin]`\n"
+                "`/child remove|rename|pin <name>`\n\n"
+                "**Setup:**\n"
+                "`/setup` - Interactive setup hub\n\n",
+                version=__version__,
+            )
+            + f"{help_link}"
+            + self.tr("☕ [Buy me a coffee]({url})", url="https://ko-fi.com/coffee4jj")
         ), parse_mode=MD2, disable_web_page_preview=True)
 
     async def _cmd_shorts(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -227,19 +246,25 @@ class CommandsMixin:
                     self.on_channel_change()
                 if enabled:
                     await update.effective_message.reply_text(_md(
-                        f"**Shorts enabled{ctx}**\n\n"
-                        "- Shorts row appears on the homepage below videos\n"
-                        "- Shorts from allowlisted channels are fetched on next cache refresh\n"
-                        "- Shorts still count toward category time budgets (edu/fun)\n"
-                        "- Shorts hidden from search results remain hidden"
+                        f"**{self.tr('Shorts enabled{ctx}', ctx=ctx)}**\n\n"
+                        "- "
+                        + self.tr(
+                            "Shorts row appears on the homepage below videos\n"
+                            "- Shorts from allowlisted channels are fetched on next cache refresh\n"
+                            "- Shorts still count toward category time budgets (edu/fun)\n"
+                            "- Shorts hidden from search results remain hidden"
+                        )
                     ), parse_mode=MD2)
                 else:
                     await update.effective_message.reply_text(_md(
-                        f"**Shorts disabled{ctx}**\n\n"
-                        "- Shorts row removed from homepage\n"
-                        "- Shorts hidden from catalog, search results, and channel filters\n"
-                        "- Existing approved Shorts stay in the database\n"
-                        "- Use `/shorts on` to re-enable anytime"
+                        f"**{self.tr('Shorts disabled{ctx}', ctx=ctx)}**\n\n"
+                        "- "
+                        + self.tr(
+                            "Shorts row removed from homepage\n"
+                            "- Shorts hidden from catalog, search results, and channel filters\n"
+                            "- Existing approved Shorts stay in the database\n"
+                            "- Use `/shorts on` to re-enable anytime"
+                        )
                     ), parse_mode=MD2)
             else:
                 db_val = cs.get_setting("shorts_enabled", "")
@@ -251,18 +276,21 @@ class CommandsMixin:
                     current = False
                 if current:
                     await update.effective_message.reply_text(_md(
-                        f"**Shorts: enabled{ctx}**\n\n"
-                        "Shorts appear in a dedicated row on the homepage and are "
-                        "fetched from allowlisted channels. They count toward "
-                        "edu/fun time budgets like regular videos.\n\n"
-                        "`/shorts off` — hide Shorts everywhere"
+                        f"**{self.tr('Shorts: enabled{ctx}', ctx=ctx)}**\n\n"
+                        + self.tr(
+                            "Shorts appear in a dedicated row on the homepage and are fetched from allowlisted channels. "
+                            "They count toward edu/fun time budgets like regular videos.\n\n"
+                            "`/shorts off` — hide Shorts everywhere"
+                        )
                     ), parse_mode=MD2)
                 else:
                     await update.effective_message.reply_text(_md(
-                        f"**Shorts: disabled{ctx}**\n\n"
-                        "Shorts are hidden from the homepage, catalog, and search results. "
-                        "No Shorts are fetched from channels.\n\n"
-                        "`/shorts on` — show Shorts in a dedicated row"
+                        f"**{self.tr('Shorts: disabled{ctx}', ctx=ctx)}**\n\n"
+                        + self.tr(
+                            "Shorts are hidden from the homepage, catalog, and search results. "
+                            "No Shorts are fetched from channels.\n\n"
+                            "`/shorts on` — show Shorts in a dedicated row"
+                        )
                     ), parse_mode=MD2)
 
         await self._with_child_context(update, context, _inner)
@@ -277,7 +305,7 @@ class CommandsMixin:
         async def _inner(update, context, cs, profile):
             pending = cs.get_pending()
             if not pending:
-                await update.effective_message.reply_text("No pending requests. Videos requested from the web app will appear here.")
+                await update.effective_message.reply_text(self.tr("No pending requests. Videos requested from the web app will appear here."))
                 return
             text, keyboard = self._render_pending_page(pending, 0, profile_id=profile["id"])
             await update.effective_message.reply_text(text, parse_mode=MD2, reply_markup=keyboard)
@@ -294,9 +322,9 @@ class CommandsMixin:
         total_pages = (total + ps - 1) // ps
 
         ctx = self._ctx_label({"display_name": self._profile_name(profile_id)}) if len(self._get_profiles()) > 1 else ""
-        header = f"**Pending Requests{ctx} ({total})**"
+        header = f"**{self.tr('Pending Requests{ctx} ({total})', ctx=ctx, total=total)}**"
         if total_pages > 1:
-            header += f" \u00b7 pg {page + 1}/{total_pages}"
+            header += self.tr(" · pg {page}/{total}", page=page + 1, total=total_pages)
         lines = [header, ""]
         buttons = []
         for v in page_items:
@@ -306,10 +334,11 @@ class CommandsMixin:
             lines.append(f"  _{ch} \u00b7 {duration}_")
             lines.append("")
             buttons.append([InlineKeyboardButton(
-                f"Resend: {v['title'][:30]}", callback_data=f"resend:{profile_id}:{v['video_id']}",
+                self.tr("Resend: {title}", title=v["title"][:30]), callback_data=f"resend:{profile_id}:{v['video_id']}",
             )])
 
-        nav = _nav_row(page, total, ps, f"pending_page:{profile_id}")
+        nav = _nav_row(page, total, ps, f"pending_page:{profile_id}",
+                       back_label=self.tr("Back"), next_label=self.tr("Next"))
         if nav:
             buttons.append(nav)
         return _md("\n".join(lines)), InlineKeyboardMarkup(buttons)
@@ -319,7 +348,7 @@ class CommandsMixin:
         cs = self._child_store(profile_id)
         pending = cs.get_pending()
         if not pending:
-            await query.answer("No pending requests.")
+            await query.answer(self.tr("No pending requests."))
             return
         _answer_bg(query)
         text, keyboard = self._render_pending_page(pending, page, profile_id=profile_id)
@@ -338,7 +367,7 @@ class CommandsMixin:
             if query_str:
                 results = cs.search_approved(query_str)
                 if not results:
-                    await update.effective_message.reply_text(f"No approved videos matching \"{query_str}\".")
+                    await update.effective_message.reply_text(self.tr('No approved videos matching "{query}".', query=query_str))
                     return
                 text, keyboard = self._render_approved_page(results, len(results), 0, search=query_str, store=cs, profile_id=pid)
                 await update.effective_message.reply_text(
@@ -347,7 +376,7 @@ class CommandsMixin:
                 return
             page_items, total = cs.get_approved_page(0, self._APPROVED_PAGE_SIZE)
             if not page_items:
-                await update.effective_message.reply_text("No approved videos yet. Approve requests or use /channel to allow channels.")
+                await update.effective_message.reply_text(self.tr("No approved videos yet. Approve requests or use /channel to allow channels."))
                 return
             text, keyboard = self._render_approved_page(page_items, total, 0, store=cs, profile_id=pid)
             await update.effective_message.reply_text(
@@ -365,11 +394,13 @@ class CommandsMixin:
 
         ctx = self._ctx_label({"display_name": self._profile_name(profile_id)}) if len(self._get_profiles()) > 1 else ""
         if search:
-            header = f"\U0001f50d **\"{search}\"{ctx} ({total} result{'s' if total != 1 else ''})**"
+            result_word = self.tr("result") if total == 1 else self.tr("results")
+            search_header = self.tr('"{search}"{ctx} ({total} {result_word})', search=search, ctx=ctx, total=total, result_word=result_word)
+            header = f"\U0001f50d **{search_header}**"
         else:
-            header = f"\U0001f4cb **Approved{ctx} ({total})**"
+            header = f"\U0001f4cb **{self.tr('Approved{ctx} ({total})', ctx=ctx, total=total)}**"
         if total_pages > 1:
-            header += f" \u00b7 pg {page + 1}/{total_pages}"
+            header += self.tr(" · pg {page}/{total}", page=page + 1, total=total_pages)
         lines = [header, ""]
         watch_mins = s.get_batch_watch_minutes(
             [v['video_id'] for v in page_items]
@@ -391,7 +422,8 @@ class CommandsMixin:
             lines.append(f"  /revoke\\_{vid.replace('-', '_')}")
             lines.append("")
 
-        nav = _nav_row(page, total, ps, f"approved_page:{profile_id}")
+        nav = _nav_row(page, total, ps, f"approved_page:{profile_id}",
+                       back_label=self.tr("Back"), next_label=self.tr("Next"))
         keyboard = InlineKeyboardMarkup([nav]) if nav else None
         return _md("\n".join(lines)), keyboard
 
@@ -400,7 +432,7 @@ class CommandsMixin:
         cs = self._child_store(profile_id)
         page_items, total = cs.get_approved_page(page, self._APPROVED_PAGE_SIZE)
         if not page_items and page == 0:
-            await query.answer("No approved videos.")
+            await query.answer(self.tr("No approved videos."))
             return
         _answer_bg(query)
         text, keyboard = self._render_approved_page(page_items, total, page, store=cs, profile_id=profile_id)
@@ -429,16 +461,16 @@ class CommandsMixin:
                 video = v
                 found_profile = p
         if not video:
-            await update.effective_message.reply_text("Video not found — it may have been removed from the database.")
+            await update.effective_message.reply_text(self.tr("Video not found — it may have been removed from the database."))
             return
         video_id = video['video_id']
         if video['status'] != 'approved':
-            await update.effective_message.reply_text(f"Already {video['status']} — no change needed.")
+            await update.effective_message.reply_text(self.tr("Already {status} — no change needed.", status=self.tr(video["status"])))
             return
         cs = self._child_store(found_profile["id"])
         cs.update_status(video_id, "denied")
         await update.effective_message.reply_text(
-            _md(f"**Approval removed:** {video['title']}\nThe video is no longer watchable."), parse_mode=MD2,
+            _md(self.tr("Approval removed: {title}\nThe video is no longer watchable.", title=video["title"])), parse_mode=MD2,
         )
 
     # --- /watch command ---
@@ -451,12 +483,12 @@ class CommandsMixin:
             ctx = self._ctx_label(profile)
             stats = cs.get_stats()
             await update.effective_message.reply_text(_md(
-                f"**Stats{ctx}**\n\n"
-                f"**Total videos:** {stats['total']}\n"
-                f"**Pending:** {stats['pending']}\n"
-                f"**Approved:** {stats['approved']}\n"
-                f"**Denied:** {stats['denied']}\n"
-                f"**Total views:** {stats['total_views']}"
+                f"**{self.tr('Stats{ctx}', ctx=ctx)}**\n\n"
+                f"**{self.tr('Total videos: {total}', total=stats['total'])}**\n"
+                f"**{self.tr('Pending: {count}', count=stats['pending'])}**\n"
+                f"**{self.tr('Approved: {count}', count=stats['approved'])}**\n"
+                f"**{self.tr('Denied: {count}', count=stats['denied'])}**\n"
+                f"**{self.tr('Total views: {count}', count=stats['total_views'])}**"
             ), parse_mode=MD2)
 
         await self._with_child_context(update, context, _inner)
@@ -476,14 +508,13 @@ class CommandsMixin:
             else:
                 latest = content
             latest = latest.strip()
-            latest = f"BrainRotGuard v{__version__}\n\n{latest}"
+            latest = self.tr("BrainRotGuard v{version}\n\n{content}", version=__version__, content=latest)
             if len(latest) > 3500:
                 latest = latest[:3500] + "\n..."
             await update.effective_message.reply_text(latest)
         except FileNotFoundError:
-            await update.effective_message.reply_text("Changelog not available.")
+            await update.effective_message.reply_text(self.tr("Changelog not available."))
 
     # --- Activity report ---
 
     _LOGS_PAGE_SIZE = 10
-

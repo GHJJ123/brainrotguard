@@ -7,6 +7,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from slowapi.errors import RateLimitExceeded
 
+from i18n import t, normalize_locale
 from web.shared import limiter, static_dir, register_filters
 from web.cache import channel_cache_loop
 
@@ -37,8 +38,9 @@ app.include_router(watch_router)
 
 @app.exception_handler(RateLimitExceeded)
 async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    locale = normalize_locale(getattr(request.app.state, "locale", "en"))
     return HTMLResponse(
-        content="<h1>Too many requests</h1><p>Please wait a moment and try again.</p>",
+        content=f"<h1>{t(locale, 'Too many requests')}</h1><p>{t(locale, 'Please wait a moment and try again.')}</p>",
         status_code=429,
     )
 

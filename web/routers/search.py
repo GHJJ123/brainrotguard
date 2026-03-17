@@ -13,6 +13,7 @@ from web.cache import (
     get_word_filter_patterns, title_matches_filter, invalidate_catalog_cache,
 )
 from youtube.extractor import extract_video_id
+from i18n import t
 
 router = APIRouter()
 
@@ -77,7 +78,8 @@ async def search_videos(request: Request, q: str = Query("", max_length=200)):
     cs.record_search(q, len(results))
 
     csrf_token = get_csrf_token(request)
-    error_message = _ERROR_MESSAGES["fetch_failed"] if fetch_failed else ""
+    locale = getattr(request.app.state, "locale", "en")
+    error_message = t(locale, _ERROR_MESSAGES["fetch_failed"]) if fetch_failed else ""
     return templates.TemplateResponse("search.html", {
         **base_ctx(request),
         "results": results,

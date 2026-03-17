@@ -19,6 +19,7 @@ from web.app import app as fastapi_app
 from web.cache import init_app_state, invalidate_channel_cache, invalidate_catalog_cache
 from web.middleware import SecurityHeadersMiddleware, PinAuthMiddleware
 from youtube.extractor import configure_timeout, YouTubeExtractor
+from i18n import get_locale, get_time_format
 
 logging.basicConfig(
     level=logging.INFO,
@@ -91,6 +92,11 @@ class BrainRotGuard:
         state.youtube_config = self.config.youtube
         state.web_config = self.config.web
         state.wl_config = self.config.watch_limits
+        state.locale = get_locale(self.config)
+        state.time_format = get_time_format(self.config)
+        if state.wl_config:
+            state.wl_config.locale = state.locale
+            state.wl_config.time_format = state.time_format
         init_app_state(state)
 
         ydl_timeout = self.config.youtube.ydl_timeout if self.config.youtube else 30

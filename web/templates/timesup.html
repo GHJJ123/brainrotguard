@@ -1,27 +1,27 @@
 {% extends "base.html" %}
-{% block title %}Time's Up{% endblock %}
+{% block title %}{{ t("Time's Up") }}{% endblock %}
 
 {% block content %}
 <div class="timesup-container">
     <div class="timesup-icon">&#x23F0;</div>
     {% if category %}
-    <h2>{{ category }} Time's Up!</h2>
-    <p class="timesup-text">{% if child_name %}{{ child_name }} has{% else %}You've{% endif %} used {{ time_info.used_min | int }} out of {{ time_info.limit_min }} {{ category | lower }} minutes today.</p>
+    <h2>{{ t("{category} Time's Up!", category=category) }}</h2>
+    <p class="timesup-text">{% if child_name %}{{ t("{name} has used {used} out of {limit} {category} minutes today.", name=child_name, used=time_info.used_min | int, limit=time_info.limit_min, category=category | lower) }}{% else %}{{ t("You've used {used} out of {limit} {category} minutes today.", used=time_info.used_min | int, limit=time_info.limit_min, category=category | lower) }}{% endif %}</p>
     {% if available_categories %}
-    <p class="timesup-subtext">{% if child_name %}{{ child_name }} can{% else %}You can{% endif %} still watch:</p>
+    <p class="timesup-subtext">{% if child_name %}{{ t("{name} can still watch:", name=child_name) }}{% else %}{{ t("You can still watch:") }}{% endif %}</p>
     {% for cat in available_categories %}
     <a href="/?category={{ cat.name }}" class="back-link">
-        {{ cat.label }}{% if cat.remaining_min > 0 %} ({{ cat.remaining_min | int }} min left){% endif %}
+        {{ cat.label }}{% if cat.remaining_min > 0 %} {{ t("({minutes} min left)", minutes=cat.remaining_min | int) }}{% endif %}
     </a>
     {% endfor %}
     {% else %}
-    <p class="timesup-subtext">{% if next_start %}Videos available again at {{ next_start }}.{% else %}Time resets tomorrow at midnight.{% endif %}</p>
+    <p class="timesup-subtext">{% if next_start %}{{ t("Videos available again at {time}.", time=next_start) }}{% else %}{{ t("Time resets tomorrow at midnight.") }}{% endif %}</p>
     {% endif %}
     {% else %}
-    <h2>Time's Up!</h2>
-    <p class="timesup-text">{% if child_name %}{{ child_name }} has{% else %}You've{% endif %} used {{ time_info.used_min | int }} out of {{ time_info.limit_min }} minutes today.</p>
-    <p class="timesup-subtext">{% if next_start %}Videos available again at {{ next_start }}.{% else %}Time resets tomorrow at midnight.{% endif %}</p>
+    <h2>{{ t("Time's Up") }}!</h2>
+    <p class="timesup-text">{% if child_name %}{{ t("{name} has used {used} out of {limit} minutes today.", name=child_name, used=time_info.used_min | int, limit=time_info.limit_min) }}{% else %}{{ t("You've used {used} out of {limit} minutes today.", used=time_info.used_min | int, limit=time_info.limit_min) }}{% endif %}</p>
+    <p class="timesup-subtext">{% if next_start %}{{ t("Videos available again at {time}.", time=next_start) }}{% else %}{{ t("Time resets tomorrow at midnight.") }}{% endif %}</p>
     {% endif %}
-    <a href="/" class="back-link">Back to Home</a>
+    <a href="/" class="back-link">{{ t("Back to Home") }}</a>
 </div>
 {% endblock %}

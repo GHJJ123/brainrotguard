@@ -11,22 +11,22 @@
 {% endif %}
 {% if schedule_info and not schedule_info.allowed %}
 <div class="schedule-banner schedule-closed">
-    <span>Available {{ schedule_info.unlock_time }}</span>
+    <span>{{ t("Available again {unlock_time}", unlock_time=schedule_info.unlock_time) }}</span>
     <span class="schedule-detail">{{ schedule_info.start }}&ndash;{{ schedule_info.end }}</span>
 </div>
 {% elif schedule_info and schedule_info.allowed %}
 <div class="schedule-banner schedule-open">
-    <span>Available until {{ schedule_info.end }}</span>
+    <span>{{ t("Available until {time}", time=schedule_info.end) }}</span>
 </div>
 {% endif %}
 
 {% if time_info %}
 <a href="/activity" class="time-budget {% if time_info.remaining_min < 15 %}time-budget-low{% endif %}">
     {% if time_info.exceeded %}
-    <span class="time-low">No time remaining today</span>
+    <span class="time-low">{{ t("No time remaining today") }}</span>
     {% else %}
-    <span>{{ time_info.remaining_min | int }} min remaining today</span>
-    <span class="time-budget-detail">{{ time_info.used_min | int }} / {{ time_info.limit_min }} min used</span>
+    <span>{{ t("{remaining} min remaining today", remaining=time_info.remaining_min | int) }}</span>
+    <span class="time-budget-detail">{{ t("{used} / {limit} min used", used=time_info.used_min | int, limit=time_info.limit_min) }}</span>
     {% endif %}
 </a>
 {% endif %}
@@ -44,7 +44,7 @@
             <span class="hero-duration">{{ format_duration(vid.duration) }}</span>
             <div class="hero-play-hint">
                 <span class="play-icon"></span>
-                Watch Now
+                {{ t("Watch Now") }}
             </div>
         </div>
     </a>
@@ -56,7 +56,7 @@
 {% if channel_pills %}
 {# Channel pills: filter catalog by allowlisted channel (keyed by channel_id) #}
 <div class="channel-pills">
-    <button class="channel-pill active" data-channel="__all__">All</button>
+    <button class="channel-pill active" data-channel="__all__">{{ t("All") }}</button>
     {% for ch_id, ch_name in channel_pills.items() %}
     <button class="channel-pill" data-channel="{{ ch_id }}">{{ ch_name }}</button>
     {% endfor %}
@@ -66,18 +66,18 @@
 {% if cat_info %}
 <div class="cat-cards-row">
     <div class="cat-cards-group">
-        <button class="cat-card-all active" data-category="__all__">All</button>
+        <button class="cat-card-all active" data-category="__all__">{{ t("All") }}</button>
         {% for cat_name, info in cat_info.categories.items() %}
-        {% set cat_label = "Educational" if cat_name == "edu" else "Entertainment" %}
+        {% set cat_name_label = cat_label(cat_name) %}
         <button class="cat-card cat-card-{{ cat_name }}{% if info.exceeded %} cat-card-exceeded{% endif %}" data-category="{{ cat_name }}">
             <span class="cat-card-left">
-                <span class="cat-card-name">{{ cat_label }}</span>
+                <span class="cat-card-name">{{ cat_name_label }}</span>
                 {% if info.exceeded %}
-                <span class="cat-card-sub">time's up</span>
+                <span class="cat-card-sub">{{ t("time's up") }}</span>
                 {% elif info.limit_min > 0 %}
-                <span class="cat-card-sub">of {{ info.limit_min }}m</span>
+                <span class="cat-card-sub">{{ t("of {limit}m", limit=info.limit_min) }}</span>
                 {% else %}
-                <span class="cat-card-sub">Unlimited</span>
+                <span class="cat-card-sub">{{ t("Unlimited") }}</span>
                 {% endif %}
             </span>
             {% if info.limit_min > 0 %}
@@ -89,13 +89,13 @@
         </button>
         {% endfor %}
     </div>
-    <a href="/activity" class="cat-card-activity" title="Watch activity">&#x1f552;</a>
+    <a href="/activity" class="cat-card-activity" title="{{ t('Watch activity') }}">&#x1f552;</a>
 </div>
 {% endif %}
 
 {% if requests_row %}
 <section class="requests-section">
-    <h2 class="section-title">Your Requests</h2>
+    <h2 class="section-title">{{ t("Your Requests") }}</h2>
     <div class="video-grid" id="requests-grid">
         {% for video in requests_row %}
         <a href="/watch/{{ video.video_id }}" class="video-card requests-card" data-channel="{{ video.channel_id or video.channel_name }}" data-category="{{ video.category or 'fun' }}" data-video-id="{{ video.video_id }}">
@@ -105,25 +105,25 @@
                 <span class="duration-badge">{{ format_duration(video.duration) }}</span>
                 {% endif %}
                 {% if video.category %}
-                <span class="category-badge category-{{ video.category }}">{{ "Edu" if video.category == "edu" else "Fun" }}</span>
+                <span class="category-badge category-{{ video.category }}">{{ cat_label(video.category, short=True) }}</span>
                 {% endif %}
             </div>
             <div class="video-info">
                 <h3 class="video-title">{{ video.title }}</h3>
-                <p class="video-channel">{{ video.channel_name }}{% if video.yt_view_count %} <span class="video-views-inline">{{ video.yt_view_count | format_views }} views</span>{% endif %}</p>
+                <p class="video-channel">{{ video.channel_name }}{% if video.yt_view_count %} <span class="video-views-inline">{{ t("{views} views", views=video.yt_view_count | format_views) }}</span>{% endif %}</p>
             </div>
         </a>
         {% endfor %}
     </div>
     <div class="show-more-wrap" id="requests-show-more-wrap"{% if not has_more_requests %} style="display:none"{% endif %}>
-        <button class="btn-primary show-more-btn" id="requests-show-more-btn">Show More</button>
+        <button class="btn-primary show-more-btn" id="requests-show-more-btn">{{ t("Show More") }}</button>
     </div>
 </section>
 {% endif %}
 
 {% if catalog %}
 <section class="videos-section">
-    <h2 class="section-title">Channel Videos</h2>
+    <h2 class="section-title">{{ t("Channel Videos") }}</h2>
     <div class="video-grid" id="catalog-grid">
         {% for video in catalog %}
         <a href="/watch/{{ video.video_id }}" class="video-card" data-channel="{{ video.channel_id or video.channel_name }}" data-category="{{ video.category or 'fun' }}" data-video-id="{{ video.video_id }}">
@@ -133,34 +133,34 @@
                 <span class="duration-badge">{{ format_duration(video.duration) }}</span>
                 {% endif %}
                 {% if video.category %}
-                <span class="category-badge category-{{ video.category }}">{{ "Edu" if video.category == "edu" else "Fun" }}</span>
+                <span class="category-badge category-{{ video.category }}">{{ cat_label(video.category, short=True) }}</span>
                 {% endif %}
             </div>
             <div class="video-info">
                 <h3 class="video-title">{{ video.title }}</h3>
-                <p class="video-channel">{{ video.channel_name }}{% if video.view_count %} <span class="video-views-inline">{{ video.view_count | format_views }} views</span>{% endif %}</p>
+                <p class="video-channel">{{ video.channel_name }}{% if video.view_count %} <span class="video-views-inline">{{ t("{views} views", views=video.view_count | format_views) }}</span>{% endif %}</p>
             </div>
         </a>
         {% endfor %}
     </div>
     <div class="show-more-wrap" id="show-more-wrap"{% if not has_more %} style="display:none"{% endif %}>
-        <button class="btn-primary show-more-btn" id="show-more-btn">Show More</button>
+        <button class="btn-primary show-more-btn" id="show-more-btn">{{ t("Show More") }}</button>
     </div>
 </section>
 {% else %}
 <section class="videos-section">
-    <h2 class="section-title">Channel Videos</h2>
+    <h2 class="section-title">{{ t("Channel Videos") }}</h2>
     <div class="empty-state">
         <div class="empty-icon">&#x1f50d;</div>
-        <p>No videos yet</p>
-        <p class="empty-hint">Search for something to watch!</p>
+        <p>{{ t("No videos yet") }}</p>
+        <p class="empty-hint">{{ t("Search for something to watch!") }}</p>
     </div>
 </section>
 {% endif %}
 
 {% if shorts_catalog %}
 <section class="shorts-section">
-    <h2 class="section-title">Shorts</h2>
+    <h2 class="section-title">{{ t("Shorts") }}</h2>
     <div class="shorts-row">
         {% for video in shorts_catalog %}
         <a href="/watch/{{ video.video_id }}" class="shorts-card" data-channel="{{ video.channel_id or video.channel_name }}" data-category="{{ video.category or 'fun' }}">
@@ -169,7 +169,7 @@
                 {% if video.duration %}
                 <span class="duration-badge">{{ format_duration(video.duration) }}</span>
                 {% endif %}
-                <span class="category-badge category-{{ video.category or 'fun' }}">{{ "Edu" if video.category == "edu" else "Fun" }}</span>
+                <span class="category-badge category-{{ video.category or 'fun' }}">{{ cat_label(video.category or 'fun', short=True) }}</span>
             </div>
             <div class="shorts-info">
                 <div class="shorts-title">{{ video.title }}</div>
@@ -179,7 +179,7 @@
         {% endfor %}
         {% if has_more_shorts %}
         <button class="shorts-card shorts-show-more" id="shorts-show-more">
-            <span class="shorts-more-label">Show<br>More</span>
+            <span class="shorts-more-label">{{ t("Show<br>More") | safe }}</span>
         </button>
         {% endif %}
     </div>
@@ -188,6 +188,14 @@
 
 <script>
 (function() {
+    var showMoreText = {{ t("Show More") | tojson }};
+    var loadingText = {{ t("Loading...") | tojson }};
+    var failedToLoadText = {{ t("Failed to load") | tojson }};
+    var noVideosFoundText = {{ t("No videos yet") | tojson }};
+    var shortsShowMoreText = {{ t("Show<br>More") | replace("<br>", "\n") | tojson }};
+    var eduShortLabel = {{ cat_label("edu", short=True) | tojson }};
+    var funShortLabel = {{ cat_label("fun", short=True) | tojson }};
+    var viewsLabelTemplate = {{ t("{views} views", views="__VIEWS__") | tojson }};
     // Hero carousel: auto-advance with crossfade + Ken Burns
     var heroCarousel = document.getElementById('hero-carousel');
     if (heroCarousel) {
@@ -300,7 +308,8 @@
         a.dataset.category = v.category || 'fun';
         a.dataset.videoId = v.video_id || '';
         var dur = v.duration ? '<span class="duration-badge">' + escapeHtml(formatDuration(v.duration)) + '</span>' : '';
-        var catBadge = v.category ? '<span class="category-badge category-' + escapeHtml(v.category) + '">' + (v.category === 'edu' ? 'Edu' : 'Fun') + '</span>' : '';
+        var catBadge = v.category ? '<span class="category-badge category-' + escapeHtml(v.category) + '">' + (v.category === 'edu' ? eduShortLabel : funShortLabel) + '</span>' : '';
+        var viewsLabel = viewsLabelTemplate.replace('__VIEWS__', escapeHtml(formatViews(v.view_count || v.yt_view_count)));
         // eslint-disable-next-line no-unsanitized/property -- values are escaped via escapeHtml()
         a.innerHTML =
             '<div class="thumbnail-wrap">' +
@@ -310,7 +319,7 @@
             '</div>' +
             '<div class="video-info">' +
                 '<h3 class="video-title">' + escapeHtml(v.title || '') + '</h3>' +
-                '<p class="video-channel">' + escapeHtml(v.channel_name || '') + ((v.view_count || v.yt_view_count) ? ' <span class="video-views-inline">' + escapeHtml(formatViews(v.view_count || v.yt_view_count)) + ' views</span>' : '') + '</p>' +
+                '<p class="video-channel">' + escapeHtml(v.channel_name || '') + ((v.view_count || v.yt_view_count) ? ' <span class="video-views-inline">' + viewsLabel + '</span>' : '') + '</p>' +
             '</div>';
         return a;
     }
@@ -336,7 +345,7 @@
         return fetch(url).then(function(r) { return r.json(); }).then(function(data) {
             if (replace) catalogGrid.innerHTML = '';
             if (data.videos.length === 0 && replace) {
-                catalogGrid.innerHTML = '<p style="color:#666;text-align:center;padding:20px;">No videos found</p>';
+                catalogGrid.innerHTML = '<p style="color:#666;text-align:center;padding:20px;">' + noVideosFoundText + '</p>';
             } else {
                 data.videos.forEach(function(v) { catalogGrid.appendChild(buildCard(v)); });
             }
@@ -373,7 +382,7 @@
             document.querySelectorAll('.cat-card, .cat-card-all').forEach(function(p) { p.classList.remove('active'); });
             var allCatPill = document.querySelector('.cat-card-all[data-category="__all__"]');
             if (allCatPill) allCatPill.classList.add('active');
-            catalogGrid.innerHTML = '<p style="color:#666;text-align:center;padding:20px;">Loading...</p>';
+            catalogGrid.innerHTML = '<p style="color:#666;text-align:center;padding:20px;">' + loadingText + '</p>';
 
             fetchCatalog(channel, 0, PAGE_SIZE, true)
                 .then(function(data) {
@@ -382,11 +391,11 @@
                     showMoreWrap.style.display = filterHasMore ? '' : 'none';
                     if (showMoreBtn) {
                         showMoreBtn.disabled = false;
-                        showMoreBtn.textContent = 'Show More';
+                        showMoreBtn.textContent = showMoreText;
                     }
                 })
                 .catch(function() {
-                    catalogGrid.innerHTML = '<p style="color:#888;text-align:center;padding:20px;">Failed to load</p>';
+                    catalogGrid.innerHTML = '<p style="color:#888;text-align:center;padding:20px;">' + failedToLoadText + '</p>';
                     showMoreWrap.style.display = 'none';
                 });
         });
@@ -427,7 +436,7 @@
             var allChPill = document.querySelector('.channel-pill[data-channel="__all__"]');
             if (allChPill) allChPill.classList.add('active');
 
-            catalogGrid.innerHTML = '<p style="color:#666;text-align:center;padding:20px;">Loading...</p>';
+            catalogGrid.innerHTML = '<p style="color:#666;text-align:center;padding:20px;">' + loadingText + '</p>';
             fetchCatalog('', 0, PAGE_SIZE, true)
                 .then(function(data) {
                     filterOffset = data.videos.length;
@@ -435,11 +444,11 @@
                     showMoreWrap.style.display = filterHasMore ? '' : 'none';
                     if (showMoreBtn) {
                         showMoreBtn.disabled = false;
-                        showMoreBtn.textContent = 'Show More';
+                        showMoreBtn.textContent = showMoreText;
                     }
                 })
                 .catch(function() {
-                    catalogGrid.innerHTML = '<p style="color:#888;text-align:center;padding:20px;">Failed to load</p>';
+                    catalogGrid.innerHTML = '<p style="color:#888;text-align:center;padding:20px;">' + failedToLoadText + '</p>';
                     showMoreWrap.style.display = 'none';
                 });
         });
@@ -485,7 +494,7 @@
         if (showMoreWrap) showMoreWrap.style.display = initialHasMore ? '' : 'none';
         if (showMoreBtn) {
             showMoreBtn.disabled = false;
-            showMoreBtn.textContent = 'Show More';
+            showMoreBtn.textContent = showMoreText;
         }
     }
 
@@ -493,7 +502,7 @@
     if (showMoreBtn) {
         showMoreBtn.addEventListener('click', function() {
             showMoreBtn.disabled = true;
-            showMoreBtn.textContent = 'Loading...';
+            showMoreBtn.textContent = loadingText;
             var ch = activeFilter || '';
             var off = (activeFilter || activeCatFilter) ? filterOffset : catalogOffset;
 
@@ -512,12 +521,12 @@
                         showMoreWrap.style.display = 'none';
                     } else {
                         showMoreBtn.disabled = false;
-                        showMoreBtn.textContent = 'Show More';
+                        showMoreBtn.textContent = showMoreText;
                     }
                 })
                 .catch(function() {
                     showMoreBtn.disabled = false;
-                    showMoreBtn.textContent = 'Show More';
+                    showMoreBtn.textContent = showMoreText;
                 });
         });
     }
@@ -538,7 +547,7 @@
                         a.href = '/watch/' + encodeURIComponent(v.video_id);
                         a.className = 'shorts-card';
                         var cat = v.category || 'fun';
-                        var catLabel = cat === 'edu' ? 'Edu' : 'Fun';
+                        var catLabel = cat === 'edu' ? eduShortLabel : funShortLabel;
                         var dur = v.duration ? '<span class="duration-badge">' + escapeHtml(formatDuration(v.duration)) + '</span>' : '';
                         // eslint-disable-next-line no-unsanitized/property -- values are escaped via escapeHtml()
                         a.innerHTML =
@@ -557,11 +566,11 @@
                     if (!data.has_more) {
                         shortsBtn.remove();
                     } else {
-                        shortsBtn.querySelector('.shorts-more-label').textContent = 'Show\nMore';
+                        shortsBtn.querySelector('.shorts-more-label').textContent = shortsShowMoreText;
                     }
                 })
                 .catch(function() {
-                    shortsBtn.querySelector('.shorts-more-label').textContent = 'Show\nMore';
+                    shortsBtn.querySelector('.shorts-more-label').textContent = shortsShowMoreText;
                 });
         });
     }
@@ -575,7 +584,7 @@
         var REQUESTS_PAGE = 24;
         requestsShowMoreBtn.addEventListener('click', function() {
             requestsShowMoreBtn.disabled = true;
-            requestsShowMoreBtn.textContent = 'Loading...';
+            requestsShowMoreBtn.textContent = loadingText;
             fetch('/api/catalog?requests=true&offset=' + requestsOffset + '&limit=' + REQUESTS_PAGE)
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
@@ -592,12 +601,12 @@
                         requestsShowMoreWrap.style.display = 'none';
                     } else {
                         requestsShowMoreBtn.disabled = false;
-                        requestsShowMoreBtn.textContent = 'Show More';
+                        requestsShowMoreBtn.textContent = showMoreText;
                     }
                 })
                 .catch(function() {
                     requestsShowMoreBtn.disabled = false;
-                    requestsShowMoreBtn.textContent = 'Show More';
+                    requestsShowMoreBtn.textContent = showMoreText;
                 });
         });
     }

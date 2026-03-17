@@ -7,7 +7,6 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
 from bot.helpers import _md, _answer_bg, _nav_row, _edit_msg, MD2
-from utils import CAT_LABELS
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +43,7 @@ class ChannelMixin:
                 await self._channel_starter(update, store=cs)
             else:
                 await update.effective_message.reply_text(
-                    "Usage: /channel allow|unallow|block|unblock|cat|starter <name>"
+                    self.tr("Usage: /channel allow|unallow|block|unblock|cat|starter <name>")
                 )
 
         await self._with_child_context(update, context, _inner, allow_all=True)
@@ -54,7 +53,7 @@ class ChannelMixin:
     async def _channel_starter(self, update: Update, store=None) -> None:
         """Handle /channel starter — show importable starter channels."""
         if not self._starter_channels:
-            await update.effective_message.reply_text("No starter channels configured.")
+            await update.effective_message.reply_text(self.tr("No starter channels configured."))
             return
         s = store or self.video_store
         pid = getattr(s, 'profile_id', 'default')
@@ -75,11 +74,11 @@ class ChannelMixin:
         total_pages = (total + ps - 1) // ps
 
         if onboard_name:
-            header = f"**Starter Channels for {onboard_name}** ({total})"
+            header = f"**{self.tr('Starter Channels for {name}', name=onboard_name)}** ({total})"
         else:
-            header = f"**Starter Channels** ({total})"
+            header = f"**{self.tr('Starter Channels')}** ({total})"
         if total_pages > 1:
-            header += f" \u00b7 pg {page + 1}/{total_pages}"
+            header += self.tr(" · pg {page}/{total}", page=page + 1, total=total_pages)
         lines = [header, ""]
         buttons = []
         for idx in range(start, end):
@@ -89,23 +88,24 @@ class ChannelMixin:
             cat = ch.get("category") or ""
             desc = ch.get("description") or ""
             url = f"https://www.youtube.com/{handle}"
-            cat_badge = f" [{cat}]" if cat else ""
+            cat_badge = f" [{self.cat_label(cat, short=True)}]" if cat else ""
             lines.append(f"[{name}]({url}){cat_badge}")
             if desc:
                 lines.append(f"_{desc}_")
             if handle.lower() in existing:
-                lines.append("\u2705 _imported_\n")
+                lines.append(f"\u2705 _{self.tr('imported')}_\n")
             else:
                 lines.append("")
                 buttons.append([InlineKeyboardButton(
-                    f"Import: {name}", callback_data=f"starter_import:{profile_id}:{idx}",
+                    self.tr("Import: {name}", name=name), callback_data=f"starter_import:{profile_id}:{idx}",
                 )])
 
-        nav = _nav_row(page, total, ps, f"starter_page:{profile_id}")
+        nav = _nav_row(page, total, ps, f"starter_page:{profile_id}",
+                       back_label=self.tr("Back"), next_label=self.tr("Next"))
         if nav:
             buttons.append(nav)
         if onboard:
-            buttons.append([InlineKeyboardButton("\u2190 Back to Setup", callback_data="onboard_chan_back")])
+            buttons.append([InlineKeyboardButton(f"\u2190 {self.tr('Back to Setup')}", callback_data="onboard_chan_back")])
         markup = InlineKeyboardMarkup(buttons) if buttons else None
         return _md("\n".join(lines)), markup
 
@@ -126,7 +126,7 @@ class ChannelMixin:
     async def _cb_starter_import(self, query, profile_id: str, idx: int) -> None:
         """Handle Import button press from starter channels message."""
         if idx < 0 or idx >= len(self._starter_channels):
-            await query.answer("Invalid channel.")
+            await query.answer(self.tr("Invalid channel."))
             return
         cs = self._child_store(profile_id)
         ch = self._starter_channels[idx]
@@ -155,7 +155,7 @@ class ChannelMixin:
                 self.on_channel_change(profile_id)
 
         # Acknowledge callback in background (non-blocking)
-        msg = f"Already imported: {name}" if already else f"Imported: {name}"
+        msg = self.tr("Already imported: {name}", name=name) if already else self.tr("Imported: {name}", name=name)
         _answer_bg(query, msg)
 
         # Re-render the message immediately
@@ -183,20 +183,19 @@ class ChannelMixin:
         verb = "allow" if status == "allowed" else "block"
         example = "@LEGO" if status == "allowed" else "@Slurry"
         if not args:
-            await update.effective_message.reply_text(f"Usage: /channel {verb} @handle\nExample: /channel {verb} {example}")
+            await update.effective_message.reply_text(self.tr("Usage: /channel {verb} @handle\nExample: /channel {verb} {example}", verb=verb, example=example))
             return
         raw = args[0]
         if not raw.startswith("@"):
             await update.effective_message.reply_text(
-                f"Please use the channel's @handle (e.g. {example}).\n"
-                "You can find it on the channel's YouTube page."
+                self.tr("Please use the channel's @handle (e.g. {example}).\nYou can find it on the channel's YouTube page.", example=example)
             )
             return
-        await update.effective_message.reply_text(f"Looking up {raw} on YouTube...")
+        await update.effective_message.reply_text(self.tr("Looking up {raw} on YouTube...", raw=raw))
         from youtube.extractor import resolve_channel_handle
         info = await resolve_channel_handle(raw)
         if not info or not info.get("channel_name"):
-            await update.effective_message.reply_text(f"Couldn't find a channel for {raw}. Check the spelling or try the full @handle from YouTube.")
+            await update.effective_message.reply_text(self.tr("Couldn't find a channel for {raw}. Check the spelling or try the full @handle from YouTube.", raw=raw))
             return
         channel_name = info["channel_name"]
         channel_id = info.get("channel_id")
@@ -208,12 +207,12 @@ class ChannelMixin:
         if self.on_channel_change:
             self.on_channel_change(pid)
         if status == "allowed":
-            cat_label = {"edu": "Educational", "fun": "Entertainment"}.get(cat, "No category")
+            cat_label = self.cat_label(cat) if cat else self.tr("No category")
             await update.effective_message.reply_text(
-                f"Added to allowlist: {channel_name} ({raw})\nCategory: {cat_label}"
+                self.tr("Added to allowlist: {channel} ({handle})\nCategory: {category}", channel=channel_name, handle=raw, category=cat_label)
             )
         else:
-            await update.effective_message.reply_text(f"Blocked: {channel_name}\nVideos from this channel will be auto-denied.")
+            await update.effective_message.reply_text(self.tr("Blocked: {channel}\nVideos from this channel will be auto-denied.", channel=channel_name))
 
     async def _channel_unblock(self, update: Update, args: list[str], store=None) -> None:
         await self._channel_remove(update, args, "unblock", store=store)
@@ -223,7 +222,7 @@ class ChannelMixin:
         s = store or self.video_store
         pid = getattr(s, 'profile_id', 'default')
         if not args:
-            await update.effective_message.reply_text(f"Usage: /channel {verb} <channel name>")
+            await update.effective_message.reply_text(self.tr("Usage: /channel {verb} <channel name>", verb=verb))
             return
         channel = " ".join(args)
         # Look up channel_id before removing (remove_channel deletes the row)
@@ -241,21 +240,22 @@ class ChannelMixin:
             if self.on_channel_change:
                 self.on_channel_change(pid)
             label = "Removed from allowlist" if verb == "unallow" else "Unblocked"
-            extra = f" Deleted {deleted} video{'s' if deleted != 1 else ''} from catalog." if deleted else ""
-            await update.effective_message.reply_text(f"{label}: {channel}.{extra}")
+            extra = self.tr(" Deleted {count} {word} from catalog.",
+                            count=deleted, word=self.tr("video") if deleted == 1 else self.tr("videos")) if deleted else ""
+            await update.effective_message.reply_text(self.tr("{label}: {channel}.{extra}", label=self.tr(label), channel=channel, extra=extra))
         else:
-            await update.effective_message.reply_text(f"Channel not in list: {channel}. Use /channel to see all channels.")
+            await update.effective_message.reply_text(self.tr("Channel not in list: {channel}. Use /channel to see all channels.", channel=channel))
 
     async def _channel_set_cat(self, update: Update, args: list[str], store=None) -> None:
         """Handle /channel cat <name> edu|fun."""
         s = store or self.video_store
         pid = getattr(s, 'profile_id', 'default')
         if len(args) < 2:
-            await update.effective_message.reply_text("Usage: /channel cat <name> edu|fun\n\nThis sets which time budget the channel's videos count against.")
+            await update.effective_message.reply_text(self.tr("Usage: /channel cat <name> edu|fun\n\nThis sets which time budget the channel's videos count against."))
             return
         cat = args[-1].lower()
         if cat not in ("edu", "fun"):
-            await update.effective_message.reply_text("Category must be edu (Educational) or fun (Entertainment).")
+            await update.effective_message.reply_text(self.tr("Category must be edu (Educational) or fun (Entertainment)."))
             return
         raw = " ".join(args[:-1])
         channel = s.resolve_channel_name(raw) or raw
@@ -264,9 +264,13 @@ class ChannelMixin:
         if channel.lower() not in allowed_names:
             blocked_names = {name.lower() for name, *_ in s.get_channels_with_ids("blocked")}
             if channel.lower() in blocked_names:
-                await update.effective_message.reply_text(f"**{channel}** is blocked, not allowed\\. Unblock it first, then allow with a category\\.", parse_mode=MD2)
+                await update.effective_message.reply_text(
+                    self.tr("**{channel}** is blocked, not allowed\\. Unblock it first, then allow with a category\\.",
+                            channel=channel),
+                    parse_mode=MD2,
+                )
             else:
-                await update.effective_message.reply_text(f"Channel not in allowlist: {raw}. Use /channel to see all channels.")
+                await update.effective_message.reply_text(self.tr("Channel not in allowlist: {channel}. Use /channel to see all channels.", channel=raw))
             return
         if s.set_channel_category(channel, cat):
             # Look up channel_id for stable matching
@@ -276,12 +280,16 @@ class ChannelMixin:
                     ch_id = cid or ""
                     break
             s.set_channel_videos_category(channel, cat, channel_id=ch_id)
-            cat_label = CAT_LABELS.get(cat, "Entertainment")
+            cat_label = self.cat_label(cat)
             if self.on_channel_change:
                 self.on_channel_change(pid)
-            await update.effective_message.reply_text(f"**{channel}** → {cat_label}\nExisting videos from this channel updated too.", parse_mode=MD2)
+            await update.effective_message.reply_text(
+                self.tr("**{channel}** -> {category}\nExisting videos from this channel updated too.",
+                        channel=channel, category=cat_label),
+                parse_mode=MD2,
+            )
         else:
-            await update.effective_message.reply_text(f"Channel not in list: {raw}. Use /channel to see all channels.")
+            await update.effective_message.reply_text(self.tr("Channel not in list: {channel}. Use /channel to see all channels.", channel=raw))
 
     # --- Channel list rendering + callbacks ---
 
@@ -291,35 +299,35 @@ class ChannelMixin:
         allowed = s.get_channels_with_ids("allowed")
         blocked = s.get_channels_with_ids("blocked")
         if not allowed and not blocked:
-            return "No channels configured.", None
+            return self.tr("No channels configured."), None
         total = len(allowed) + len(blocked)
         edu_count = sum(1 for _, _, _, cat in allowed + blocked if cat == "edu")
         fun_count = sum(1 for _, _, _, cat in allowed + blocked if cat == "fun")
         uncat = total - edu_count - fun_count
         ctx = self._ctx_label({"display_name": self._profile_name(profile_id)}) if len(self._get_profiles()) > 1 else ""
-        lines = [f"**Channels{ctx}** ({total})\n"]
+        lines = [f"**{self.tr('Channels')}{ctx}** ({total})\n"]
         if allowed:
-            lines.append(f"Allowed: {len(allowed)}")
+            lines.append(self.tr("Allowed: {count}", count=len(allowed)))
         if blocked:
-            lines.append(f"Blocked: {len(blocked)}")
+            lines.append(self.tr("Blocked: {count}", count=len(blocked)))
         cat_parts = []
         if edu_count:
-            cat_parts.append(f"{edu_count} edu")
+            cat_parts.append(self.tr("{count} {category}", count=edu_count, category=self.cat_label("edu", short=True)))
         if fun_count:
-            cat_parts.append(f"{fun_count} fun")
+            cat_parts.append(self.tr("{count} {category}", count=fun_count, category=self.cat_label("fun", short=True)))
         if uncat:
-            cat_parts.append(f"{uncat} uncategorized")
+            cat_parts.append(self.tr("{count} uncategorized", count=uncat))
         if cat_parts:
-            lines.append(f"Categories: {', '.join(cat_parts)}")
+            lines.append(self.tr("Categories: {categories}", categories=", ".join(cat_parts)))
         text = _md("\n".join(lines))
         row = []
         if allowed:
             row.append(InlineKeyboardButton(
-                f"Allowed ({len(allowed)})", callback_data=f"chan_filter:{profile_id}:allowed",
+                self.tr("Allowed ({count})", count=len(allowed)), callback_data=f"chan_filter:{profile_id}:allowed",
             ))
         if blocked:
             row.append(InlineKeyboardButton(
-                f"Blocked ({len(blocked)})", callback_data=f"chan_filter:{profile_id}:blocked",
+                self.tr("Blocked ({count})", count=len(blocked)), callback_data=f"chan_filter:{profile_id}:blocked",
             ))
         return text, InlineKeyboardMarkup([row]) if row else None
 
@@ -328,7 +336,7 @@ class ChannelMixin:
         s = store or self.video_store
         entries = s.get_channels_with_ids(status)
         if not entries:
-            return f"No {status} channels.", None
+            return self.tr("No {status} channels.", status=self.tr(status)), None
 
         total = len(entries)
         page_size = self._CHANNEL_PAGE_SIZE
@@ -336,11 +344,11 @@ class ChannelMixin:
         end = min(start + page_size, total)
         page_entries = entries[start:end]
 
-        label = "Allowed" if status == "allowed" else "Blocked"
-        lines = [f"**{label} Channels** ({total})\n"]
+        label = self.tr("Allowed") if status == "allowed" else self.tr("Blocked")
+        lines = [f"**{label} {self.tr('Channels')}** ({total})\n"]
         buttons = []
         for ch, cid, handle, cat in page_entries:
-            cat_tag = f" [{cat}]" if cat else ""
+            cat_tag = f" [{self.cat_label(cat, short=True)}]" if cat else ""
             if cid:
                 url = f"https://www.youtube.com/channel/{cid}"
             elif handle:
@@ -349,7 +357,7 @@ class ChannelMixin:
                 url = f"https://www.youtube.com/results?search_query={quote(ch)}"
             handle_tag = f" `{handle}`" if handle else ""
             lines.append(f"  [{ch}]({url}){handle_tag}{cat_tag}")
-            btn_label = f"Unallow: {ch}" if status == "allowed" else f"Unblock: {ch}"
+            btn_label = self.tr("Unallow: {name}", name=ch) if status == "allowed" else self.tr("Unblock: {name}", name=ch)
             btn_action = "unallow" if status == "allowed" else "unblock"
             # Telegram enforces 64-byte limit on callback_data; truncate channel name
             prefix = f"{btn_action}:{profile_id}:"
@@ -359,11 +367,12 @@ class ChannelMixin:
                 btn_label, callback_data=f"{prefix}{ch_cb}"
             )])
 
-        nav = _nav_row(page, total, page_size, f"chan_page:{profile_id}:{status}")
+        nav = _nav_row(page, total, page_size, f"chan_page:{profile_id}:{status}",
+                       back_label=self.tr("Back"), next_label=self.tr("Next"))
         if nav:
             buttons.append(nav)
         # Back to menu
-        buttons.append([InlineKeyboardButton("\U0001f4cb Channels", callback_data=f"chan_menu:{profile_id}")])
+        buttons.append([InlineKeyboardButton(f"\U0001f4cb {self.tr('Channels')}", callback_data=f"chan_menu:{profile_id}")])
 
         text = _md("\n".join(lines))
         markup = InlineKeyboardMarkup(buttons) if buttons else None
@@ -401,7 +410,7 @@ class ChannelMixin:
 
     async def _cb_starter_prompt(self, query, choice: str) -> None:
         """Handle Yes/No from first-run welcome message."""
-        _answer_bg(query, "Got it!" if choice == "no" else "")
+        _answer_bg(query, self.tr("Got it!") if choice == "no" else "")
         if choice == "yes":
             cs = self._child_store("default")
             text, markup = self._render_starter_message(store=cs, profile_id="default")
@@ -438,10 +447,10 @@ class ChannelMixin:
                 cs.delete_channel_videos(resolved_name, channel_id=ch_id)
             if self.on_channel_change:
                 self.on_channel_change(profile_id)
-            _answer_bg(query, f"Removed: {resolved_name}")
+            _answer_bg(query, self.tr("Removed: {name}", name=resolved_name))
             await self._update_channel_list_message(query, profile_id=profile_id)
         else:
-            _answer_bg(query, f"Not found: {resolved_name}")
+            _answer_bg(query, self.tr("Not found: {name}", name=resolved_name))
 
     async def _update_channel_list_message(self, query, profile_id: str = "default") -> None:
         """Refresh back to channel menu after unallow/unblock."""

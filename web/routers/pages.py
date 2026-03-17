@@ -16,6 +16,7 @@ from web.cache import (
     get_profile_cache, build_catalog, build_shorts_catalog, build_requests_row,
 )
 from utils import get_today_str, get_day_utc_bounds
+from i18n import t
 
 router = APIRouter()
 
@@ -53,7 +54,8 @@ async def index(request: Request, error: str = Query("", max_length=50)):
     for cache_key in channel_videos:
         display = id_to_name.get(cache_key, cache_key)
         channel_pills[cache_key] = display
-    error_message = _ERROR_MESSAGES.get(error, "") if error else ""
+    locale = getattr(request.app.state, "locale", "en")
+    error_message = t(locale, _ERROR_MESSAGES.get(error, "")) if error else ""
     return templates.TemplateResponse("index.html", {
         **base_ctx(request),
         "catalog": catalog,

@@ -34,6 +34,13 @@ def expand_env_vars(value: Any) -> Any:
 
 
 @dataclass
+class AppConfig:
+    """Application-wide configuration."""
+    locale: str = "en"
+    time_format: str = "locale"
+
+
+@dataclass
 class WebConfig:
     """Web server configuration."""
     host: str = "0.0.0.0"
@@ -82,6 +89,7 @@ class WatchLimitsConfig:
 @dataclass
 class Config:
     """Main configuration container."""
+    app: AppConfig = field(default_factory=AppConfig)
     web: WebConfig = field(default_factory=WebConfig)
     telegram: TelegramConfig = field(default_factory=TelegramConfig)
     youtube: YouTubeConfig = field(default_factory=YouTubeConfig)
@@ -99,6 +107,7 @@ class Config:
         expanded_config = expand_env_vars(raw_config)
 
         # Construct Config from expanded data
+        app_data = expanded_config.get("app", {})
         web_data = expanded_config.get("web", {})
         telegram_data = expanded_config.get("telegram", {})
         youtube_data = expanded_config.get("youtube", {})
@@ -106,6 +115,7 @@ class Config:
         watch_limits_data = expanded_config.get("watch_limits", {})
 
         return cls(
+            app=AppConfig(**app_data),
             web=WebConfig(**web_data),
             telegram=TelegramConfig(**telegram_data),
             youtube=YouTubeConfig(**youtube_data),
@@ -117,6 +127,10 @@ class Config:
     def from_env(cls) -> "Config":
         """Load configuration directly from environment variables."""
         return cls(
+            app=AppConfig(
+                locale=os.environ.get("BRG_LOCALE", "en"),
+                time_format=os.environ.get("BRG_TIME_FORMAT", "locale"),
+            ),
             web=WebConfig(
                 host=os.environ.get("BRG_WEB_HOST", "0.0.0.0"),
                 port=int(os.environ.get("BRG_WEB_PORT", "8080")),
@@ -174,6 +188,10 @@ def load_config(config_path: str | None = None) -> Config:
     if config is None:
         # Fallback to environment variables
         config = Config.from_env()
+
+    from i18n import normalize_locale, normalize_time_format
+    config.app.locale = normalize_locale(config.app.locale)
+    config.app.time_format = normalize_time_format(config.app.time_format)
 
     # Validate admin_chat_id
     admin_id = config.telegram.admin_chat_id
