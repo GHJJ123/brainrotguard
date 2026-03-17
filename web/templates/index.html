@@ -121,10 +121,16 @@
         </a>
         {% endfor %}
     </div>
-    <div class="show-more-wrap auto-load-wrap" id="requests-show-more-wrap"{% if not has_more_requests and (autoload or requests_row | length <= 4) %} style="display:none"{% endif %}>
+    {% if not autoload %}
+    <div class="show-more-wrap" id="requests-show-more-wrap"{% if requests_row | length <= 4 %} style="display:none"{% endif %}>
+        <button class="btn-primary show-more-btn" id="requests-show-more-btn">{{ t("Show More") }}</button>
+    </div>
+    {% else %}
+    <div class="show-more-wrap auto-load-wrap" id="requests-show-more-wrap"{% if not has_more_requests %} style="display:none"{% endif %}>
         <div class="auto-load-sentinel" id="requests-show-more-sentinel" aria-hidden="true"></div>
         <span class="auto-load-status" id="requests-show-more-status"></span>
     </div>
+    {% endif %}
 </section>
 {% endif %}
 
@@ -150,10 +156,16 @@
         </a>
         {% endfor %}
     </div>
-    <div class="show-more-wrap auto-load-wrap" id="show-more-wrap"{% if not has_more and (autoload or catalog | length <= 12) %} style="display:none"{% endif %}>
+    {% if not autoload %}
+    <div class="show-more-wrap" id="show-more-wrap"{% if catalog | length <= 12 %} style="display:none"{% endif %}>
+        <button class="btn-primary show-more-btn" id="show-more-btn">{{ t("Show More") }}</button>
+    </div>
+    {% else %}
+    <div class="show-more-wrap auto-load-wrap" id="show-more-wrap"{% if not has_more %} style="display:none"{% endif %}>
         <div class="auto-load-sentinel" id="show-more-sentinel" aria-hidden="true"></div>
         <span class="auto-load-status" id="show-more-status"></span>
     </div>
+    {% endif %}
 </section>
 {% else %}
 <section class="videos-section">
@@ -186,7 +198,13 @@
         </a>
         {% endfor %}
     </div>
-    {% if has_more_shorts or (not autoload and shorts_catalog | length > 9) %}
+    {% if not autoload %}
+    {% if shorts_catalog | length > 9 %}
+    <div class="show-more-wrap" id="shorts-show-more-wrap">
+        <button class="btn-primary show-more-btn" id="shorts-show-more-btn">{{ t("Show More") }}</button>
+    </div>
+    {% endif %}
+    {% elif has_more_shorts %}
     <div class="show-more-wrap auto-load-wrap" id="shorts-show-more-wrap">
         <div class="auto-load-sentinel" id="shorts-show-more-sentinel" aria-hidden="true"></div>
         <span class="auto-load-status" id="shorts-show-more-status"></span>
@@ -443,14 +461,12 @@
         };
     }
 
-    // Reveal pager: reveals hidden DOM cards in batches (used when autoload is OFF)
-    function setupRevealPager(gridSelector, wrapId, sentinelId, statusId, batchSize) {
+    // Show More: click-to-reveal hidden DOM cards in batches (used when autoload is OFF)
+    function setupShowMore(gridSelector, wrapId, btnId, batchSize) {
         var grid = document.querySelector(gridSelector);
         var wrap = document.getElementById(wrapId);
-        var sentinel = document.getElementById(sentinelId);
-        var status = document.getElementById(statusId);
-        var revealing = false;
-        if (!grid || !wrap || !sentinel) return { update: function(){}, reapply: function(){} };
+        var btn = document.getElementById(btnId);
+        if (!grid || !wrap || !btn) return { update: function(){}, reapply: function(){} };
 
         function hiddenCards() {
             return grid.querySelectorAll(':scope > [style*="display:none"]:not(._filter-hidden)');
@@ -458,30 +474,14 @@
 
         function syncVis() {
             wrap.style.display = hiddenCards().length ? '' : 'none';
-            if (status) status.textContent = '';
         }
 
-        function revealMore() {
+        function revealBatch() {
             var hidden = hiddenCards();
-            if (revealing || !hidden.length) { syncVis(); return; }
-            revealing = true;
-            if (status) status.textContent = loadingText;
-            window.requestAnimationFrame(function() {
-                for (var i = 0; i < Math.min(batchSize, hidden.length); i++) {
-                    hidden[i].style.display = '';
-                }
-                revealing = false;
-                syncVis();
-                queueCheck();
-            });
-        }
-
-        function queueCheck() {
-            window.requestAnimationFrame(function() {
-                if (wrap.style.display === 'none') return;
-                var rect = sentinel.getBoundingClientRect();
-                if (rect.top <= window.innerHeight + 320) revealMore();
-            });
+            for (var i = 0; i < Math.min(batchSize, hidden.length); i++) {
+                hidden[i].style.display = '';
+            }
+            syncVis();
         }
 
         function reapply(batchOverride) {
@@ -495,23 +495,10 @@
                 }
             }
             syncVis();
-            queueCheck();
         }
 
-        if ('IntersectionObserver' in window) {
-            var observer = new IntersectionObserver(function(entries) {
-                entries.forEach(function(entry) {
-                    if (entry.isIntersecting) revealMore();
-                });
-            }, { rootMargin: '320px 0px' });
-            observer.observe(sentinel);
-        } else {
-            window.addEventListener('scroll', queueCheck, { passive: true });
-            window.addEventListener('resize', queueCheck);
-        }
-
+        btn.addEventListener('click', revealBatch);
         syncVis();
-        queueCheck();
         return { update: syncVis, reapply: reapply };
     }
 
@@ -556,14 +543,14 @@
     var initialOffset = catalogOffset;
     var initialHasMore = {{ 'true' if has_more else 'false' }};
 
-    // -- Reveal pagers for Show More mode --
+    // -- Show More buttons (click-to-reveal, when autoload is OFF) --
     var catalogRevealer = null;
     var requestsRevealer = null;
     var shortsRevealer = null;
     if (!autoloadEnabled) {
-        catalogRevealer = setupRevealPager('#catalog-grid', 'show-more-wrap', 'show-more-sentinel', 'show-more-status', CATALOG_INITIAL_PAGE);
-        requestsRevealer = setupRevealPager('#requests-grid', 'requests-show-more-wrap', 'requests-show-more-sentinel', 'requests-show-more-status', 4);
-        shortsRevealer = setupRevealPager('.shorts-row', 'shorts-show-more-wrap', 'shorts-show-more-sentinel', 'shorts-show-more-status', 9);
+        catalogRevealer = setupShowMore('#catalog-grid', 'show-more-wrap', 'show-more-btn', CATALOG_INITIAL_PAGE);
+        requestsRevealer = setupShowMore('#requests-grid', 'requests-show-more-wrap', 'requests-show-more-btn', 4);
+        shortsRevealer = setupShowMore('.shorts-row', 'shorts-show-more-wrap', 'shorts-show-more-btn', 9);
     }
 
     // Client-side DOM filter helper (Show More mode)
