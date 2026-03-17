@@ -68,9 +68,16 @@ header {
 
 .logo {
     display: flex;
-    flex-direction: column;
     align-items: center;
     flex-shrink: 0;
+}
+
+.logo-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.625rem;
+    color: inherit;
+    text-decoration: none;
 }
 
 .logo-img {
@@ -79,15 +86,24 @@ header {
     width: auto;
 }
 
+.logo-name {
+    font-size: 0.825rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    line-height: 1;
+}
+
 /* === Footer === */
 footer {
     text-align: center;
     padding: 1.5rem max(20px, calc(20px + var(--safe-right))) calc(1.5rem + var(--safe-bottom)) max(20px, calc(20px + var(--safe-left)));
+    font-size: 0.825rem;
+    color: #444;
 }
 
 footer a {
-    font-size: 0.825rem;
-    color: #444;
+    font-size: inherit;
+    color: inherit;
     text-decoration: none;
 }
 
@@ -1201,6 +1217,9 @@ main {
         order: 0;
         margin-right: auto;
         align-items: flex-start;
+    }
+    .logo-name {
+        display: none;
     }
     .logo-img {
         max-height: 2.25rem;

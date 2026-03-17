@@ -1,17 +1,17 @@
-<!-- BrainRotGuard version: v{{ app_version }} -->
+<!-- {{ app_name() }} version: v{{ app_version }} -->
 <!DOCTYPE html>
 <html lang="{{ html_lang() }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <meta name="application-name" content="BrainRotGuard">
+    <meta name="application-name" content="{{ app_name() }}">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="BrainRotGuard">
+    <meta name="apple-mobile-web-app-title" content="{{ app_name() }}">
     <meta name="format-detection" content="telephone=no">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="theme-color" content="#0f0f23">
-    <title>{% block title %}BrainRotGuard{% endblock %}</title>
+    <title>{% block title %}{{ app_name() }}{% endblock %}</title>
     <link rel="icon" href="/static/favicon-32.png" type="image/png" sizes="32x32">
     <link rel="apple-touch-icon" href="/static/favicon.png">
     <link rel="manifest" href="/manifest.webmanifest">
@@ -20,7 +20,10 @@
 <body>
     <header>
         <div class="logo">
-            <a href="/"><img src="/static/brg-icon-512.png" alt="BrainRotGuard" class="logo-img"></a>
+            <a href="/" class="logo-link">
+                <img src="/static/brg-icon-512.png" alt="{{ app_name() }}" class="logo-img">
+                <span class="logo-name">{{ app_name() }}</span>
+            </a>
         </div>
         {% if child_name %}
         <div class="search-dropdown-wrap">
@@ -69,7 +72,7 @@
         {% block content %}{% endblock %}
     </main>
     <footer>
-        <a href="https://ko-fi.com/coffee4jj" target="_blank" rel="noopener">☕ {{ t("Buy me a coffee") }}</a>
+        {{ app_name() }} v. {{ app_version }} &middot; <a href="https://ko-fi.com/coffee4jj" target="_blank" rel="noopener">☕ {{ t("Buy me a coffee") }}</a>
     </footer>
     {% block scripts %}{% endblock %}
     <script>

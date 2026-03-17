@@ -16,6 +16,7 @@ MONTHS_SHORT = (
 )
 
 TRANSLATIONS: dict[str, str] = {
+    "App Name": "HjerneVakt",
     "Too many requests": "For mange forespørsler",
     "Please wait a moment and try again.": "Vent litt og prøv igjen.",
     "Search": "Søk",
@@ -321,7 +322,7 @@ TRANSLATIONS: dict[str, str] = {
     "Got it!": "Skjønner!",
     "Keeping current settings.": "Beholder gjeldende innstillinger.",
     "Please reply with a positive number of minutes.": "Svar med et positivt antall minutter.",
-    "BrainRotGuard v{version}\n\nYouTube approval system for kids. Tap a section below to set things up.": "BrainRotGuard v{version}\n\nYouTube-godkjenningssystem for barn. Trykk på en seksjon under for å sette opp.",
+    "{app_name} v{version}\n\nYouTube approval system for kids. Tap a section below to set things up.": "{app_name} v{version}\n\nYouTube-godkjenningssystem for barn. Trykk på en seksjon under for å sette opp.",
     "Children Setup": "Barneoppsett",
     "Current: default (no name)": "Nåværende: standard (uten navn)",
     " (PIN set)": " (PIN satt)",
@@ -420,10 +421,10 @@ TRANSLATIONS: dict[str, str] = {
     "Activity ({period}){ctx} — {total} videos": "Aktivitet ({period}){ctx} — {total} videoer",
     "**Word Filters** (hidden everywhere):\n": "**Ordfiltre** (skjult overalt):\n",
     "Shorts {status}": "Shorts {status}",
-    "BrainRotGuard v{version}\n\n{content}": "BrainRotGuard v{version}\n\n{content}",
+    "{app_name} v{version}\n\n{content}": "{app_name} v{version}\n\n{content}",
     "📖 [Full command reference]({url})\n": "📖 [Full kommandoreferanse]({url})\n",
     "☕ [Buy me a coffee]({url})": "☕ [Spander en kaffe]({url})",
-    "**BrainRotGuard v{version}**\n\n**Commands:**\n`/help` - Show this message\n`/pending` - List pending requests\n`/approved` - List approved videos\n`/stats` - Usage statistics\n`/watch [yesterday|N]` - Watch activity & time budget\n`/logs [days|today]` - Activity report\n`/changelog` - Latest changes\n\n**Channel:**\n`/channel` - List all channels\n`/channel starter` - Kid-friendly starter list\n`/channel allow|unallow @handle [edu|fun]`\n`/channel block|unblock @handle`\n`/channel cat <name> edu|fun`\n\n**Filters & Search:**\n`/filter` - List word filters\n`/filter add|remove <word>`\n`/search [days|today|all]` - Search history\n\n**Time & Schedule:**\n`/time` - Show status & weekly view\n`/time setup` - Guided limit wizard\n`/time <min|off>` - Simple watch limit\n`/time edu|fun <min|off>` - Category limits\n`/time start|stop [time|off]` - Schedule\n`/time add <min>` - Bonus for today\n`/time <day> [start|stop|edu|fun|limit|off]`\n`/time <day> copy <days|weekdays|weekend|all>`\n`/shorts [on|off]` - Toggle Shorts row\n\n**Profiles:**\n`/child` - List child profiles\n`/child add <name> [pin]`\n`/child remove|rename|pin <name>`\n\n**Setup:**\n`/setup` - Interactive setup hub\n\n": "**BrainRotGuard v{version}**\n\n**Kommandoer:**\n`/help` - Vis denne meldingen\n`/pending` - Vis ventende forespørsler\n`/approved` - Vis godkjente videoer\n`/stats` - Bruksstatistikk\n`/watch [yesterday|N]` - Seaktivitet og tidsbudsjett\n`/logs [days|today]` - Aktivitetsrapport\n`/changelog` - Siste endringer\n\n**Kanal:**\n`/channel` - Vis alle kanaler\n`/channel starter` - Barnevennlig startliste\n`/channel allow|unallow @handle [edu|fun]`\n`/channel block|unblock @handle`\n`/channel cat <name> edu|fun`\n\n**Filtre og søk:**\n`/filter` - Vis ordfiltre\n`/filter add|remove <word>`\n`/search [days|today|all]` - Søkehistorikk\n\n**Tid og tidsplan:**\n`/time` - Vis status og ukeoversikt\n`/time setup` - Guidet oppsett\n`/time <min|off>` - Enkel segrense\n`/time edu|fun <min|off>` - Kategorigrenser\n`/time start|stop [time|off]` - Tidsplan\n`/time add <min>` - Bonus for i dag\n`/time <day> [start|stop|edu|fun|limit|off]`\n`/time <day> copy <days|weekdays|weekend|all>`\n`/shorts [on|off]` - Slå Shorts-raden av eller på\n\n**Profiler:**\n`/child` - Vis barneprofiler\n`/child add <name> [pin]`\n`/child remove|rename|pin <name>`\n\n**Oppsett:**\n`/setup` - Interaktivt oppsett\n\n",
+    "**{app_name} v{version}**\n\n**Commands:**\n`/help` - Show this message\n`/pending` - List pending requests\n`/approved` - List approved videos\n`/stats` - Usage statistics\n`/watch [yesterday|N]` - Watch activity & time budget\n`/logs [days|today]` - Activity report\n`/changelog` - Latest changes\n\n**Channel:**\n`/channel` - List all channels\n`/channel starter` - Kid-friendly starter list\n`/channel allow|unallow @handle [edu|fun]`\n`/channel block|unblock @handle`\n`/channel cat <name> edu|fun`\n\n**Filters & Search:**\n`/filter` - List word filters\n`/filter add|remove <word>`\n`/search [days|today|all]` - Search history\n\n**Time & Schedule:**\n`/time` - Show status & weekly view\n`/time setup` - Guided limit wizard\n`/time <min|off>` - Simple watch limit\n`/time edu|fun <min|off>` - Category limits\n`/time start|stop [time|off]` - Schedule\n`/time add <min>` - Bonus for today\n`/time <day> [start|stop|edu|fun|limit|off]`\n`/time <day> copy <days|weekdays|weekend|all>`\n`/shorts [on|off]` - Toggle Shorts row\n\n**Profiles:**\n`/child` - List child profiles\n`/child add <name> [pin]`\n`/child remove|rename|pin <name>`\n\n**Setup:**\n`/setup` - Interactive setup hub\n\n": "**{app_name} v{version}**\n\n**Kommandoer:**\n`/help` - Vis denne meldingen\n`/pending` - Vis ventende forespørsler\n`/approved` - Vis godkjente videoer\n`/stats` - Bruksstatistikk\n`/watch [yesterday|N]` - Seaktivitet og tidsbudsjett\n`/logs [days|today]` - Aktivitetsrapport\n`/changelog` - Siste endringer\n\n**Kanal:**\n`/channel` - Vis alle kanaler\n`/channel starter` - Barnevennlig startliste\n`/channel allow|unallow @handle [edu|fun]`\n`/channel block|unblock @handle`\n`/channel cat <name> edu|fun`\n\n**Filtre og søk:**\n`/filter` - Vis ordfiltre\n`/filter add|remove <word>`\n`/search [days|today|all]` - Søkehistorikk\n\n**Tid og tidsplan:**\n`/time` - Vis status og ukeoversikt\n`/time setup` - Guidet oppsett\n`/time <min|off>` - Enkel segrense\n`/time edu|fun <min|off>` - Kategorigrenser\n`/time start|stop [time|off]` - Tidsplan\n`/time add <min>` - Bonus for i dag\n`/time <day> [start|stop|edu|fun|limit|off]`\n`/time <day> copy <days|weekdays|weekend|all>`\n`/shorts [on|off]` - Slå Shorts-raden av eller på\n\n**Profiler:**\n`/child` - Vis barneprofiler\n`/child add <name> [pin]`\n`/child remove|rename|pin <name>`\n\n**Oppsett:**\n`/setup` - Interaktivt oppsett\n\n",
     "Allowlisted: {channel}": "Tillatt: {channel}",
     "Allowlisted ({category}): {channel}": "Tillatt ({category}): {channel}",
     "{approved} + CHANNEL ALLOWED": "{approved} + KANAL TILLATT",
@@ -476,6 +477,6 @@ TRANSLATIONS: dict[str, str] = {
     "{minutes}m/day": "{minutes} m/dag",
     "{minutes}m edu": "{minutes} m læring",
     "{minutes}m fun": "{minutes} m moro",
-    "**BrainRotGuard v{latest} available** (you have v{current})\n\n{body}\n\n[View release]({url})": "**BrainRotGuard v{latest} er tilgjengelig** (du har v{current})\n\n{body}\n\n[Se utgivelse]({url})",
+    "**{app_name} v{latest} available** (you have v{current})\n\n{body}\n\n[View release]({url})": "**{app_name} v{latest} er tilgjengelig** (du har v{current})\n\n{body}\n\n[Se utgivelse]({url})",
     "Auto-approved!": "Autogodkjent!",
 }

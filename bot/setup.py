@@ -92,7 +92,8 @@ class SetupMixin:
             shorts_status = self.tr("enabled") if shorts_parts[0][1] else self.tr("disabled")
 
         intro = self.tr(
-            "BrainRotGuard v{version}\n\nYouTube approval system for kids. Tap a section below to set things up.",
+            "{app_name} v{version}\n\nYouTube approval system for kids. Tap a section below to set things up.",
+            app_name=self.tr("App Name"),
             version=__version__,
         )
         text = (

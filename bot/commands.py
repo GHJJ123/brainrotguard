@@ -189,7 +189,7 @@ class CommandsMixin:
                             url="https://github.com/GHJJ123/brainrotguard/blob/main/docs/telegram-commands.md")
         await update.effective_message.reply_text(_md(
             self.tr(
-                "**BrainRotGuard v{version}**\n\n"
+                "**{app_name} v{version}**\n\n"
                 "**Commands:**\n"
                 "`/help` - Show this message\n"
                 "`/pending` - List pending requests\n"
@@ -224,6 +224,7 @@ class CommandsMixin:
                 "`/child remove|rename|pin <name>`\n\n"
                 "**Setup:**\n"
                 "`/setup` - Interactive setup hub\n\n",
+                app_name=self.tr("App Name"),
                 version=__version__,
             )
             + f"{help_link}"
@@ -508,7 +509,12 @@ class CommandsMixin:
             else:
                 latest = content
             latest = latest.strip()
-            latest = self.tr("BrainRotGuard v{version}\n\n{content}", version=__version__, content=latest)
+            latest = self.tr(
+                "{app_name} v{version}\n\n{content}",
+                app_name=self.tr("App Name"),
+                version=__version__,
+                content=latest,
+            )
             if len(latest) > 3500:
                 latest = latest[:3500] + "\n..."
             await update.effective_message.reply_text(latest)

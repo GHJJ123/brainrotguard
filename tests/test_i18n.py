@@ -1,6 +1,14 @@
 """Tests for locale and time formatting helpers."""
 
-from i18n import format_time, format_time_compact, normalize_time_format
+from i18n import app_name, format_time, format_time_compact, normalize_time_format
+
+
+class TestAppName:
+    def test_defaults_to_brainrotguard_in_english(self):
+        assert app_name("en") == "BrainRotGuard"
+
+    def test_uses_hjernevakt_in_norwegian(self):
+        assert app_name("nb") == "HjerneVakt"
 
 
 class TestNormalizeTimeFormat:

@@ -68,6 +68,11 @@ def t(locale: str | None, key: str, **kwargs) -> str:
     return text
 
 
+def app_name(locale: str | None) -> str:
+    """Return the localized application name."""
+    return t(locale, "App Name")
+
+
 def category_label(category: str, locale: str | None, short: bool = False) -> str:
     """Return localized category label."""
     if short:
@@ -153,6 +158,7 @@ def html_lang(locale: str | None) -> str:
 
 
 __all__ = [
+    "app_name",
     "DEFAULT_LOCALE",
     "DEFAULT_TIME_FORMAT",
     "SUPPORTED_LOCALES",

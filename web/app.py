@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from slowapi.errors import RateLimitExceeded
 
-from i18n import t, normalize_locale
+from i18n import app_name, t, normalize_locale
 from web.shared import limiter, static_dir, register_filters
 from web.cache import channel_cache_loop
 
@@ -20,7 +20,7 @@ from web.routers.pwa import router as pwa_router
 from web.routers.search import router as search_router
 from web.routers.watch import router as watch_router
 
-app = FastAPI(title="BrainRotGuard")
+app = FastAPI(title=app_name("en"))
 app.state.limiter = limiter
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 

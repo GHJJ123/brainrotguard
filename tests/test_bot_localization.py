@@ -75,6 +75,7 @@ def test_setup_hub_uses_configured_locale(tmp_path):
     bot, store = _make_bot(tmp_path)
     try:
         text, _ = bot._build_setup_hub(1)
+        assert "HjerneVakt v" in text
         assert "Barn" in text
         assert "Tidsgrenser" in text
         assert "Kanaler" in text

@@ -354,9 +354,10 @@ class BrainRotGuardBot(SetupMixin, ApprovalMixin, ChannelMixin, TimeLimitMixin, 
 
         text = (
             self.tr(
-                "**BrainRotGuard v{latest} available** (you have v{current})\n\n"
+                "**{app_name} v{latest} available** (you have v{current})\n\n"
                 "{body}\n\n"
                 "[View release]({url})",
+                app_name=self.tr("App Name"),
                 latest=latest,
                 current=__version__,
                 body=body,

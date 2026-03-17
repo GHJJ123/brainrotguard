@@ -11,7 +11,7 @@ from slowapi.util import get_remote_address
 
 from version import __version__
 from youtube.extractor import format_duration
-from i18n import t, category_label, day_label, format_time, html_lang
+from i18n import app_name, t, category_label, day_label, format_time, html_lang
 
 templates_dir = Path(__file__).parent / "templates"
 static_dir = Path(__file__).parent / "static"
@@ -44,6 +44,11 @@ def _jinja_fmt_time(ctx, hhmm: str):
 def _jinja_html_lang(ctx):
     return html_lang(ctx.get("locale", "en"))
 
+
+@pass_context
+def _jinja_app_name(ctx):
+    return app_name(ctx.get("locale", "en"))
+
 # Template globals
 templates.env.globals["format_duration"] = format_duration
 templates.env.globals["app_version"] = __version__
@@ -52,6 +57,7 @@ templates.env.globals["cat_label"] = _jinja_cat_label
 templates.env.globals["day_label"] = _jinja_day_label
 templates.env.globals["fmt_time"] = _jinja_fmt_time
 templates.env.globals["html_lang"] = _jinja_html_lang
+templates.env.globals["app_name"] = _jinja_app_name
 
 
 def register_filters():
