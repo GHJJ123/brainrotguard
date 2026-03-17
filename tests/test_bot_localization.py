@@ -34,9 +34,16 @@ class _DummyQuery:
         self.message = _DummyQueryMessage(chat_id=chat_id)
         self.cleared = False
         self.edits: list[dict] = []
+        self.answers: list[str] = []
+
+    async def answer(self, text: str = ""):
+        self.answers.append(text)
 
     async def edit_message_reply_markup(self, reply_markup=None):
         self.cleared = reply_markup is None
+
+    async def edit_message_caption(self, **kwargs):
+        self.edits.append(kwargs)
 
     async def edit_message_text(self, **kwargs):
         self.edits.append(kwargs)
@@ -179,5 +186,23 @@ def test_switch_confirm_keep_clears_inline_buttons(tmp_path):
         assert query.edits
         assert "Beholder gjeldende innstillinger" in query.edits[0]["text"]
         assert query.edits[0]["reply_markup"] is None
+    finally:
+        store.close()
+
+
+def test_revoke_toast_uses_dedicated_localized_key(tmp_path):
+    bot, store = _make_bot(tmp_path)
+    try:
+        store.add_video("dQw4w9WgXcQ", "Test Video", "Test Channel", profile_id="default")
+        store.update_status("dQw4w9WgXcQ", "approved", profile_id="default")
+        query = _DummyQuery()
+
+        async def _run():
+            await bot._cb_video_action(query, "revoke", "default", "dQw4w9WgXcQ")
+            await asyncio.sleep(0)
+
+        asyncio.run(_run())
+
+        assert query.answers == ["Fjernet!"]
     finally:
         store.close()

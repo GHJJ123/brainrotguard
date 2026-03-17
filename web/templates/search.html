@@ -44,7 +44,7 @@
         var wrap = document.getElementById('show-more-wrap');
         var sentinel = document.getElementById('show-more-sentinel');
         var status = document.getElementById('show-more-status');
-        var loadingText = {{ t("Loading...") | tojson }};
+        var loadingText = {{ "Loading..." | tojson }};
         var revealing = false;
         if (!wrap || !sentinel || !status) return;
 

@@ -279,6 +279,30 @@ class TestSearchFlow:
         assert resp.status_code == 200
         assert "Test Video" in resp.text
 
+    def test_search_with_more_than_five_results_renders_auto_load_block(self, store):
+        app = _create_test_app(store)
+        app.state.extractor.search.return_value = [
+            {
+                "video_id": f"result{i:08d}"[:11],
+                "title": f"Search Result {i}",
+                "channel_name": "Result Channel",
+                "thumbnail_url": f"https://i.ytimg.com/vi/result{i:08d}/hqdefault.jpg",
+                "duration": 300,
+                "view_count": i * 100,
+                "is_short": False,
+            }
+            for i in range(1, 7)
+        ]
+        client = TestClient(app, raise_server_exceptions=False)
+        _login(client, "1234")
+
+        resp = client.get("/search?q=test+video")
+
+        assert resp.status_code == 200
+        assert 'id="show-more-wrap"' in resp.text
+        assert "<<<<<<< HEAD" not in resp.text
+        assert '"Loading..."' in resp.text
+
     def test_request_pending_video_resends_notification(self, auth_client):
         app = auth_client.app
         store = app.state.video_store
@@ -295,8 +319,8 @@ class TestSearchFlow:
         notify_cb = app.state.notify_callback
         notify_cb.reset_mock()
 
-        home = auth_client.get("/")
-        csrf_match = re.search(r'name="csrf_token"\s+value="([^"]+)"', home.text)
+        search_resp = auth_client.get("/search?q=test")
+        csrf_match = re.search(r'name="csrf_token"\s+value="([^"]+)"', search_resp.text)
         csrf = csrf_match.group(1) if csrf_match else ""
 
         resp = auth_client.post(

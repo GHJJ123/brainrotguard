@@ -461,7 +461,7 @@ function timesUp() {
     clearInterval(countdownInterval); countdownInterval = null;
     clearInterval(endCheckInterval); endCheckInterval = null;
     stopPositionSaving();
-    savePlaybackPosition();
+    clearPlaybackPosition();
     if (player && player.pauseVideo) player.pauseVideo();
     var overlay = document.getElementById('time-overlay');
     if (overlay) overlay.style.display = 'flex';

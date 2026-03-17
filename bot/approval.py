@@ -286,7 +286,7 @@ class ApprovalMixin:
             status_label = self.tr("DENIED")
         elif action == "revoke" and video['status'] == 'approved':
             cs.update_status(video_id, "denied")
-            _answer_bg(query, f"{self.tr('Revoke')}!")
+            _answer_bg(query, self.tr("Revoked!"))
             status_label = self.tr("REVOKED")
         elif action == "allowchan":
             channel = video['channel_name']
