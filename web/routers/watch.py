@@ -137,6 +137,7 @@ async def watch_video(request: Request, video_id: str):
         "video_cat": video_cat,
         "cat_label": cat_label,
         "is_short": bool(video.get("is_short")),
+        "profile_id": cs.profile_id,
     })
 
 

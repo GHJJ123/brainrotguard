@@ -431,6 +431,13 @@ class TestWatchPage:
         resp = auth_client.get("/watch/watchTest12")
         assert resp.status_code == 200
         assert "watchTest12" in resp.text
+        assert "brg-watch-position:" in resp.text
+        assert "localStorage.setItem(playbackStorageKey" in resp.text
+        assert "pagehide" in resp.text
+        assert "document.visibilityState === 'visible'" in resp.text
+        assert "attemptAutoplayIfActive" in resp.text
+        assert "brg-nav-history" in resp.text
+        assert "previous.indexOf('/pending/')" in resp.text
 
     def test_watch_pending_redirects(self, auth_client, store):
         cs = ChildStore(store, "default")

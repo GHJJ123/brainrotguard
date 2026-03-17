@@ -91,6 +91,7 @@
     (function(){
         var backText = {{ t("Back") | tojson }};
         var backToTemplate = {{ t("Back to {page}", page="__PAGE__") | tojson }};
+        var navHistoryKey = 'brg-nav-history';
         var pageLabels = {
             library: {{ t("Library") | tojson }},
             activity: {{ t("Activity") | tojson }},
@@ -109,9 +110,51 @@
             return '';
         }
 
+        function currentPath() {
+            return window.location.pathname + window.location.search;
+        }
+
+        function readHistory() {
+            try {
+                var raw = window.sessionStorage.getItem(navHistoryKey);
+                if (!raw) return [];
+                var parsed = JSON.parse(raw);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (e) {
+                return [];
+            }
+        }
+
+        function writeHistory(history) {
+            try {
+                window.sessionStorage.setItem(navHistoryKey, JSON.stringify(history.slice(-20)));
+            } catch (e) {}
+        }
+
+        function updateHistory() {
+            var history = readHistory();
+            var path = currentPath();
+            if (history[history.length - 1] !== path) {
+                history.push(path);
+                writeHistory(history);
+            }
+            return history;
+        }
+
+        function previousTarget(history) {
+            if (!history.length) return '';
+            var current = window.location.pathname;
+            var previous = history.length > 1 ? history[history.length - 2] : '';
+            if (current.indexOf('/watch/') === 0 && previous.indexOf('/pending/') === 0 && history.length > 2) {
+                return history[history.length - 3];
+            }
+            return previous;
+        }
+
         // Search dropdown: outside-click close
         var sw=document.querySelector('.search-dropdown-wrap');
         if(sw){var sd=sw.querySelector('.search-dropdown');document.addEventListener('click',function(e){if(!sw.contains(e.target))sd.classList.remove('open')})}
+        var history = updateHistory();
         var sameOriginReferrer = null;
         if (document.referrer && document.referrer.indexOf(window.location.origin) === 0) {
             try {
@@ -119,9 +162,25 @@
             } catch (e) {}
         }
         document.querySelectorAll('.back-link-previous').forEach(function(link){
-            var label = sameOriginReferrer ? previousPageLabel(sameOriginReferrer.pathname) : '';
+            var target = previousTarget(history);
+            var targetUrl = null;
+            if (target) {
+                try {
+                    targetUrl = new URL(target, window.location.origin);
+                } catch (e) {}
+            }
+            var label = targetUrl ? previousPageLabel(targetUrl.pathname) : (sameOriginReferrer ? previousPageLabel(sameOriginReferrer.pathname) : '');
             link.textContent = label ? backToTemplate.replace('__PAGE__', label) : backText;
             link.addEventListener('click', function(e){
+                if (targetUrl) {
+                    e.preventDefault();
+                    history.pop();
+                    if (history[history.length - 1] === target) {
+                        writeHistory(history);
+                    }
+                    window.location.href = targetUrl.pathname + targetUrl.search;
+                    return;
+                }
                 if (window.history.length < 2) return;
                 if (sameOriginReferrer) {
                     e.preventDefault();
