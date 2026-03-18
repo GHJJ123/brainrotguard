@@ -1916,10 +1916,15 @@ main {
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    min-height: 200px;
+    aspect-ratio: 9/16;
     color: var(--text-muted);
     font-size: 14px;
     font-weight: 600;
+    font-family: inherit;
+    padding: 0;
+    border: 1px solid var(--border-faint);
+    background: var(--bg-card);
+    border-radius: var(--radius-card);
 }
 
 .shorts-more-label {
