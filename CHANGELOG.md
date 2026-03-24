@@ -5,6 +5,7 @@
 - i18n/localization system with English and Norwegian translations (PR #26 -- thanks @NoLooseEnds)
 - PWA support: installable as tablet app with manifest, service worker, standalone mode, safe-area insets (PR #29 -- thanks @NoLooseEnds)
 - Watch autoplay/resume: remembers playback position via localStorage, more reliable auto-start (PR #30 -- thanks @NoLooseEnds)
+- Persistent playback progress: watch progress stored to database and restored on return, survives app restarts (PR #32 -- thanks @NoLooseEnds)
 - Localized app name: "BrainRotGuard" renders as "HjerneVakt" in Norwegian (PR #31 -- thanks @NoLooseEnds)
 - `/autoload [on|off]` toggle: switch homepage between Show More buttons (default) and infinite scroll mode (PR #27 -- thanks @NoLooseEnds)
 - New `/api/catalog/status` endpoint for lightweight cache polling (PR #27)
@@ -21,6 +22,7 @@
 **Fixed**
 - Norwegian revoke confirmation toast: "Fjernet!" (past tense) instead of "Fjern!" (imperative) or "Avslått!" (which duplicated "Denied")
 - Playback position cleared on time expiry instead of saved (prevents resuming from expired position)
+- Heartbeat dedup guard: lowered `_HEARTBEAT_MIN_INTERVAL` from 10s to 8s to maintain safety margin (must be < client heartbeat interval; PR #32 reduced client interval to 10s)
 
 ## v1.28.0 - 2026-03-01
 
