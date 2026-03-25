@@ -535,6 +535,51 @@ class VideoStore:
             cursor = self.conn.execute(sql, params)
             return [dict(row) for row in cursor.fetchall()]
 
+    def get_watch_history(self, limit: int = 200, profile_id: str = "default") -> list[dict]:
+        """Get watched videos ordered by most recent watch date for a profile."""
+        with self._lock:
+            cursor = self.conn.execute(
+                """
+                SELECT *
+                FROM videos
+                WHERE status = 'approved'
+                  AND last_viewed_at IS NOT NULL
+                  AND profile_id = ?
+                ORDER BY last_viewed_at DESC, requested_at DESC
+                LIMIT ?
+                """,
+                (profile_id, limit),
+            )
+            return [dict(row) for row in cursor.fetchall()]
+
+    def get_watch_history_page(self, offset: int = 0, limit: int = 50,
+                               profile_id: str = "default") -> tuple[list[dict], int]:
+        """Get a page of watched videos ordered by most recent watch date."""
+        with self._lock:
+            total = self.conn.execute(
+                """
+                SELECT COUNT(*)
+                FROM videos
+                WHERE status = 'approved'
+                  AND last_viewed_at IS NOT NULL
+                  AND profile_id = ?
+                """,
+                (profile_id,),
+            ).fetchone()[0]
+            cursor = self.conn.execute(
+                """
+                SELECT *
+                FROM videos
+                WHERE status = 'approved'
+                  AND last_viewed_at IS NOT NULL
+                  AND profile_id = ?
+                ORDER BY last_viewed_at DESC, requested_at DESC
+                LIMIT ? OFFSET ?
+                """,
+                (profile_id, limit, offset),
+            )
+            return [dict(row) for row in cursor.fetchall()], total
+
     def update_status(self, video_id: str, status: str, profile_id: str = "default") -> bool:
         """Update video status for a profile. Returns True if updated."""
         with self._lock:

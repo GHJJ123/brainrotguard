@@ -1615,6 +1615,7 @@ main {
 }
 
 .activity-row {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 12px;
@@ -1623,6 +1624,7 @@ main {
     padding: 10px 14px;
     border: 1px solid var(--border-faint);
     transition: background 0.2s;
+    overflow: hidden;
 }
 
 .activity-row:hover {
@@ -1634,6 +1636,15 @@ main {
     min-width: 80px;
     aspect-ratio: 16/9;
     object-fit: cover;
+    border-radius: 8px;
+}
+
+.activity-thumb-wrap {
+    position: relative;
+    display: inline-flex;
+    width: 80px;
+    min-width: 80px;
+    overflow: hidden;
     border-radius: 8px;
 }
 
@@ -1660,11 +1671,32 @@ main {
 }
 
 .activity-time {
-    font-size: 15px;
-    font-weight: 600;
-    color: #aaa;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-dim);
     white-space: nowrap;
     flex-shrink: 0;
+}
+
+.activity-row > .watch-progress {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 3px;
+    background: transparent;
+    overflow: hidden;
+}
+
+.activity-row > .watch-progress .watch-progress-fill {
+    display: block;
+    height: 100%;
+    background: var(--text-dim);
+    border-radius: 0;
+}
+
+.activity-row:hover > .watch-progress .watch-progress-fill {
+    background: #ff0033;
 }
 
 /* Category badges on video cards */
@@ -2180,6 +2212,7 @@ main {
     box-shadow: 0 0 0 2px var(--accent);
 }
 
+.avatar-menu-link,
 .avatar-switch-link {
     display: block;
     text-align: center;
@@ -2191,8 +2224,14 @@ main {
     transition: color 0.2s;
 }
 
+.avatar-menu-link:hover,
 .avatar-switch-link:hover {
     color: var(--accent);
+}
+
+.avatar-menu-link + .avatar-switch-link {
+    border-top: none;
+    padding-top: 10px;
 }
 
 /* Login page: avatar on profile picker buttons */

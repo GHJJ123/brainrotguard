@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+{% block title %}{{ t("History") }} - {{ app_name() }}{% endblock %}
+
+{% block content %}
+<div class="activity-container">
+    <div class="activity-header">
+        <h2 class="section-title">{{ t("History") }}</h2>
+    </div>
+
+    {% if history_groups %}
+    <div id="history-groups">
+        {% for group in history_groups %}
+        <section class="history-group" data-date="{{ group.date }}">
+            <div class="activity-category-header"><strong>{{ group.label }}</strong></div>
+            <div class="activity-list">
+                {% for v in group.videos %}
+                <a href="/watch/{{ v.video_id }}" class="activity-row">
+                    <span class="activity-thumb-wrap">
+                        <img src="{{ v.thumbnail_url }}" alt="" class="activity-thumb" loading="lazy">
+                    </span>
+                    <div class="activity-info">
+                        <span class="activity-title">{{ v.title }}</span>
+                        <span class="activity-channel">{{ v.channel_name }}</span>
+                    </div>
+                    {% if v.total_minutes %}
+                    <span class="activity-time">{{ v.total_minutes }} {{ t("min") }}</span>
+                    {% else %}
+                    <span class="activity-time">{{ v.watched_label }} {{ t("min") }}</span>
+                    {% endif %}
+                    {% if v.watched_percent %}
+                    <span class="watch-progress"><span class="watch-progress-fill" style="width:{{ v.watched_percent }}%"></span></span>
+                    {% endif %}
+                </a>
+                {% endfor %}
+            </div>
+        </section>
+        {% endfor %}
+    </div>
+    <div class="show-more-wrap auto-load-wrap" id="history-show-more-wrap"{% if not history_has_more %} style="display:none"{% endif %}>
+        <div class="auto-load-sentinel" id="history-show-more-sentinel" aria-hidden="true"></div>
+        <span class="auto-load-status" id="history-show-more-status"></span>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <p>{{ t("No videos watched yet") }}</p>
+        <p class="empty-hint">{{ t("Videos you start will appear here") }}</p>
+    </div>
+    {% endif %}
+    <a href="/" class="back-link back-link-home back-link-previous">{{ t("Back") }}</a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+    function shouldRefreshFromBackNav(event) {
+        if (event && event.persisted) return true;
+        if (!window.performance || !window.performance.getEntriesByType) return false;
+        var entries = window.performance.getEntriesByType('navigation');
+        return !!(entries && entries[0] && entries[0].type === 'back_forward');
+    }
+
+    window.addEventListener('pageshow', function(event) {
+        if (shouldRefreshFromBackNav(event)) {
+            window.location.reload();
+        }
+    });
+
+    var groupsRoot = document.getElementById('history-groups');
+    var wrap = document.getElementById('history-show-more-wrap');
+    var sentinel = document.getElementById('history-show-more-sentinel');
+    var statusNode = document.getElementById('history-show-more-status');
+    var loadingText = {{ t("Loading...") | tojson }};
+    var failedToLoadText = {{ t("Failed to load") | tojson }};
+    var offset = {{ history_count | int }};
+    var pageSize = {{ history_page_size | int }};
+    var hasMore = {{ 'true' if history_has_more else 'false' }};
+    var loading = false;
+    var retryTimer = 0;
+    var blockedOnError = false;
+
+    if (!groupsRoot || !wrap || !sentinel) return;
+
+    function setStatus(text) {
+        if (statusNode) statusNode.textContent = text || '';
+    }
+
+    function syncVisibility() {
+        wrap.style.display = hasMore ? '' : 'none';
+        if (loading) setStatus(loadingText);
+        else if (blockedOnError) setStatus(failedToLoadText);
+        else setStatus('');
+    }
+
+    function clearRetry() {
+        if (retryTimer) {
+            window.clearTimeout(retryTimer);
+            retryTimer = 0;
+        }
+    }
+
+    function renderVideo(video) {
+        var row = document.createElement('a');
+        row.href = '/watch/' + encodeURIComponent(video.video_id);
+        row.className = 'activity-row';
+        var progressMeta = video.total_minutes
+            ? '<span class="activity-time">' + escapeHtml(String(video.total_minutes)) + ' min</span>'
+            : '<span class="activity-time">' + escapeHtml(video.watched_label || '') + ' min</span>';
+        var progressBar = video.watched_percent
+            ? '<span class="watch-progress"><span class="watch-progress-fill" style="width:' + escapeHtml(String(video.watched_percent)) + '%"></span></span>'
+            : '';
+        row.innerHTML =
+            '<span class="activity-thumb-wrap">' +
+                '<img src="' + escapeHtml(video.thumbnail_url || '') + '" alt="" class="activity-thumb" loading="lazy">' +
+            '</span>' +
+            '<div class="activity-info">' +
+                '<span class="activity-title">' + escapeHtml(video.title || '') + '</span>' +
+                '<span class="activity-channel">' + escapeHtml(video.channel_name || '') + '</span>' +
+            '</div>' +
+            progressMeta +
+            progressBar;
+        return row;
+    }
+
+    function escapeHtml(str) {
+        var div = document.createElement('div');
+        div.appendChild(document.createTextNode(str));
+        return div.innerHTML;
+    }
+
+    function appendGroups(groups) {
+        groups.forEach(function(group) {
+            var existing = groupsRoot.querySelector('.history-group[data-date="' + group.date + '"]');
+            var list;
+            if (existing) {
+                list = existing.querySelector('.activity-list');
+            } else {
+                existing = document.createElement('section');
+                existing.className = 'history-group';
+                existing.dataset.date = group.date;
+                existing.innerHTML =
+                    '<div class="activity-category-header"><strong>' + escapeHtml(group.label) + '</strong></div>' +
+                    '<div class="activity-list"></div>';
+                groupsRoot.appendChild(existing);
+                list = existing.querySelector('.activity-list');
+            }
+            group.videos.forEach(function(video) {
+                list.appendChild(renderVideo(video));
+            });
+        });
+    }
+
+    function queueCheck() {
+        window.requestAnimationFrame(function() {
+            if (!hasMore || loading || blockedOnError) return;
+            var rect = sentinel.getBoundingClientRect();
+            if (rect.top <= window.innerHeight + 320) {
+                loadMore();
+            }
+        });
+    }
+
+    function scheduleRetry(delayMs) {
+        clearRetry();
+        retryTimer = window.setTimeout(function() {
+            retryTimer = 0;
+            blockedOnError = false;
+            syncVisibility();
+            queueCheck();
+        }, Math.max(delayMs || 0, 500));
+    }
+
+    function loadMore() {
+        if (!hasMore || loading || blockedOnError) {
+            syncVisibility();
+            return;
+        }
+        loading = true;
+        syncVisibility();
+        fetch('/api/history?offset=' + offset + '&limit=' + pageSize)
+            .then(function(r) {
+                if (!r.ok) {
+                    var error = new Error('history');
+                    if (r.status === 429) {
+                        error.retryAfterMs = parseFloat(r.headers.get('Retry-After') || '3') * 1000;
+                    }
+                    throw error;
+                }
+                return r.json();
+            })
+            .then(function(data) {
+                clearRetry();
+                blockedOnError = false;
+                appendGroups(data.groups || []);
+                offset += data.count || 0;
+                hasMore = !!data.has_more;
+            })
+            .catch(function(err) {
+                blockedOnError = true;
+                if (err && err.retryAfterMs) {
+                    scheduleRetry(err.retryAfterMs);
+                }
+            })
+            .finally(function() {
+                loading = false;
+                syncVisibility();
+                if (!blockedOnError) queueCheck();
+            });
+    }
+
+    if ('IntersectionObserver' in window) {
+        var observer = new IntersectionObserver(function(entries) {
+            entries.forEach(function(entry) {
+                if (entry.target === sentinel && entry.isIntersecting) {
+                    loadMore();
+                }
+            });
+        }, { rootMargin: '320px 0px' });
+        observer.observe(sentinel);
+    } else {
+        var onScroll = function() { queueCheck(); };
+        window.addEventListener('scroll', onScroll, { passive: true });
+        window.addEventListener('resize', onScroll);
+    }
+
+    syncVisibility();
+    queueCheck();
+})();
+</script>
+{% endblock %}

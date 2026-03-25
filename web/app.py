@@ -3,7 +3,7 @@
 import asyncio
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from slowapi.errors import RateLimitExceeded
 
@@ -41,9 +41,20 @@ app.include_router(watch_router)
 @app.exception_handler(RateLimitExceeded)
 async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
     locale = normalize_locale(getattr(request.app.state, "locale", "en"))
+    headers = {"Retry-After": "5"}
+    if request.url.path.startswith("/api/"):
+        return JSONResponse(
+            content={
+                "error": "rate_limited",
+                "message": t(locale, "Please wait a moment and try again."),
+            },
+            status_code=429,
+            headers=headers,
+        )
     return HTMLResponse(
         content=f"<h1>{t(locale, 'Too many requests')}</h1><p>{t(locale, 'Please wait a moment and try again.')}</p>",
         status_code=429,
+        headers=headers,
     )
 
 

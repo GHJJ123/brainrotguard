@@ -61,6 +61,7 @@
                     <button type="button" class="color-option{% if c == avatar_color %} selected{% endif %}" data-color="{{ c }}" style="background:{{ c }}"></button>
                     {% endfor %}
                 </div>
+                <a href="/history" class="avatar-menu-link">{{ t("History") }}</a>
                 {% if multi_profile %}
                 <a href="/switch-profile" class="avatar-switch-link">{{ t("Switch Profile") }}</a>
                 {% endif %}
@@ -98,6 +99,7 @@
         var pageLabels = {
             library: {{ t("Library") | tojson }},
             activity: {{ t("Activity") | tojson }},
+            history: {{ t("History") | tojson }},
             search: {{ t("Search") | tojson }},
             video: {{ t("Video") | tojson }},
             pending: {{ t("Pending") | tojson }}
@@ -107,6 +109,7 @@
             if (!pathname) return '';
             if (pathname === '/') return pageLabels.library;
             if (pathname.indexOf('/activity') === 0) return pageLabels.activity;
+            if (pathname.indexOf('/history') === 0) return pageLabels.history;
             if (pathname.indexOf('/search') === 0) return pageLabels.search;
             if (pathname.indexOf('/watch/') === 0) return pageLabels.video;
             if (pathname.indexOf('/pending/') === 0) return pageLabels.pending;
