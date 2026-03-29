@@ -245,7 +245,8 @@ document.addEventListener('keydown', function(event) {
     var placeholder = document.getElementById('ytplayer');
     var iframe = document.createElement('iframe');
     iframe.id = 'ytplayer';
-    iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation');
+    // Sandbox disabled: YouTube embeds stopped working on tablet
+    // iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation');
     iframe.setAttribute('allow', 'autoplay; fullscreen; encrypted-media; picture-in-picture');
     iframe.setAttribute('allowfullscreen', '');
     iframe.src = 'https://www.youtube-nocookie.com/embed/' + videoId
