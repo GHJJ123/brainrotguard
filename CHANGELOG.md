@@ -1,4 +1,11 @@
 # Changelog
+## v1.31.1 - 2026-04-09
+
+**Fixed**
+- Switch embeds from `youtube-nocookie.com` to `youtube.com` — YouTube's bot detection blocks anonymous nocookie embeds with a "Sign in to confirm you're not a bot" wall; standard embeds share the tablet's Google session (closes #38)
+- Updated CSP `frame-src` header to allow `youtube.com`
+- Updated docs: README, setup guide, troubleshooting, design decisions
+
 ## v1.31.0 - 2026-03-25
 
 **Added**
