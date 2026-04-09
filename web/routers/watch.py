@@ -126,7 +126,7 @@ async def watch_video(request: Request, video_id: str):
     cs.record_view(video_id)
     request.session["watching"] = video_id
 
-    embed_url = f"https://www.youtube-nocookie.com/embed/{video_id}?enablejsapi=1"
+    embed_url = f"https://www.youtube.com/embed/{video_id}?enablejsapi=1"
 
     return templates.TemplateResponse(request, "watch.html", {
         **base,

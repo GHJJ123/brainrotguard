@@ -106,9 +106,8 @@ Now I curate his content and I can see the difference. He's not parroting gamer 
 
 ### Privacy & Security
 - **100% self-hosted** — runs entirely on your own hardware inside your home network. No cloud service, no third-party accounts, no subscriptions
-- **No YouTube account required** — no sign-in, no tracking, no personalized ads
 - **No API key needed** — uses [yt-dlp](https://github.com/yt-dlp/yt-dlp) for search and metadata
-- **Privacy-respecting embeds** — videos play via `youtube-nocookie.com` (Google's reduced-tracking embed domain)
+- **Standard YouTube embeds** — videos play via `youtube.com` embeds (signing into a Google account on the tablet prevents bot-check interruptions)
 - **Single-file database** — all data is one SQLite file on your machine. Nothing phones home.
 - **Container runs as non-root** — Docker security best practice
 

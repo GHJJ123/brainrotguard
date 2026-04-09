@@ -100,12 +100,11 @@ Without this step, your kid can just open youtube.com in a browser or use the Yo
 
 ### Why not DNS blocking?
 
-Previously, this guide recommended blocking `youtube.com` via DNS (AdGuard Home, Pi-hole, etc.) while allowing `youtube-nocookie.com` for the embedded player. **This no longer works** — as of March 2026, YouTube's nocookie embed requires requests to `www.youtube.com` to function. Blocking that domain breaks video playback entirely. See [#36](https://github.com/GHJJ123/brainrotguard/issues/36) for details.
+Previously, this guide recommended blocking `youtube.com` via DNS (AdGuard Home, Pi-hole, etc.) while allowing `youtube-nocookie.com` for the embedded player. **This no longer works** — YouTube's bot detection now blocks anonymous embedded playback with a "Sign in to confirm you're not a bot" wall. As of v1.x, BrainRotGuard uses standard `youtube.com` embeds, so the tablet needs a signed-in Google session. See [#36](https://github.com/GHJJ123/brainrotguard/issues/36) and [#38](https://github.com/GHJJ123/brainrotguard/issues/38) for details.
 
 DNS blocking is still fine as an additional layer, but you must allow `www.youtube.com` through:
 ```
 @@||www.youtube.com^
-@@||www.youtube-nocookie.com^
 @@||googlevideo.com^
 ```
 

@@ -5,7 +5,8 @@
 - Make sure `BRG_ADMIN_CHAT_ID` matches your account. The bot only responds to the configured admin.
 
 **Videos won't play on the tablet**
-- If you set up DNS blocking, make sure `www.youtube-nocookie.com` and `*.googlevideo.com` are allowlisted. These domains serve the actual video content.
+- If you set up DNS blocking, make sure `www.youtube.com` and `*.googlevideo.com` are allowlisted. These domains serve the actual video content.
+- If you see "Sign in to confirm you're not a bot", sign into a Google account on the tablet's browser at `youtube.com`. The embed shares that session.
 - Check the browser console for errors — some ad blockers interfere with embedded video playback.
 
 **"Connection refused" when opening the web UI**

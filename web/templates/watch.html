@@ -249,7 +249,7 @@ document.addEventListener('keydown', function(event) {
     // iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation');
     iframe.setAttribute('allow', 'autoplay; fullscreen; encrypted-media; picture-in-picture');
     iframe.setAttribute('allowfullscreen', '');
-    iframe.src = 'https://www.youtube-nocookie.com/embed/' + videoId
+    iframe.src = 'https://www.youtube.com/embed/' + videoId
         + '?enablejsapi=1&autoplay=0&rel=0&modestbranding=1'
         + '&origin=' + encodeURIComponent(window.location.origin);
     placeholder.parentNode.replaceChild(iframe, placeholder);
