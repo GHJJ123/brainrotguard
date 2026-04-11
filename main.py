@@ -261,6 +261,11 @@ async def main() -> None:
     if not args.verbose and not args.log_level:
         logging.getLogger().setLevel(getattr(logging, config.app.log_level.upper()))
 
+    # Quiet noisy third-party HTTP loggers (python-telegram-bot uses httpx)
+    if not args.verbose:
+        for name in ("httpx", "httpcore"):
+            logging.getLogger(name).setLevel(logging.WARNING)
+
     app = BrainRotGuard(config)
 
     loop = asyncio.get_event_loop()
