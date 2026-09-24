@@ -22,6 +22,7 @@ web:
   port: 8080             # web UI port
   poll_interval: 3000    # how often pending page checks for updates (ms)
   pin: ${BRG_PIN}        # optional — remove this line to disable PIN
+  embed_host: https://www.youtube-nocookie.com  # or https://www.youtube.com — see below
 
 telegram:
   bot_token: ${BRG_BOT_TOKEN}
@@ -66,6 +67,15 @@ When `time_format` is set to `locale`, English defaults to 12-hour time and Norw
 
 For contributors adding another language, see the locale guide in [`i18n/locales/README.md`](../i18n/locales/README.md).
 
+### Player Embed Origin
+
+`web.embed_host` (env var `BRG_EMBED_HOST`) controls which origin the YouTube player iframe loads from:
+
+- `https://www.youtube-nocookie.com` — the default. Keeps `www.youtube.com` out of the DNS allowlist entirely, so DNS-level blocking (see [setup.md](setup.md#dns-blocking-optional-second-layer)) stays effective.
+- `https://www.youtube.com` — drops DNS enforcement (playback needs `www.youtube.com` whitelisted, and DNS can't tell an embedded player apart from a browser tab on that domain) but keeps the signed-in Google session, which avoids YouTube's "confirm you're not a bot" wall on embedded playback.
+
+Any other value falls back to the nocookie default. This setting requires v1.32.0 or later — earlier images don't have the `embed_host` field and will reject it with a `TypeError` if set in `config.yaml`.
+
 ### Category Time Limits
 
 Category limits are managed via Telegram commands, not config files. They're stored in the SQLite database:
@@ -93,4 +103,5 @@ If you skip `config.yaml` entirely, everything falls back to environment variabl
 | `BRG_TIME_FORMAT` | Time display format (`locale`, `12h`, `24h`) | `locale` |
 | `BRG_YOUTUBE_MAX_RESULTS` | Max search results | `10` |
 | `BRG_BASE_URL` | LAN URL for Telegram links (e.g. `http://192.168.1.100:8080`) | — |
+| `BRG_EMBED_HOST` | Player iframe origin (`https://www.youtube-nocookie.com` or `https://www.youtube.com`) — see [Player Embed Origin](#player-embed-origin) | `https://www.youtube-nocookie.com` |
 | `BRG_DB_PATH` | SQLite database path | `db/videos.db` |
