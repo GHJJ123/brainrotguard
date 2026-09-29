@@ -1,9 +1,16 @@
 # Changelog
-## Unreleased
+## v1.33.0 - 2026-09-29
 
 **Added**
 - `BRG_TELEGRAM_API_URL` env var / `telegram.api_url` config for routing Telegram traffic through a custom Bot API server or relay (closes #43).
 - `/searchmode [on|off]` bot command: per-profile allowlist-only mode for younger children. Hides the search bar and rejects `/search` and `/request` server-side, so the child can only browse allowlisted channels and already-approved videos (closes #45).
+- `TelegramConfig.api_url` is validated at load: it must be an `http(s)` URL with a host, and plain `http` logs a warning because the bot token travels in the request path. The startup log prints only the API host so credentials embedded in the URL are never logged.
+
+**Fixed**
+- `/changelog` no longer shows an unreleased section under the current version number.
+
+**Notes**
+- v1.32.0 (`BRG_EMBED_HOST`, see below) was never tagged or published as a release. Installs from published images (latest: v1.31.2) get those changes for the first time in this release.
 
 ## v1.32.0 - 2026-08-11
 
