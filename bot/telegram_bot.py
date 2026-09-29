@@ -235,7 +235,13 @@ class BrainRotGuardBot(SetupMixin, ApprovalMixin, ChannelMixin, TimeLimitMixin, 
             connect_timeout=10.0, read_timeout=15.0, write_timeout=15.0,
             connection_pool_size=10, pool_timeout=5.0,
         )
-        self._app = ApplicationBuilder().token(self.bot_token).request(request).build()
+        builder = ApplicationBuilder().token(self.bot_token).request(request)
+        api_url = getattr(getattr(self.config, "telegram", None), "api_url", "")
+        if api_url:
+            # Custom Bot API server / relay: same path layout as api.telegram.org
+            builder = builder.base_url(f"{api_url}/bot").base_file_url(f"{api_url}/file/bot")
+            logger.info(f"Using custom Telegram API URL: {api_url}")
+        self._app = builder.build()
 
         self._app.add_handler(CommandHandler("start", self._cmd_start))
         self._app.add_handler(CommandHandler("help", self._cmd_help))

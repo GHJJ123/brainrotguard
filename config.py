@@ -83,6 +83,12 @@ class TelegramConfig:
     """Telegram bot configuration."""
     bot_token: str = ""
     admin_chat_id: str = ""
+    api_url: str = ""  # custom Bot API server root, e.g. https://tg-relay.example.com
+
+    def __post_init__(self):
+        if not self.api_url:
+            self.api_url = os.environ.get("BRG_TELEGRAM_API_URL", "")
+        self.api_url = self.api_url.strip().rstrip("/")
 
 
 @dataclass
@@ -167,6 +173,7 @@ class Config:
             telegram=TelegramConfig(
                 bot_token=os.environ.get("BRG_BOT_TOKEN", ""),
                 admin_chat_id=os.environ.get("BRG_ADMIN_CHAT_ID", ""),
+                api_url=os.environ.get("BRG_TELEGRAM_API_URL", ""),
             ),
             youtube=YouTubeConfig(
                 search_max_results=int(os.environ.get("BRG_YOUTUBE_MAX_RESULTS", "50")),

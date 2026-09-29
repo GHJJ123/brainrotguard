@@ -14,6 +14,7 @@ web:
 telegram:
   bot_token: ${BRG_BOT_TOKEN}
   admin_chat_id: ${BRG_ADMIN_CHAT_ID}
+  # api_url: https://tg-relay.example.com  # custom Telegram Bot API server/relay (or BRG_TELEGRAM_API_URL)
 
 youtube:
   search_max_results: 50

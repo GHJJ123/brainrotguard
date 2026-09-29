@@ -1,4 +1,9 @@
 # Changelog
+## Unreleased
+
+**Added**
+- `BRG_TELEGRAM_API_URL` env var / `telegram.api_url` config for routing Telegram traffic through a custom Bot API server or relay (closes #43).
+
 ## v1.32.0 - 2026-08-11
 
 **Added**

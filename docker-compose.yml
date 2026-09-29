@@ -9,6 +9,7 @@ services:
     environment:
       - BRG_BOT_TOKEN=${BRG_BOT_TOKEN}
       - BRG_ADMIN_CHAT_ID=${BRG_ADMIN_CHAT_ID}
+      - BRG_TELEGRAM_API_URL=${BRG_TELEGRAM_API_URL:-}
       - BRG_PIN=${BRG_PIN:-}
       - BRG_BASE_URL=${BRG_BASE_URL:-}
     volumes:

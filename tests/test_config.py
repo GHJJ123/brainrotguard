@@ -3,7 +3,7 @@
 import os
 import pytest
 
-from config import AppConfig, Config, expand_env_vars, load_config, WebConfig
+from config import AppConfig, Config, TelegramConfig, expand_env_vars, load_config, WebConfig
 
 
 class TestExpandEnvVars:
@@ -271,3 +271,17 @@ class TestWebConfig:
         """embed_host lands in an iframe src — only the two known origins may pass."""
         monkeypatch.setenv("BRG_EMBED_HOST", value)
         assert WebConfig().embed_host == "https://www.youtube-nocookie.com"
+
+
+class TestTelegramApiUrl:
+    def test_defaults_empty(self, monkeypatch):
+        monkeypatch.delenv("BRG_TELEGRAM_API_URL", raising=False)
+        assert TelegramConfig().api_url == ""
+
+    def test_from_env_strips_trailing_slash(self, monkeypatch):
+        monkeypatch.setenv("BRG_TELEGRAM_API_URL", " https://relay.example.com/ ")
+        assert TelegramConfig().api_url == "https://relay.example.com"
+
+    def test_explicit_value_wins_over_env(self, monkeypatch):
+        monkeypatch.setenv("BRG_TELEGRAM_API_URL", "https://env.example.com")
+        assert TelegramConfig(api_url="https://yaml.example.com").api_url == "https://yaml.example.com"

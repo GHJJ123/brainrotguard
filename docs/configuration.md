@@ -27,6 +27,7 @@ web:
 telegram:
   bot_token: ${BRG_BOT_TOKEN}
   admin_chat_id: ${BRG_ADMIN_CHAT_ID}
+  # api_url: https://tg-relay.example.com  # optional — custom Telegram Bot API server / relay
 
 youtube:
   search_max_results: 50         # max results per search
@@ -95,6 +96,7 @@ If you skip `config.yaml` entirely, everything falls back to environment variabl
 |----------|-------------|---------|
 | `BRG_BOT_TOKEN` | Telegram bot token | *required* |
 | `BRG_ADMIN_CHAT_ID` | Parent's Telegram chat ID | *required* |
+| `BRG_TELEGRAM_API_URL` | Custom Telegram Bot API server root (e.g. `https://tg-relay.example.com`). BrainRotGuard appends `/bot<token>/...` itself, so omit the trailing `/bot` | `https://api.telegram.org` |
 | `BRG_WEB_HOST` | Web server bind address | `0.0.0.0` |
 | `BRG_WEB_PORT` | Web server port | `8080` |
 | `BRG_PIN` | Web UI access PIN (empty = no auth) | — |
