@@ -6,6 +6,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import yaml
 
@@ -88,7 +89,13 @@ class TelegramConfig:
     def __post_init__(self):
         if not self.api_url:
             self.api_url = os.environ.get("BRG_TELEGRAM_API_URL", "")
-        self.api_url = self.api_url.strip().rstrip("/")
+        self.api_url = str(self.api_url).strip().rstrip("/")
+        if self.api_url:
+            parts = urlparse(self.api_url)
+            if parts.scheme not in ("http", "https") or not parts.hostname:
+                raise ValueError("telegram.api_url / BRG_TELEGRAM_API_URL must be an http(s) URL with a host")
+            if parts.scheme == "http":
+                logger.warning("telegram.api_url uses plain http — the bot token is sent unencrypted")
 
 
 @dataclass

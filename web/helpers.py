@@ -8,6 +8,7 @@ from fastapi import Request
 from pydantic import BaseModel, Field
 
 from data.child_store import ChildStore
+from web.deps import get_child_store
 from i18n import format_time, normalize_locale, normalize_time_format, t
 from utils import (
     get_today_str, get_day_utc_bounds, get_weekday,
@@ -103,7 +104,7 @@ def base_ctx(request: Request) -> dict:
         "time_format": normalize_time_format(getattr(request.app.state, "time_format", "locale")),
         "child_name": get_child_name(request),
         "multi_profile": len(profiles) > 1,
-        "search_enabled": not search_disabled(request),
+        "search_enabled": not (vs and search_disabled(request)),
         "avatar_icon": avatar_icon,
         "avatar_color": avatar_color,
         "avatar_icons": AVATAR_ICONS,
@@ -145,13 +146,11 @@ def shorts_enabled(request: Request, child_store=None) -> bool:
 
 def search_disabled(request: Request, child_store=None) -> bool:
     """Check if search is turned off for this profile (whitelist-only browsing). Default: search on."""
-    store = child_store
-    if store is None:
-        vs = getattr(request.app.state, "video_store", None)
-        if not vs:
-            return False
-        store = ChildStore(vs, request.session.get("child_id", "default"))
-    return store.get_setting("search_disabled", "").lower() == "true"
+    disabled = getattr(request.state, "search_disabled", None)
+    if disabled is None:
+        store = child_store or get_child_store(request)
+        disabled = request.state.search_disabled = store.get_setting("search_disabled", "").lower() == "true"
+    return disabled
 
 
 def autoload_enabled(request: Request, child_store=None) -> bool:

@@ -282,6 +282,16 @@ class TestTelegramApiUrl:
         monkeypatch.setenv("BRG_TELEGRAM_API_URL", " https://relay.example.com/ ")
         assert TelegramConfig().api_url == "https://relay.example.com"
 
+    @pytest.mark.parametrize("value", ["relay.example.com", "ftp://relay.example.com", "https://", 1234])
+    def test_rejects_non_http_urls(self, value):
+        with pytest.raises(ValueError):
+            TelegramConfig(api_url=value)
+
+    def test_plain_http_allowed_with_warning(self, caplog):
+        with caplog.at_level("WARNING"):
+            assert TelegramConfig(api_url="http://relay.local:8081").api_url == "http://relay.local:8081"
+        assert "unencrypted" in caplog.text
+
     def test_explicit_value_wins_over_env(self, monkeypatch):
         monkeypatch.setenv("BRG_TELEGRAM_API_URL", "https://env.example.com")
         assert TelegramConfig(api_url="https://yaml.example.com").api_url == "https://yaml.example.com"

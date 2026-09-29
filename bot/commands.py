@@ -359,50 +359,39 @@ class CommandsMixin:
             return
 
         async def _inner(update, context, cs, profile):
-            args = context.args
             ctx = self._ctx_label(profile)
-            if args and args[0].lower() in ("on", "off"):
-                disabled = args[0].lower() == "off"
-                cs.set_setting("search_disabled", str(disabled).lower())
-                if disabled:
-                    await update.effective_message.reply_text(_md(
-                        f"**{self.tr('Search disabled{ctx}', ctx=ctx)}**\n\n"
-                        "- "
-                        + self.tr(
-                            "Search bar hidden from the child's pages\n"
-                            "- Only videos from allowlisted channels and already-approved videos are available\n"
-                            "- New video requests are blocked\n"
-                            "- Use `/searchmode on` to re-enable search"
-                        )
-                    ), parse_mode=MD2)
+            arg = context.args[0].lower() if context.args else ""
+            if arg in ("on", "off"):
+                cs.set_setting("search_disabled", str(arg == "off").lower())
+                if arg == "off":
+                    title = self.tr('Search disabled{ctx}', ctx=ctx)
+                    body = "- " + self.tr(
+                        "Search bar hidden from the child's pages\n"
+                        "- Only videos from allowlisted channels and already-approved videos are available\n"
+                        "- New video requests are blocked\n"
+                        "- Use `/searchmode on` to re-enable search"
+                    )
                 else:
-                    await update.effective_message.reply_text(_md(
-                        f"**{self.tr('Search enabled{ctx}', ctx=ctx)}**\n\n"
-                        "- "
-                        + self.tr(
-                            "Search bar is back on the child's pages\n"
-                            "- New videos can be requested for your approval\n"
-                            "- Use `/searchmode off` to switch back to allowlist-only browsing"
-                        )
-                    ), parse_mode=MD2)
+                    title = self.tr('Search enabled{ctx}', ctx=ctx)
+                    body = "- " + self.tr(
+                        "Search bar is back on the child's pages\n"
+                        "- New videos can be requested for your approval\n"
+                        "- Use `/searchmode off` to switch back to allowlist-only browsing"
+                    )
+            elif cs.get_setting("search_disabled", "").lower() == "true":
+                title = self.tr('Search: disabled{ctx}', ctx=ctx)
+                body = self.tr(
+                    "The child can only browse allowlisted channels and approved videos. "
+                    "There is no search bar and new requests are blocked.\n\n"
+                    "`/searchmode on` — allow searching again"
+                )
             else:
-                if cs.get_setting("search_disabled", "").lower() == "true":
-                    await update.effective_message.reply_text(_md(
-                        f"**{self.tr('Search: disabled{ctx}', ctx=ctx)}**\n\n"
-                        + self.tr(
-                            "The child can only browse allowlisted channels and approved videos. "
-                            "There is no search bar and new requests are blocked.\n\n"
-                            "`/searchmode on` — allow searching again"
-                        )
-                    ), parse_mode=MD2)
-                else:
-                    await update.effective_message.reply_text(_md(
-                        f"**{self.tr('Search: enabled{ctx}', ctx=ctx)}**\n\n"
-                        + self.tr(
-                            "The child can search YouTube and request videos for your approval.\n\n"
-                            "`/searchmode off` — hide search, allowlist-only browsing"
-                        )
-                    ), parse_mode=MD2)
+                title = self.tr('Search: enabled{ctx}', ctx=ctx)
+                body = self.tr(
+                    "The child can search YouTube and request videos for your approval.\n\n"
+                    "`/searchmode off` — hide search, allowlist-only browsing"
+                )
+            await update.effective_message.reply_text(_md(f"**{title}**\n\n{body}"), parse_mode=MD2)
 
         await self._with_child_context(update, context, _inner)
 
@@ -613,11 +602,8 @@ class CommandsMixin:
         try:
             with open(changelog_path, "r") as f:
                 content = f.read()
-            sections = content.split("\n## ")
-            if len(sections) >= 2:
-                latest = "## " + sections[1].split("\n## ")[0]
-            else:
-                latest = content
+            released = [s for s in content.split("\n## ")[1:] if not s.startswith("Unreleased")]
+            latest = "## " + released[0] if released else content
             latest = latest.strip()
             latest = self.tr(
                 "{app_name} v{version}\n\n{content}",
