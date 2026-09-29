@@ -3,6 +3,7 @@
 
 **Added**
 - `BRG_TELEGRAM_API_URL` env var / `telegram.api_url` config for routing Telegram traffic through a custom Bot API server or relay (closes #43).
+- `/searchmode [on|off]` bot command: per-profile allowlist-only mode for younger children. Hides the search bar and rejects `/search` and `/request` server-side, so the child can only browse allowlisted channels and already-approved videos (closes #45).
 
 ## v1.32.0 - 2026-08-11
 

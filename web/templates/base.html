@@ -25,7 +25,7 @@
                 <span class="logo-name">{{ app_name() }}</span>
             </a>
         </div>
-        {% if child_name %}
+        {% if child_name and search_enabled %}
         <div class="search-dropdown-wrap">
             <button type="button" class="search-toggle" onclick="var d=this.nextElementSibling;d.classList.toggle('open');if(d.classList.contains('open'))d.querySelector('input').focus();">&#x1F50D;</button>
             <div class="search-dropdown">

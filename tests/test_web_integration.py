@@ -521,6 +521,62 @@ class TestSearchFlow:
 
 
 # ---------------------------------------------------------------------------
+# Search disabled (allowlist-only) mode
+# ---------------------------------------------------------------------------
+
+class TestSearchDisabled:
+    SEARCH_FORM = '<form action="/search"'
+
+    def test_search_bar_shown_by_default(self, auth_client):
+        assert self.SEARCH_FORM in auth_client.get("/").text
+
+    def test_search_bar_hidden_when_disabled(self, store):
+        store.set_setting("default:search_disabled", "true")
+        app = _create_test_app(store)
+        c = AppClient(app, raise_server_exceptions=False)
+        _login(c, "1234")
+        assert self.SEARCH_FORM not in c.get("/").text
+
+    def test_search_route_redirects_and_skips_extractor(self, store):
+        store.set_setting("default:search_disabled", "true")
+        app = _create_test_app(store)
+        c = AppClient(app, raise_server_exceptions=False)
+        _login(c, "1234")
+        resp = c.get("/search?q=cats", follow_redirects=False)
+        assert resp.status_code == 303
+        assert resp.headers["location"] == "/"
+        app.state.extractor.search.assert_not_called()
+        app.state.extractor.extract_metadata.assert_not_called()
+
+    def test_request_blocked_when_disabled(self, store):
+        app = _create_test_app(store)
+        c = AppClient(app, raise_server_exceptions=False)
+        _login(c, "1234")
+        csrf = re.search(r'name="csrf_token"\s+value="([^"]+)"', c.get("/search?q=test").text).group(1)
+        store.set_setting("default:search_disabled", "true")
+
+        resp = c.post(
+            "/request",
+            data={"video_id": "dQw4w9WgXcQ", "csrf_token": csrf},
+            follow_redirects=False,
+        )
+
+        assert resp.status_code == 303
+        assert resp.headers["location"] == "/"
+        assert store.get_video("dQw4w9WgXcQ", profile_id="default") is None
+
+    def test_disabled_flag_is_per_profile(self, store):
+        store.create_profile("sibling", "Sibling", pin="5678")
+        store.set_setting("sibling:search_disabled", "true")
+        app = _create_test_app(store)
+        c = AppClient(app, raise_server_exceptions=False)
+        csrf = re.search(r'name="csrf_token"\s+value="([^"]+)"', c.get("/login?profile=default").text).group(1)
+        c.post("/login", data={"pin": "1234", "profile_id": "default", "csrf_token": csrf}, follow_redirects=False)
+        assert self.SEARCH_FORM in c.get("/").text
+        assert c.get("/search?q=cats", follow_redirects=False).status_code == 200
+
+
+# ---------------------------------------------------------------------------
 # Video request flow
 # ---------------------------------------------------------------------------
 

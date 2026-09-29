@@ -133,6 +133,18 @@ Choose how the homepage loads videos: either a "Show More" button for batch load
 
 Infinite scroll is disabled by default. Switching modes doesn't affect already-approved videos — it only changes how they're displayed.
 
+## Search Mode
+
+Turn off search for a profile so the child can only browse allowlisted channels and videos you've already approved. Useful for younger kids who aren't ready to search on their own. Applies per profile — use `/child` to pick the profile first.
+
+| Command | What It Does |
+|---------|-------------|
+| `/searchmode` | Show whether search is on or off for the profile |
+| `/searchmode off` | Hide the search bar and block new video requests |
+| `/searchmode on` | Restore search and requests (default) |
+
+With search off, the child's search bar disappears and `/search` and new requests are rejected on the server, so it can't be bypassed by typing a URL. Videos from allowlisted channels and already-approved videos keep working.
+
 ## Profiles
 
 Manage child profiles. Each profile has its own PIN, watch history, and time budgets.

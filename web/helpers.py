@@ -103,6 +103,7 @@ def base_ctx(request: Request) -> dict:
         "time_format": normalize_time_format(getattr(request.app.state, "time_format", "locale")),
         "child_name": get_child_name(request),
         "multi_profile": len(profiles) > 1,
+        "search_enabled": not search_disabled(request),
         "avatar_icon": avatar_icon,
         "avatar_color": avatar_color,
         "avatar_icons": AVATAR_ICONS,
@@ -140,6 +141,17 @@ def shorts_enabled(request: Request, child_store=None) -> bool:
     if yt_cfg:
         return yt_cfg.shorts_enabled
     return False
+
+
+def search_disabled(request: Request, child_store=None) -> bool:
+    """Check if search is turned off for this profile (whitelist-only browsing). Default: search on."""
+    store = child_store
+    if store is None:
+        vs = getattr(request.app.state, "video_store", None)
+        if not vs:
+            return False
+        store = ChildStore(vs, request.session.get("child_id", "default"))
+    return store.get_setting("search_disabled", "").lower() == "true"
 
 
 def autoload_enabled(request: Request, child_store=None) -> bool:

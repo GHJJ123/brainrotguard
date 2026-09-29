@@ -205,7 +205,7 @@
     <div class="empty-state">
         <div class="empty-icon">&#x1f50d;</div>
         <p>{{ t("No videos yet") }}</p>
-        <p class="empty-hint">{{ t("Search for something to watch!") }}</p>
+        {% if search_enabled %}<p class="empty-hint">{{ t("Search for something to watch!") }}</p>{% endif %}
     </div>
     </div>
 </section>

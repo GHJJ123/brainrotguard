@@ -218,7 +218,8 @@ class CommandsMixin:
                 "`/time <day> [start|stop|edu|fun|limit|off]`\n"
                 "`/time <day> copy <days|weekdays|weekend|all>`\n"
                 "`/shorts [on|off]` - Toggle Shorts row\n"
-                "`/autoload [on|off]` - Toggle scroll loading\n\n"
+                "`/autoload [on|off]` - Toggle scroll loading\n"
+                "`/searchmode [on|off]` - Toggle child search\n\n"
                 "**Profiles:**\n"
                 "`/child` - List child profiles\n"
                 "`/child add <name> [pin]`\n"
@@ -347,6 +348,59 @@ class CommandsMixin:
                             "All videos load at once. Channel and category filters "
                             "work instantly without server requests.\n\n"
                             "`/autoload on` — enable scroll loading"
+                        )
+                    ), parse_mode=MD2)
+
+        await self._with_child_context(update, context, _inner)
+
+    async def _cmd_searchmode(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Turn child search on/off for a profile, or show status."""
+        if not await self._require_admin(update):
+            return
+
+        async def _inner(update, context, cs, profile):
+            args = context.args
+            ctx = self._ctx_label(profile)
+            if args and args[0].lower() in ("on", "off"):
+                disabled = args[0].lower() == "off"
+                cs.set_setting("search_disabled", str(disabled).lower())
+                if disabled:
+                    await update.effective_message.reply_text(_md(
+                        f"**{self.tr('Search disabled{ctx}', ctx=ctx)}**\n\n"
+                        "- "
+                        + self.tr(
+                            "Search bar hidden from the child's pages\n"
+                            "- Only videos from allowlisted channels and already-approved videos are available\n"
+                            "- New video requests are blocked\n"
+                            "- Use `/searchmode on` to re-enable search"
+                        )
+                    ), parse_mode=MD2)
+                else:
+                    await update.effective_message.reply_text(_md(
+                        f"**{self.tr('Search enabled{ctx}', ctx=ctx)}**\n\n"
+                        "- "
+                        + self.tr(
+                            "Search bar is back on the child's pages\n"
+                            "- New videos can be requested for your approval\n"
+                            "- Use `/searchmode off` to switch back to allowlist-only browsing"
+                        )
+                    ), parse_mode=MD2)
+            else:
+                if cs.get_setting("search_disabled", "").lower() == "true":
+                    await update.effective_message.reply_text(_md(
+                        f"**{self.tr('Search: disabled{ctx}', ctx=ctx)}**\n\n"
+                        + self.tr(
+                            "The child can only browse allowlisted channels and approved videos. "
+                            "There is no search bar and new requests are blocked.\n\n"
+                            "`/searchmode on` — allow searching again"
+                        )
+                    ), parse_mode=MD2)
+                else:
+                    await update.effective_message.reply_text(_md(
+                        f"**{self.tr('Search: enabled{ctx}', ctx=ctx)}**\n\n"
+                        + self.tr(
+                            "The child can search YouTube and request videos for your approval.\n\n"
+                            "`/searchmode off` — hide search, allowlist-only browsing"
                         )
                     ), parse_mode=MD2)
 

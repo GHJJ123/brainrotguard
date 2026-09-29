@@ -7,7 +7,7 @@ from web.shared import templates, limiter
 from web.deps import get_child_store, get_extractor
 from web.helpers import (
     VIDEO_ID_RE, _ERROR_MESSAGES,
-    base_ctx, get_csrf_token, validate_csrf, shorts_enabled,
+    base_ctx, get_csrf_token, validate_csrf, shorts_enabled, search_disabled,
 )
 from web.cache import (
     get_word_filter_patterns, title_matches_filter, invalidate_catalog_cache,
@@ -25,11 +25,11 @@ _pending_requests: set[tuple[str, str]] = set()  # (profile_id, video_id)
 @limiter.limit("10/minute")
 async def search_videos(request: Request, q: str = Query("", max_length=200)):
     """Search results via yt-dlp."""
-    if not q:
-        return RedirectResponse(url="/", status_code=303)
-
     state = request.app.state
     cs = get_child_store(request)
+    if not q or search_disabled(request, cs):
+        return RedirectResponse(url="/", status_code=303)
+
     extractor = get_extractor(request)
 
     # Block search queries that contain filtered words
@@ -100,6 +100,10 @@ async def request_video(
     if not validate_csrf(request, csrf_token):
         return RedirectResponse(url="/", status_code=303)
 
+    cs = get_child_store(request)
+    if search_disabled(request, cs):
+        return RedirectResponse(url="/", status_code=303)
+
     extracted_id = extract_video_id(video_id)
     if extracted_id:
         video_id = extracted_id
@@ -108,7 +112,6 @@ async def request_video(
         return RedirectResponse(url="/?error=invalid_video", status_code=303)
 
     state = request.app.state
-    cs = get_child_store(request)
     extractor = get_extractor(request)
     profile_id = cs.profile_id
 
