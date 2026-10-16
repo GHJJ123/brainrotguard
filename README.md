@@ -96,6 +96,7 @@ Now I curate his content and I can see the difference. He's not parroting gamer 
 - **Guided setup wizard** — `/time setup` walks through limit mode and schedule configuration with inline buttons
 - **Bonus time** — grant extra minutes for today only (`/time add 30`)
 - **Shorts control** — toggle YouTube Shorts visibility across the entire app
+- **Search-off mode** — for younger kids, `/searchmode off` hides the search bar for a profile so they only see allowlisted channels and videos you've already approved
 - **Watch activity log** — see what was watched, for how long, grouped by category
 - **Localized UI and bot** — English and Norwegian support, with locale-aware or forced 12h/24h time display
 - **Word filters** — block videos whose titles contain specific words
@@ -107,7 +108,8 @@ Now I curate his content and I can see the difference. He's not parroting gamer 
 ### Privacy & Security
 - **100% self-hosted** — runs entirely on your own hardware inside your home network. No cloud service, no third-party accounts, no subscriptions
 - **No API key needed** — uses [yt-dlp](https://github.com/yt-dlp/yt-dlp) for search and metadata
-- **Standard YouTube embeds** — videos play via `youtube.com` embeds (signing into a Google account on the tablet prevents bot-check interruptions)
+- **YouTube embeds** — videos play via `youtube-nocookie.com` by default, which keeps `www.youtube.com` out of your DNS allowlist. If YouTube shows a "confirm you're not a bot" wall, set `BRG_EMBED_HOST=https://www.youtube.com` (see [Configuration](docs/configuration.md#player-embed-origin))
+- **Custom Telegram API server** — route the bot through your own Bot API server or relay with `BRG_TELEGRAM_API_URL`
 - **Single-file database** — all data is one SQLite file on your machine. Nothing phones home.
 - **Container runs as non-root** — Docker security best practice
 
